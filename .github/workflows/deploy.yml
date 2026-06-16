@@ -31,10 +31,11 @@ jobs:
         run: |
           python3 - <<'EOF'
           import os
-          url = os.environ['RE_SHEET_URL'].strip()
+          import json
+          url = os.environ['RE_SHEET_URL'].strip().strip("'\"")
           with open('RE_LDR_Dashboard_v1.0.html', 'r', encoding='utf-8') as f:
               content = f.read()
-          content = content.replace("LDR_SHEET_URL:         ''", "LDR_SHEET_URL:         '" + url + "'")
+          content = content.replace('"INJECT_SHEET_URL_HERE"', json.dumps(url))
           with open('RE_LDR_Dashboard_v1.0.html', 'w', encoding='utf-8') as f:
               f.write(content)
           print('Injected URL:', url[:40], '...')
