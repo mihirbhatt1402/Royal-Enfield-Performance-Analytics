@@ -490,88 +490,252 @@ function OverviewTab({rows,mf}){
   );
 }
 
-/* ══════════════════════════════════════════════════════════════════════════
-   SOURCE ANALYSIS TAB
-══════════════════════════════════════════════════════════════════════════ */
-function SourceTab({rows,mf}){
+/* ── Source color palette ─────────────────────────────────────────── */
+const SRC_PALETTE={
+  'Adwords':  {bar:'#F59E0B',line:'#D97706',light:'#FEF3C7',text:'#92400E',badge:'#FEF3C7'},
+  'MS FB':    {bar:'#8B5CF6',line:'#7C3AED',light:'#EDE9FE',text:'#4C1D95',badge:'#EDE9FE'},
+  'Non MS':   {bar:'#3B82F6',line:'#2563EB',light:'#DBEAFE',text:'#1E40AF',badge:'#DBEAFE'},
+  'Organic':  {bar:'#10B981',line:'#059669',light:'#D1FAE5',text:'#064E3B',badge:'#D1FAE5'},
+};
+const FALLBACK_COLORS=['#6366F1','#EC4899','#14B8A6','#F97316','#84CC16'];
+function getSrcColor(src,idx){
+  return SRC_PALETTE[src]||{
+    bar:FALLBACK_COLORS[idx%5],line:FALLBACK_COLORS[idx%5],
+    light:'#F3F4F6',text:'#374151',badge:'#F3F4F6'
+  };
+}
+
+/* ── Per-source mini chart ────────────────────────────────────────── */
+function SourceMiniChart({src,srcRows,allMonths,colorCfg}){
   const chartRef=useRef(); const chartInst=useRef();
-  const sources=useMemo(()=>[...new Set(rows.map(r=>r.source))].filter(Boolean).sort(),[rows]);
-  const tableData=useMemo(()=>sources.map(src=>({src,m:aggRE(rows.filter(r=>r.source===src),mf)})),[rows,sources,mf]);
-  const grand=useMemo(()=>aggRE(rows,mf),[rows,mf]);
+
+  /* Per-month data for this source (oldest → newest for chart x-axis) */
+  const chartMonths=useMemo(()=>[...allMonths].sort((a,b)=>monthOrder(a)-monthOrder(b)),[allMonths]);
+  const perMonth=useMemo(()=>chartMonths.map(M=>{
+    const a=aggRE(srcRows,M);
+    return{month:M,uniqueLeads:a.uniqueLeads,e2bPct:a.e2bPct};
+  }),[srcRows,chartMonths]);
+
+  const totals=useMemo(()=>aggRE(srcRows,'All'),[srcRows]);
 
   useEffect(()=>{
     const canvas=chartRef.current;
     if(!canvas||!window.Chart) return;
     if(chartInst.current) try{chartInst.current.destroy();}catch(e){}
-    const COLORS=['#2D6A4F','#1B4332','#40916C','#52B788','#74C69D'];
     chartInst.current=new Chart(canvas,{
       type:'bar',
       data:{
-        labels:tableData.map(d=>d.src),
+        labels:perMonth.map(d=>d.month),
         datasets:[
-          {label:'Unique Leads',data:tableData.map(d=>d.m.uniqueLeads),backgroundColor:tableData.map((_,i)=>COLORS[i%5]+'55'),borderColor:tableData.map((_,i)=>COLORS[i%5]),borderWidth:1.5,borderRadius:4,yAxisID:'y'},
-          {label:'Bookings',data:tableData.map(d=>d.m.bookings),backgroundColor:'#C9A22788',borderColor:'#C9A227',borderWidth:1.5,borderRadius:4,yAxisID:'y'},
-          {label:'E2B %',data:tableData.map(d=>parseFloat(d.m.e2bPct.toFixed(2))),type:'line',borderColor:'#081C15',backgroundColor:'transparent',borderWidth:2,pointRadius:5,pointBackgroundColor:'#081C15',yAxisID:'y2',tension:.3},
+          {label:'Leads',data:perMonth.map(d=>d.uniqueLeads),
+            backgroundColor:colorCfg.bar+'55',borderColor:colorCfg.bar,
+            borderWidth:1.5,borderRadius:3,yAxisID:'y'},
+          {label:'E2B%',data:perMonth.map(d=>parseFloat(d.e2bPct.toFixed(2))),
+            type:'line',borderColor:colorCfg.line,backgroundColor:'transparent',
+            borderWidth:2,pointRadius:4,pointBackgroundColor:colorCfg.line,
+            yAxisID:'y2',tension:.3},
         ]
       },
       options:{
         responsive:true,maintainAspectRatio:false,
         interaction:{mode:'index',intersect:false},
         plugins:{
-          legend:{position:'top',labels:{boxWidth:10,boxHeight:10,font:{size:10,family:'DM Mono,monospace'},color:'#475569'}},
-          tooltip:{backgroundColor:'rgba(8,28,21,.92)',titleColor:'#f0f7f4',bodyColor:'#A8D5BA',padding:10,cornerRadius:8},
+          legend:{position:'top',labels:{boxWidth:8,boxHeight:8,font:{size:9},color:'#6b7280'}},
+          tooltip:{backgroundColor:'rgba(8,28,21,.92)',titleColor:'#f0f7f4',bodyColor:'#A8D5BA',padding:8,cornerRadius:6},
           datalabels:{display:false}
         },
         scales:{
-          x:{grid:{color:'rgba(100,116,139,.1)'},ticks:{color:'#475569',font:{size:11}}},
-          y:{grid:{color:'rgba(100,116,139,.1)'},ticks:{color:'#475569',font:{size:10}},position:'left',title:{display:true,text:'Leads',color:'#94a3b8',font:{size:9}},beginAtZero:true},
-          y2:{position:'right',ticks:{color:'#2D6A4F',font:{size:10},callback:v=>v+'%'},grid:{display:false},title:{display:true,text:'E2B%',color:'#2D6A4F',font:{size:9}},beginAtZero:true}
+          x:{grid:{display:false},ticks:{color:'#9ca3af',font:{size:9}}},
+          y:{grid:{color:'rgba(100,116,139,.07)'},ticks:{color:'#9ca3af',font:{size:9}},beginAtZero:true},
+          y2:{position:'right',ticks:{color:colorCfg.line,font:{size:9},callback:v=>v+'%'},
+            grid:{display:false},beginAtZero:true}
         }
       }
     });
     return()=>{try{if(chartInst.current)chartInst.current.destroy();}catch(e){}};
-  },[tableData]);
+  },[perMonth,colorCfg]);
 
-  return ce('div',{className:'fade-up'},
-    ce('div',{className:'card',style:{padding:'16px 18px',marginBottom:14}},
-      ce('div',{className:'section-title'},'Source Performance — Unique Leads & E2B%'),
-      ce('div',{style:{height:260,position:'relative'}},ce('canvas',{ref:chartRef}))
+  return ce('div',{style:{background:'#fff',border:'1px solid #E5E7EB',borderRadius:12,padding:'14px 16px'}},
+    ce('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:10}},
+      ce('span',{style:{fontSize:13,fontWeight:700,color:'#111827'}},src),
+      ce('div',{style:{textAlign:'right'}},
+        ce('div',{style:{fontSize:24,fontWeight:900,color:colorCfg.line,fontFamily:'DM Mono,monospace',lineHeight:1}},
+          totals.e2bPct.toFixed(2)+'%'),
+        ce('div',{style:{fontSize:9,color:'#9ca3af',marginTop:2,fontFamily:'DM Mono,monospace'}},
+          Nf(totals.uniqueLeads)+' leads')
+      )
     ),
-    ce('div',{className:'card',style:{padding:0,overflow:'hidden'}},
-      ce('div',{style:{padding:'12px 18px',borderBottom:'1px solid #e4e6ef'}},
-        ce('span',{style:{fontSize:11,fontWeight:700,color:'#1B4332'}},'Source-wise Disposition Table')
-      ),
-      ce('div',{className:'scroll-x'},
-        ce('table',null,
-          ce('thead',null,ce('tr',null,
-            ce('th',{className:'left',style:{minWidth:150,position:'sticky',top:0,left:0,zIndex:4,background:'#081C15'}},'Source'),
-            ce('th',null,'Total Leads'),
-            ce('th',{style:{background:'#166534'}},'Unique Leads'),
-            ce('th',{style:{background:'#C9A227',color:'#081C15'}},'Bookings'),
-            ce('th',{style:{background:'#166534'}},'E2B%'),
-            ce('th',{style:{background:'#7c2d12'}},'Duplicity%'),
-          )),
-          ce('tbody',null,
-            tableData.map((d,i)=>ce('tr',{key:i},
-              ce('td',{className:'label'},d.src),
-              ce('td',null,Nf(d.m.totalLeads)),
-              ce('td',{style:{color:'#166534',fontWeight:700}},Nf(d.m.uniqueLeads)),
-              ce('td',{style:{color:'#C9A227',fontWeight:700}},Nf(d.m.bookings)),
-              ce('td',null,e2bBadge(d.m.e2bPct)),
-              ce('td',null,dupBadge(d.m.dupPct)),
-            )),
-            ce('tr',{className:'total-row'},
-              ce('td',{className:'label',style:{background:'#081C15',color:'#A8D5BA'}},'∑ Grand Total'),
-              ce('td',null,Nf(grand.totalLeads)),
-              ce('td',{style:{color:'#86efac',fontWeight:700}},Nf(grand.uniqueLeads)),
-              ce('td',{style:{color:'#fbbf24',fontWeight:700}},Nf(grand.bookings)),
-              ce('td',null,ce('span',{style:{color:'#86efac',fontWeight:700}},grand.e2bPct.toFixed(1)+'%')),
-              ce('td',null,ce('span',{style:{color:'#fbbf24',fontWeight:700}},grand.dupPct.toFixed(1)+'%')),
-            )
+    ce('div',{style:{height:165,position:'relative'}},ce('canvas',{ref:chartRef}))
+  );
+}
+
+/* ── Monthly performance grid ─────────────────────────────────────── */
+function MonthGrid({M,rows,sources,srcColors}){
+  const grand=useMemo(()=>aggRE(rows,M),[rows,M]);
+  const srcData=useMemo(()=>
+    sources.map((src,i)=>{
+      const a=aggRE(rows.filter(r=>r.source===src),M);
+      return{src,idx:i,...a};
+    })
+  ,[rows,sources,M]);
+
+  const maxE2b=Math.max(...srcData.map(d=>d.e2bPct),0.001);
+
+  return ce('div',{style:{background:'#fff',border:'1px solid #E5E7EB',borderRadius:12,overflow:'hidden',marginBottom:16}},
+    /* Header */
+    ce('div',{style:{padding:'10px 16px',background:'#F8FAFC',borderBottom:'1px solid #E5E7EB',
+      display:'flex',justifyContent:'space-between',alignItems:'center'}},
+      ce('span',{style:{fontSize:11,fontWeight:700,background:'#1B4332',color:'#fff',
+        padding:'3px 12px',borderRadius:20}},M),
+      ce('span',{style:{fontSize:11,color:'#9ca3af',fontFamily:'DM Mono,monospace'}},
+        Nf(grand.uniqueLeads)+' leads')
+    ),
+    /* Table */
+    ce('div',{style:{padding:'0 0 4px'}},
+      ce('table',{style:{width:'100%',borderCollapse:'collapse'}},
+        ce('thead',null,
+          ce('tr',{style:{background:'#1B4332'}},
+            ce('th',{style:{padding:'8px 16px',textAlign:'left',fontSize:9,fontWeight:700,
+              letterSpacing:'.08em',color:'#A8D5BA',textTransform:'uppercase',width:'18%'}},'Source'),
+            ce('th',{style:{padding:'8px 12px',textAlign:'right',fontSize:9,fontWeight:700,
+              letterSpacing:'.08em',color:'#A8D5BA',textTransform:'uppercase'}},'Unique Leads'),
+            ce('th',{style:{padding:'8px 12px',textAlign:'right',fontSize:9,fontWeight:700,
+              letterSpacing:'.08em',color:'#fbbf24',textTransform:'uppercase'}},'Bookings'),
+            ce('th',{style:{padding:'8px 12px',textAlign:'right',fontSize:9,fontWeight:700,
+              letterSpacing:'.08em',color:'#A8D5BA',textTransform:'uppercase'}},'Contrib%'),
+            ce('th',{style:{padding:'8px 12px',textAlign:'right',fontSize:9,fontWeight:700,
+              letterSpacing:'.08em',color:'#86efac',textTransform:'uppercase'}},'E2B%'),
+            ce('th',{style:{padding:'8px 16px',textAlign:'left',fontSize:9,fontWeight:700,
+              letterSpacing:'.08em',color:'#A8D5BA',textTransform:'uppercase',width:'22%'}},'E2B BAR'),
+          )
+        ),
+        ce('tbody',null,
+          srcData.map((d,i)=>{
+            const clr=srcColors[d.src]||{bar:'#6b7280',light:'#F3F4F6',text:'#374151'};
+            const contrib=grand.uniqueLeads>0?(d.uniqueLeads/grand.uniqueLeads*100):0;
+            const barW=maxE2b>0?(d.e2bPct/maxE2b*100):0;
+            return ce('tr',{key:i,style:{borderBottom:'1px solid #F3F4F6',background:i%2===0?'#fff':'#FAFAFA'}},
+              ce('td',{style:{padding:'9px 16px'}},
+                ce('span',{style:{display:'inline-block',padding:'2px 10px',borderRadius:20,
+                  fontSize:10,fontWeight:700,background:clr.light,color:clr.text}}
+                ,d.src)
+              ),
+              ce('td',{style:{padding:'9px 12px',textAlign:'right',fontSize:12,fontWeight:600,
+                color:'#111827',fontFamily:'DM Mono,monospace'}},Nf(d.uniqueLeads)),
+              ce('td',{style:{padding:'9px 12px',textAlign:'right',fontSize:12,fontWeight:600,
+                color:'#C9A227',fontFamily:'DM Mono,monospace'}},Nf(d.bookings)),
+              ce('td',{style:{padding:'9px 12px',textAlign:'right',fontSize:11,
+                color:'#6b7280',fontFamily:'DM Mono,monospace'}},contrib.toFixed(1)+'%'),
+              ce('td',{style:{padding:'9px 12px',textAlign:'right',fontSize:12,fontWeight:700,
+                color:clr.line||clr.bar,fontFamily:'DM Mono,monospace'}},d.e2bPct.toFixed(2)+'%'),
+              ce('td',{style:{padding:'9px 16px'}},
+                ce('div',{style:{display:'flex',alignItems:'center',gap:6}},
+                  ce('div',{style:{flex:1,height:6,background:'#F3F4F6',borderRadius:6,overflow:'hidden'}},
+                    ce('div',{style:{height:'100%',width:barW+'%',background:clr.bar,borderRadius:6,transition:'width .4s ease'}})
+                  ),
+                  ce('span',{style:{fontSize:10,fontFamily:'DM Mono,monospace',color:clr.bar,
+                    minWidth:36,textAlign:'right',fontWeight:700}},d.e2bPct.toFixed(2)+'%')
+                )
+              )
+            );
+          }),
+          /* Grand Total */
+          ce('tr',{style:{borderTop:'2px solid #E5E7EB',background:'#F8FAFC'}},
+            ce('td',{style:{padding:'9px 16px',fontWeight:700,fontSize:12,color:'#111827'}},'Grand Total'),
+            ce('td',{style:{padding:'9px 12px',textAlign:'right',fontSize:12,fontWeight:700,
+              color:'#111827',fontFamily:'DM Mono,monospace'}},Nf(grand.uniqueLeads)),
+            ce('td',{style:{padding:'9px 12px',textAlign:'right',fontSize:12,fontWeight:700,
+              color:'#C9A227',fontFamily:'DM Mono,monospace'}},Nf(grand.bookings)),
+            ce('td',{style:{padding:'9px 12px',textAlign:'right',fontSize:11,fontWeight:700,
+              color:'#374151',fontFamily:'DM Mono,monospace'}},'100%'),
+            ce('td',{style:{padding:'9px 12px',textAlign:'right',fontSize:12,fontWeight:700,
+              color:'#2D6A4F',fontFamily:'DM Mono,monospace'}},grand.e2bPct.toFixed(2)+'%'),
+            ce('td',{style:{padding:'9px 16px'}})
           )
         )
       )
     )
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   SOURCE ANALYSIS TAB
+══════════════════════════════════════════════════════════════════════════ */
+function SourceTab({rows}){
+  const sources=useMemo(()=>[...new Set(rows.map(r=>r.source))].filter(Boolean).sort(),[rows]);
+
+  /* All months, newest first for pills; oldest first for charts is handled inside SourceMiniChart */
+  const allMonths=useMemo(()=>
+    [...new Set(rows.map(r=>r.lead_month))].filter(Boolean)
+      .sort((a,b)=>monthOrder(b)-monthOrder(a))
+  ,[rows]);
+
+  /* Month pill selection: 'all' or a Set of month strings */
+  const [selMonths,setSelMonths]=useState(new Set(['all']));
+
+  function toggleMonth(m){
+    setSelMonths(prev=>{
+      if(m==='all') return new Set(['all']);
+      const next=new Set(prev);
+      next.delete('all');
+      if(next.has(m)){next.delete(m);if(next.size===0)return new Set(['all']);}
+      else next.add(m);
+      return next;
+    });
+  }
+
+  const activeMonths=selMonths.has('all')?allMonths:allMonths.filter(m=>selMonths.has(m));
+
+  /* Pre-compute per-source rows (all months, used by mini charts) */
+  const srcRowsMap=useMemo(()=>{
+    const m={};
+    for(const src of sources) m[src]=rows.filter(r=>r.source===src);
+    return m;
+  },[rows,sources]);
+
+  /* Color map */
+  const srcColors=useMemo(()=>{
+    const m={};
+    sources.forEach((s,i)=>m[s]=getSrcColor(s,i));
+    return m;
+  },[sources]);
+
+  const pillBase={padding:'4px 14px',fontSize:11,fontWeight:600,borderRadius:20,
+    cursor:'pointer',border:'1px solid #D1D5DB',background:'#fff',color:'#374151',
+    fontFamily:'inherit',transition:'all 120ms'};
+  const pillActive={...pillBase,background:'#1B4332',color:'#fff',borderColor:'#1B4332'};
+
+  return ce('div',{className:'fade-up'},
+
+    /* Month pills */
+    ce('div',{style:{display:'flex',alignItems:'center',gap:8,marginBottom:18,flexWrap:'wrap'}},
+      ce('span',{style:{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:'.08em',color:'#9ca3af',marginRight:4}},'MONTHS:'),
+      ce('button',{onClick:()=>toggleMonth('all'),style:selMonths.has('all')?pillActive:pillBase},'All'),
+      allMonths.map(m=>ce('button',{key:m,onClick:()=>toggleMonth(m),
+        style:selMonths.has(m)?pillActive:pillBase},m))
+    ),
+
+    /* Section label */
+    ce('div',{style:{fontSize:11,fontWeight:700,color:'#6b7280',textTransform:'uppercase',
+      letterSpacing:'.08em',marginBottom:12}},'Source Leads vs Bookings'),
+
+    /* Mini charts grid — 2 columns */
+    ce('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:24}},
+      sources.map((src,i)=>ce(SourceMiniChart,{
+        key:src,src,
+        srcRows:srcRowsMap[src]||[],
+        allMonths,
+        colorCfg:srcColors[src]||getSrcColor(src,i)
+      }))
+    ),
+
+    /* Monthly performance grids */
+    activeMonths.map(M=>ce(MonthGrid,{
+      key:M,M,
+      rows,
+      sources,
+      srcColors
+    }))
   );
 }
 
