@@ -287,7 +287,7 @@ const OverviewTab=React.memo(function OverviewTab({rows,mf}){
       const sRows=rows.filter(r=>r.source===s);
       const states=[...new Set(sRows.map(r=>r.state))].filter(Boolean);
       const sm=states.map(st=>({state:st,m:aggRE(sRows.filter(r=>r.state===st),mf)}))
-        .filter(x=>x.m.uniqueLeads>=5).sort((a,b)=>a.m.e2bPct-b.m.e2bPct);
+        .filter(x=>x.m.uniqueLeads>=200).sort((a,b)=>a.m.e2bPct-b.m.e2bPct);
       statesBySrc[s]={worst5:sm.slice(0,5),best5:[...sm].reverse().slice(0,5)};
     }
 
