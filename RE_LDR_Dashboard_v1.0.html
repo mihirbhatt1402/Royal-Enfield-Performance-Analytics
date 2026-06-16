@@ -758,16 +758,17 @@ function SourceTab({rows}){
 }
 
 /* ── Dimension × Source Monthly Grid (LT / Model / State) ─────────── */
-function renderMetricCells(a,ulClr,bkClr,e2bClr,keyPfx){
+function renderMetricCells(a,keyPfx,bold){
+  const fw=bold?700:600;
   return[
-    ce('td',{key:keyPfx+'u',style:{padding:'6px 8px',textAlign:'right',fontSize:11,fontWeight:700,
-      color:ulClr,fontFamily:'DM Mono,monospace',borderLeft:'2px solid rgba(0,0,0,.05)'}},
+    ce('td',{key:keyPfx+'u',style:{padding:'6px 8px',textAlign:'right',fontSize:11,fontWeight:fw,
+      color:'#111827',fontFamily:'DM Mono,monospace',borderLeft:'2px solid rgba(0,0,0,.05)'}},
       a.uniqueLeads?Nf(a.uniqueLeads):'—'),
-    ce('td',{key:keyPfx+'b',style:{padding:'6px 8px',textAlign:'right',fontSize:11,fontWeight:600,
-      color:bkClr,fontFamily:'DM Mono,monospace'}},
+    ce('td',{key:keyPfx+'b',style:{padding:'6px 8px',textAlign:'right',fontSize:11,fontWeight:fw,
+      color:'#111827',fontFamily:'DM Mono,monospace'}},
       a.bookings?Nf(a.bookings):'—'),
-    ce('td',{key:keyPfx+'e',style:{padding:'6px 8px',textAlign:'right',fontSize:11,fontWeight:700,
-      color:e2bClr,fontFamily:'DM Mono,monospace'}},
+    ce('td',{key:keyPfx+'e',style:{padding:'6px 8px',textAlign:'right',fontSize:11,fontWeight:fw,
+      color:'#111827',fontFamily:'DM Mono,monospace'}},
       a.uniqueLeads>0?a.e2bPct.toFixed(1)+'%':'—'),
   ];
 }
@@ -778,34 +779,83 @@ function DimMonthGrid({M,rows,rowKey,dimLabel}){
 
   const grand=useMemo(()=>aggRE(rows,M),[rows,M]);
   const allSrcs=useMemo(()=>[...new Set(rows.map(r=>r.source))].filter(Boolean),[rows]);
+  const grouped=useMemo(()=>new Set(SRC_GROUPS.flatMap(g=>g.members)),[]);
 
-  const dimVals=useMemo(()=>{
-    const all=[...new Set(rows.map(r=>r[rowKey]))].filter(Boolean);
-    return all.sort((a,b)=>aggRE(rows.filter(r=>r[rowKey]===b),M).uniqueLeads - aggRE(rows.filter(r=>r[rowKey]===a),M).uniqueLeads);
-  },[rows,rowKey,M]);
-
+  /* Build dimRowsMap in one pass — avoids repeated .filter() */
   const dimRowsMap=useMemo(()=>{
     const m={};
-    for(const v of dimVals) m[v]=rows.filter(r=>r[rowKey]===v);
+    for(const r of rows){
+      const v=r[rowKey]||'Unknown';
+      if(!m[v]) m[v]=[];
+      m[v].push(r);
+    }
     return m;
-  },[rows,dimVals,rowKey]);
+  },[rows,rowKey]);
+
+  /* Pre-compute total per dim value — sort once, no repeated aggRE in comparator */
+  const dimTotals=useMemo(()=>{
+    const t={};
+    for(const v of Object.keys(dimRowsMap)) t[v]=aggRE(dimRowsMap[v],M);
+    return t;
+  },[dimRowsMap,M]);
+
+  const dimVals=useMemo(()=>
+    Object.keys(dimTotals).sort((a,b)=>dimTotals[b].uniqueLeads-dimTotals[a].uniqueLeads)
+  ,[dimTotals]);
+
+  /* Pre-compute all source-group cell aggregations upfront */
+  const cellAggs=useMemo(()=>{
+    const result={};
+    const srcRows={};
+    for(const g of SRC_GROUPS) g.members.forEach(src=>{srcRows[src]=[];});
+    const ungroupedSrcs=allSrcs.filter(s=>!grouped.has(s));
+    ungroupedSrcs.forEach(src=>{srcRows[src]=[];});
+
+    for(const r of rows){
+      const v=r[rowKey]||'Unknown';
+      if(!result[v]) result[v]={};
+      if(srcRows[r.source]!==undefined && dimRowsMap[v]){
+        // handled below per-dim
+      }
+    }
+    for(const v of dimVals){
+      result[v]={};
+      const dimR=dimRowsMap[v]||[];
+      for(const g of SRC_GROUPS){
+        result[v]['grp_'+g.name]=aggRE(dimR.filter(r=>g.members.includes(r.source)),M);
+        g.members.forEach(src=>{ result[v]['src_'+src]=aggRE(dimR.filter(r=>r.source===src),M); });
+      }
+      ungroupedSrcs.forEach(src=>{ result[v]['src_'+src]=aggRE(dimR.filter(r=>r.source===src),M); });
+    }
+    return result;
+  },[dimVals,dimRowsMap,allSrcs,grouped,M]);
+
+  /* Grand total per source-group */
+  const grandColAggs=useMemo(()=>{
+    const result={};
+    for(const g of SRC_GROUPS){
+      result['grp_'+g.name]=aggRE(rows.filter(r=>g.members.includes(r.source)),M);
+      g.members.forEach(src=>{ result['src_'+src]=aggRE(rows.filter(r=>r.source===src),M); });
+    }
+    allSrcs.filter(s=>!grouped.has(s)).forEach(src=>{ result['src_'+src]=aggRE(rows.filter(r=>r.source===src),M); });
+    return result;
+  },[rows,allSrcs,grouped,M]);
 
   const visCols=useMemo(()=>{
-    const cols=[];const grouped=new Set(SRC_GROUPS.flatMap(g=>g.members));
+    const cols=[];
     SRC_GROUPS.forEach(g=>{
       const avail=g.members.filter(m=>allSrcs.includes(m));
       if(!avail.length) return;
-      cols.push({type:'group',name:g.name,clr:g.clr,members:avail});
-      if(expandedGrps.has(g.name)) avail.forEach(src=>cols.push({type:'src',src,clr:getSrcColor(src,0),parentGrp:g.name}));
+      cols.push({type:'group',name:g.name,clr:g.clr,members:avail,key:'grp_'+g.name});
+      if(expandedGrps.has(g.name)) avail.forEach(src=>cols.push({type:'src',src,clr:getSrcColor(src,0),key:'src_'+src}));
     });
-    allSrcs.filter(s=>!grouped.has(s)).forEach(src=>cols.push({type:'src',src,clr:getSrcColor(src,0)}));
+    allSrcs.filter(s=>!grouped.has(s)).forEach(src=>cols.push({type:'src',src,clr:getSrcColor(src,0),key:'src_'+src}));
     return cols;
-  },[allSrcs,expandedGrps]);
-
-  const maxE2b=useMemo(()=>Math.max(0.001,...dimVals.map(v=>aggRE(dimRowsMap[v]||[],M).e2bPct)),[dimVals,dimRowsMap,M]);
+  },[allSrcs,expandedGrps,grouped]);
 
   const TH={padding:'6px 8px',fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:'.06em',
     color:'#fff',textAlign:'center',border:'1px solid rgba(255,255,255,.12)',whiteSpace:'nowrap'};
+  const SUB=['Lead','Booking','E2B%'];
 
   return ce('div',{style:{background:'#fff',border:'1px solid #E5E7EB',borderRadius:12,overflow:'hidden',marginBottom:16}},
     ce('div',{style:{padding:'10px 16px',background:'#F8FAFC',borderBottom:'1px solid #E5E7EB',
@@ -814,7 +864,7 @@ function DimMonthGrid({M,rows,rowKey,dimLabel}){
       ce('span',{style:{fontSize:11,color:'#9ca3af',fontFamily:'DM Mono,monospace'}},Nf(grand.uniqueLeads)+' leads')
     ),
     ce('div',{style:{padding:'0 0 4px',overflowX:'auto'}},
-      ce('table',{style:{width:'100%',borderCollapse:'collapse',minWidth:520}},
+      ce('table',{style:{width:'100%',borderCollapse:'collapse',minWidth:400}},
         ce('thead',null,
           ce('tr',{style:{background:'#1B4332'}},
             ce('th',{style:{...TH,textAlign:'left',minWidth:90,position:'sticky',left:0,background:'#1B4332',zIndex:2,
@@ -828,37 +878,19 @@ function DimMonthGrid({M,rows,rowKey,dimLabel}){
               :ce('th',{key:'sh_'+col.src,colSpan:3,
                   style:{...TH,background:col.clr.bar+'bb',borderLeft:'1px solid rgba(255,255,255,.2)',fontSize:8}},
                 col.src)
-            ),
-            ce('th',{style:{...TH,minWidth:80,borderLeft:'2px solid rgba(255,255,255,.3)'}},'E2B BAR')
+            )
           ),
           ce('tr',{style:{background:'#0F3024'}},
             ce('th',{style:{...TH,position:'sticky',left:0,background:'#0F3024',zIndex:2,borderRight:'2px solid rgba(255,255,255,.2)'}},''),
-            ['UL','Books','E2B%'].map((s,i)=>ce('th',{key:'ts'+i,
-              style:{...TH,fontSize:8,color:['#A8D5BA','#fbbf24','#86efac'][i],borderLeft:i===0?'2px solid rgba(255,255,255,.3)':'none'}},s)),
-            visCols.flatMap((col,ci)=>['UL','Books','E2B%'].map((s,i)=>ce('th',{key:'c'+ci+'_'+i,
-              style:{...TH,fontSize:8,color:i===0?'#fff':i===1?'#fbbf24':'#86efac',
-                borderLeft:i===0?'2px solid rgba(255,255,255,.2)':'none'}},s))),
-            ce('th',{style:{...TH,borderLeft:'2px solid rgba(255,255,255,.3)'}})
+            SUB.map((s,i)=>ce('th',{key:'ts'+i,
+              style:{...TH,fontSize:8,borderLeft:i===0?'2px solid rgba(255,255,255,.3)':'none'}},s)),
+            visCols.flatMap((col,ci)=>SUB.map((s,i)=>ce('th',{key:'c'+ci+'_'+i,
+              style:{...TH,fontSize:8,borderLeft:i===0?'2px solid rgba(255,255,255,.2)':'none'}},s)))
           )
         ),
         ce('tbody',null,
-          ce('tr',{style:{background:'#081C15'}},
-            ce('td',{style:{padding:'6px 10px',fontSize:10,fontWeight:700,color:'#A8D5BA',
-              position:'sticky',left:0,background:'#081C15',zIndex:1,
-              borderRight:'2px solid rgba(255,255,255,.1)'}},'∑ Grand Total'),
-            renderMetricCells(grand,'#f0f7f4','#fbbf24','#86efac','GT_T'),
-            visCols.flatMap((col,ci)=>{
-              const a=col.type==='group'
-                ?aggRE(rows.filter(r=>col.members.includes(r.source)),M)
-                :aggRE(rows.filter(r=>r.source===col.src),M);
-              return renderMetricCells(a,col.clr.bar+'ee','#fbbf24','#86efac','GT_'+ci);
-            }),
-            ce('td',{style:{padding:'6px 10px',background:'#081C15'}})
-          ),
           dimVals.map((v,ri)=>{
-            const dimR=dimRowsMap[v]||[];
-            const tot=aggRE(dimR,M);
-            const barW=maxE2b>0?(tot.e2bPct/maxE2b*100):0;
+            const tot=dimTotals[v];
             const bg=ri%2===0?'#fff':'#F0F7F4';
             return ce('tr',{key:v,style:{borderBottom:'1px solid #F3F4F6',background:bg}},
               ce('td',{style:{padding:'7px 10px',position:'sticky',left:0,background:bg,zIndex:1,
@@ -866,25 +898,18 @@ function DimMonthGrid({M,rows,rowKey,dimLabel}){
                 ce('span',{style:{display:'inline-block',padding:'2px 8px',borderRadius:20,
                   fontSize:10,fontWeight:700,background:'#D8EED8',color:'#1B4332'}},v)
               ),
-              renderMetricCells(tot,'#111827','#C9A227','#2D6A4F','R'+ri+'T'),
-              visCols.flatMap((col,ci)=>{
-                const colR=col.type==='group'
-                  ?dimR.filter(r=>col.members.includes(r.source))
-                  :dimR.filter(r=>r.source===col.src);
-                const a=aggRE(colR,M);
-                return renderMetricCells(a,col.clr.bar,col.clr.bar,col.clr.bar,'R'+ri+'C'+ci);
-              }),
-              ce('td',{style:{padding:'7px 10px'}},
-                ce('div',{style:{display:'flex',alignItems:'center',gap:5,minWidth:80}},
-                  ce('div',{style:{flex:1,height:6,background:'#F3F4F6',borderRadius:6,overflow:'hidden'}},
-                    ce('div',{style:{height:'100%',width:barW+'%',background:'#2D6A4F',borderRadius:6,transition:'width .4s ease'}})
-                  ),
-                  ce('span',{style:{fontSize:9,fontFamily:'DM Mono,monospace',color:'#2D6A4F',
-                    minWidth:32,textAlign:'right',fontWeight:700}},tot.e2bPct.toFixed(1)+'%')
-                )
-              )
+              renderMetricCells(tot,'R'+ri+'T'),
+              visCols.flatMap((col,ci)=>renderMetricCells(cellAggs[v]?.[col.key]||aggRE([],M),'R'+ri+'C'+ci))
             );
-          })
+          }),
+          /* Grand Total at bottom */
+          ce('tr',{style:{borderTop:'2px solid #E5E7EB',background:'#F8FAFC'}},
+            ce('td',{style:{padding:'8px 10px',fontSize:11,fontWeight:700,color:'#111827',
+              position:'sticky',left:0,background:'#F8FAFC',zIndex:1,
+              borderRight:'2px solid #D8EED8'}},'Grand Total'),
+            renderMetricCells(grand,'GT_T',true),
+            visCols.flatMap((col,ci)=>renderMetricCells(grandColAggs[col.key]||aggRE([],M),'GT_C'+ci,true))
+          )
         )
       )
     )
