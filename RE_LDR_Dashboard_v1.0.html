@@ -280,7 +280,18 @@ function OverviewTab({rows,mf}){
       .filter(x=>x.total.uniqueLeads>=10)
       .sort((a,b)=>a.total.e2bPct-b.total.e2bPct);
     const dupSorted=[...srcSorted].sort((a,b)=>b.total.dupPct-a.total.dupPct);
-    return{srcs,bySrc,srcSorted,
+
+    /* Per-source worst/best 5 states by E2B% */
+    const statesBySrc={};
+    for(const s of srcs){
+      const sRows=rows.filter(r=>r.source===s);
+      const states=[...new Set(sRows.map(r=>r.state))].filter(Boolean);
+      const sm=states.map(st=>({state:st,m:aggRE(sRows.filter(r=>r.state===st),mf)}))
+        .filter(x=>x.m.uniqueLeads>=5).sort((a,b)=>a.m.e2bPct-b.m.e2bPct);
+      statesBySrc[s]={worst5:sm.slice(0,5),best5:[...sm].reverse().slice(0,5)};
+    }
+
+    return{srcs,bySrc,srcSorted,statesBySrc,
       worstSrc:srcSorted[0]||null,
       bestSrc:srcSorted[srcSorted.length-1]||null,
       highDupSrc:dupSorted[0]||null};
@@ -446,7 +457,7 @@ function OverviewTab({rows,mf}){
       ),
 
       /* Worst LT vs Best LT per source */
-      ce('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}},
+      ce('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:12}},
         ce('div',{className:'card',style:{padding:'14px 18px',borderLeft:'4px solid #dc2626'}},
           ce('div',{style:{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:'.08em',color:'#dc2626',marginBottom:10}},'❷  Worst Performing LT — by Source'),
           ce('table',{style:{width:'100%',borderCollapse:'collapse',fontSize:11}},
@@ -486,6 +497,39 @@ function OverviewTab({rows,mf}){
                   ce('td',{style:{padding:'5px 8px',textAlign:'center',fontFamily:'DM Mono',color:'#166534',fontWeight:700,borderBottom:'1px solid #D8EED8'}},e?e.lt:'—'),
                   ce('td',{style:{padding:'5px 8px',textAlign:'right',fontFamily:'DM Mono',borderBottom:'1px solid #D8EED8'}},e?Nf(e.m.uniqueLeads):'—'),
                   ce('td',{style:{padding:'5px 8px',textAlign:'right',fontFamily:'DM Mono',fontWeight:700,color:e?'#16a34a':'#9ca3af',borderBottom:'1px solid #D8EED8'}},e?e.m.e2bPct.toFixed(1)+'%':'—'),
+                );
+              })
+            )
+          )
+        ),
+
+      /* Worst 5 / Top 5 States by Source */
+      ce('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}},
+        [
+          {label:'❸  Worst 5 States — by Source',key:'worst5',clr:'#dc2626',border:'#dc2626'},
+          {label:'❹  Top 5 States — by Source',  key:'best5', clr:'#16a34a',border:'#16a34a'},
+        ].map(({label,key,clr,border})=>
+          ce('div',{key:key,className:'card',style:{padding:'14px 18px',borderLeft:'4px solid '+border}},
+            ce('div',{style:{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:'.08em',color:clr,marginBottom:12}},label),
+            ce('div',{style:{display:'grid',gridTemplateColumns:'repeat('+insights.srcs.length+',1fr)',gap:12}},
+              insights.srcs.map(s=>{
+                const list=insights.statesBySrc[s]?.[key]||[];
+                const srcClr=getSrcColor(s,0);
+                return ce('div',{key:s},
+                  ce('div',{style:{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:'.07em',
+                    color:srcClr.text,background:srcClr.light,padding:'3px 8px',borderRadius:20,
+                    marginBottom:8,display:'inline-block'}},s),
+                  list.length
+                    ?list.map((d,i)=>ce('div',{key:i,style:{display:'flex',justifyContent:'space-between',
+                        alignItems:'center',padding:'4px 0',borderBottom:'1px solid #F3F4F6'}},
+                        ce('div',null,
+                          ce('div',{style:{fontSize:11,fontWeight:600,color:'#111827'}},d.state),
+                          ce('div',{style:{fontSize:9,color:'#9ca3af',fontFamily:'DM Mono'}},Nf(d.m.uniqueLeads)+' leads')
+                        ),
+                        ce('div',{style:{fontSize:13,fontWeight:800,color:clr,fontFamily:'DM Mono'}},
+                          d.m.e2bPct.toFixed(1)+'%')
+                      ))
+                    :ce('div',{style:{fontSize:11,color:'#9ca3af'}},'Insufficient data')
                 );
               })
             )
