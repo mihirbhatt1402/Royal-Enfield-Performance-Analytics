@@ -157,6 +157,9 @@ function parseRows(raw){
     const lt            = get('LT');
     const source        = get('Source');
     const primary_src   = get('Primary Source');
+    const model         = get('Model');
+    const city          = get('City');
+    const state         = get('State');
     const dup           = get(['Duplicate Check','Duplicity Check']);
     const lead_month    = get('Lead Month');
     const booking_status= get('Booking Status');
@@ -168,6 +171,9 @@ function parseRows(raw){
       lt:lt||'Unknown',
       source:source||'Unknown',
       primary_src:primary_src||'Unknown',
+      model:model||'Unknown',
+      city:city||'Unknown',
+      state:state||'Unknown',
       lead_month,
       booking_status,
       booking_month:bm,
@@ -191,7 +197,7 @@ function aggRE(rows,mf){
   if(mf!=='All'){
     const valid=prevMonthsSet(mf,3);
     bookings=new Set(
-      rows.filter(r=>r.booking_month===mf&&valid.has(r.lead_month)&&r.isUnique)
+      rows.filter(r=>r.booking_month===mf&&valid.has(r.lead_month))
           .map(r=>r.lead_number)
     ).size;
   } else {
@@ -199,7 +205,7 @@ function aggRE(rows,mf){
     for(const M of months){
       const valid=prevMonthsSet(M,3);
       bookings+=new Set(
-        rows.filter(r=>r.booking_month===M&&valid.has(r.lead_month)&&r.isUnique)
+        rows.filter(r=>r.booking_month===M&&valid.has(r.lead_month))
             .map(r=>r.lead_number)
       ).size;
     }
@@ -504,6 +510,11 @@ function getSrcColor(src,idx){
     light:'#F3F4F6',text:'#374151',badge:'#F3F4F6'
   };
 }
+const SRC_GROUPS=[
+  {name:'Paid',    members:['MS FB','Adwords'],  clr:{bar:'#8B5CF6',light:'#EDE9FE',text:'#4C1D95'}},
+  {name:'Organic', members:['Organic','Non MS'], clr:{bar:'#10B981',light:'#D1FAE5',text:'#064E3B'}},
+];
+const GRP_MAP={};SRC_GROUPS.forEach(g=>g.members.forEach(m=>{GRP_MAP[m]=g.name;}));
 
 /* ── Per-source mini chart ────────────────────────────────────────── */
 function SourceMiniChart({src,srcRows,allMonths,colorCfg}){
@@ -569,87 +580,99 @@ function SourceMiniChart({src,srcRows,allMonths,colorCfg}){
   );
 }
 
-/* ── Monthly performance grid ─────────────────────────────────────── */
-function MonthGrid({M,rows,sources,srcColors}){
-  const grand=useMemo(()=>aggRE(rows,M),[rows,M]);
-  const srcData=useMemo(()=>
-    sources.map((src,i)=>{
-      const a=aggRE(rows.filter(r=>r.source===src),M);
-      return{src,idx:i,...a};
-    })
-  ,[rows,sources,M]);
+/* ── Monthly performance grid (Source Analysis — with grouping) ────── */
+function MonthGrid({M,rows}){
+  const [expanded,setExpanded]=useState(new Set());
+  const toggleGrp=name=>setExpanded(p=>{const n=new Set(p);n.has(name)?n.delete(name):n.add(name);return n;});
 
-  const maxE2b=Math.max(...srcData.map(d=>d.e2bPct),0.001);
+  const grand=useMemo(()=>aggRE(rows,M),[rows,M]);
+  const allSrcs=useMemo(()=>[...new Set(rows.map(r=>r.source))].filter(Boolean),[rows]);
+
+  const displayRows=useMemo(()=>{
+    const result=[];const grouped=new Set();
+    SRC_GROUPS.forEach(g=>{
+      const avail=g.members.filter(m=>allSrcs.includes(m));
+      if(!avail.length) return;
+      avail.forEach(m=>grouped.add(m));
+      result.push({type:'group',name:g.name,members:avail,clr:g.clr});
+      if(expanded.has(g.name)) avail.forEach(src=>result.push({type:'src',src,parentGrp:g.name}));
+    });
+    allSrcs.filter(s=>!grouped.has(s)).forEach(src=>result.push({type:'src',src}));
+    return result;
+  },[allSrcs,expanded]);
+
+  const maxE2b=useMemo(()=>{
+    let max=0.001;
+    SRC_GROUPS.forEach(g=>{const a=aggRE(rows.filter(r=>g.members.includes(r.source)),M);if(a.e2bPct>max)max=a.e2bPct;});
+    const grouped=new Set(SRC_GROUPS.flatMap(g=>g.members));
+    allSrcs.filter(s=>!grouped.has(s)).forEach(src=>{const a=aggRE(rows.filter(r=>r.source===src),M);if(a.e2bPct>max)max=a.e2bPct;});
+    return max;
+  },[rows,allSrcs,M]);
+
+  const getAgg=row=>row.type==='group'
+    ?aggRE(rows.filter(r=>row.members.includes(r.source)),M)
+    :aggRE(rows.filter(r=>r.source===row.src),M);
 
   return ce('div',{style:{background:'#fff',border:'1px solid #E5E7EB',borderRadius:12,overflow:'hidden',marginBottom:16}},
-    /* Header */
     ce('div',{style:{padding:'10px 16px',background:'#F8FAFC',borderBottom:'1px solid #E5E7EB',
       display:'flex',justifyContent:'space-between',alignItems:'center'}},
-      ce('span',{style:{fontSize:11,fontWeight:700,background:'#1B4332',color:'#fff',
-        padding:'3px 12px',borderRadius:20}},M),
-      ce('span',{style:{fontSize:11,color:'#9ca3af',fontFamily:'DM Mono,monospace'}},
-        Nf(grand.uniqueLeads)+' leads')
+      ce('span',{style:{fontSize:11,fontWeight:700,background:'#1B4332',color:'#fff',padding:'3px 12px',borderRadius:20}},M),
+      ce('span',{style:{fontSize:11,color:'#9ca3af',fontFamily:'DM Mono,monospace'}},Nf(grand.uniqueLeads)+' leads')
     ),
-    /* Table */
     ce('div',{style:{padding:'0 0 4px'}},
       ce('table',{style:{width:'100%',borderCollapse:'collapse'}},
         ce('thead',null,
           ce('tr',{style:{background:'#1B4332'}},
-            ce('th',{style:{padding:'8px 16px',textAlign:'left',fontSize:9,fontWeight:700,
-              letterSpacing:'.08em',color:'#A8D5BA',textTransform:'uppercase',width:'18%'}},'Source'),
-            ce('th',{style:{padding:'8px 12px',textAlign:'right',fontSize:9,fontWeight:700,
-              letterSpacing:'.08em',color:'#A8D5BA',textTransform:'uppercase'}},'Unique Leads'),
-            ce('th',{style:{padding:'8px 12px',textAlign:'right',fontSize:9,fontWeight:700,
-              letterSpacing:'.08em',color:'#fbbf24',textTransform:'uppercase'}},'Bookings'),
-            ce('th',{style:{padding:'8px 12px',textAlign:'right',fontSize:9,fontWeight:700,
-              letterSpacing:'.08em',color:'#A8D5BA',textTransform:'uppercase'}},'Contrib%'),
-            ce('th',{style:{padding:'8px 12px',textAlign:'right',fontSize:9,fontWeight:700,
-              letterSpacing:'.08em',color:'#86efac',textTransform:'uppercase'}},'E2B%'),
-            ce('th',{style:{padding:'8px 16px',textAlign:'left',fontSize:9,fontWeight:700,
-              letterSpacing:'.08em',color:'#A8D5BA',textTransform:'uppercase',width:'22%'}},'E2B BAR'),
+            ce('th',{style:{padding:'8px 16px',textAlign:'left',fontSize:9,fontWeight:700,letterSpacing:'.08em',color:'#A8D5BA',textTransform:'uppercase',width:'20%'}},'Source'),
+            ce('th',{style:{padding:'8px 12px',textAlign:'right',fontSize:9,fontWeight:700,letterSpacing:'.08em',color:'#A8D5BA',textTransform:'uppercase'}},'Unique Leads'),
+            ce('th',{style:{padding:'8px 12px',textAlign:'right',fontSize:9,fontWeight:700,letterSpacing:'.08em',color:'#fbbf24',textTransform:'uppercase'}},'Bookings'),
+            ce('th',{style:{padding:'8px 12px',textAlign:'right',fontSize:9,fontWeight:700,letterSpacing:'.08em',color:'#A8D5BA',textTransform:'uppercase'}},'Contrib%'),
+            ce('th',{style:{padding:'8px 12px',textAlign:'right',fontSize:9,fontWeight:700,letterSpacing:'.08em',color:'#86efac',textTransform:'uppercase'}},'E2B%'),
+            ce('th',{style:{padding:'8px 16px',textAlign:'left',fontSize:9,fontWeight:700,letterSpacing:'.08em',color:'#A8D5BA',textTransform:'uppercase',width:'22%'}},'E2B BAR'),
           )
         ),
         ce('tbody',null,
-          srcData.map((d,i)=>{
-            const clr=srcColors[d.src]||{bar:'#6b7280',light:'#F3F4F6',text:'#374151'};
-            const contrib=grand.uniqueLeads>0?(d.uniqueLeads/grand.uniqueLeads*100):0;
-            const barW=maxE2b>0?(d.e2bPct/maxE2b*100):0;
-            return ce('tr',{key:i,style:{borderBottom:'1px solid #F3F4F6',background:i%2===0?'#fff':'#FAFAFA'}},
-              ce('td',{style:{padding:'9px 16px'}},
-                ce('span',{style:{display:'inline-block',padding:'2px 10px',borderRadius:20,
-                  fontSize:10,fontWeight:700,background:clr.light,color:clr.text}}
-                ,d.src)
+          displayRows.map((row,i)=>{
+            const a=getAgg(row);
+            const contrib=grand.uniqueLeads>0?(a.uniqueLeads/grand.uniqueLeads*100):0;
+            const barW=maxE2b>0?(a.e2bPct/maxE2b*100):0;
+            const isGroup=row.type==='group';
+            const isSub=row.type==='src'&&row.parentGrp;
+            const clr=isGroup?row.clr:getSrcColor(row.src,0);
+            const bg=isGroup?clr.light:(isSub?'#FAFAFE':(i%2===0?'#fff':'#FAFAFA'));
+            const isExp=isGroup&&expanded.has(row.name);
+            return ce('tr',{key:isGroup?row.name:row.src,style:{borderBottom:'1px solid #F3F4F6',background:bg}},
+              ce('td',{style:{padding:isSub?'7px 16px 7px 30px':'9px 16px'}},
+                isGroup
+                  ?ce('button',{onClick:()=>toggleGrp(row.name),
+                      style:{display:'inline-flex',alignItems:'center',gap:6,background:'none',border:'none',cursor:'pointer',padding:0,fontFamily:'inherit'}},
+                    ce('span',{style:{fontSize:10,color:clr.text,fontWeight:700}},isExp?'▼':'▶'),
+                    ce('span',{style:{display:'inline-block',padding:'2px 10px',borderRadius:20,fontSize:10,fontWeight:700,
+                      background:clr.light,color:clr.text,border:'1px solid '+clr.bar}},row.name)
+                  )
+                  :ce('span',{style:{display:'inline-block',padding:'2px 10px',borderRadius:20,fontSize:10,
+                      fontWeight:isSub?500:700,background:clr.light,color:clr.text}},row.src)
               ),
-              ce('td',{style:{padding:'9px 12px',textAlign:'right',fontSize:12,fontWeight:600,
-                color:'#111827',fontFamily:'DM Mono,monospace'}},Nf(d.uniqueLeads)),
-              ce('td',{style:{padding:'9px 12px',textAlign:'right',fontSize:12,fontWeight:600,
-                color:'#C9A227',fontFamily:'DM Mono,monospace'}},Nf(d.bookings)),
-              ce('td',{style:{padding:'9px 12px',textAlign:'right',fontSize:11,
-                color:'#6b7280',fontFamily:'DM Mono,monospace'}},contrib.toFixed(1)+'%'),
-              ce('td',{style:{padding:'9px 12px',textAlign:'right',fontSize:12,fontWeight:700,
-                color:clr.line||clr.bar,fontFamily:'DM Mono,monospace'}},d.e2bPct.toFixed(2)+'%'),
+              ce('td',{style:{padding:'9px 12px',textAlign:'right',fontSize:12,fontWeight:isGroup?700:600,color:'#111827',fontFamily:'DM Mono,monospace'}},Nf(a.uniqueLeads)),
+              ce('td',{style:{padding:'9px 12px',textAlign:'right',fontSize:12,fontWeight:isGroup?700:600,color:'#C9A227',fontFamily:'DM Mono,monospace'}},Nf(a.bookings)),
+              ce('td',{style:{padding:'9px 12px',textAlign:'right',fontSize:11,color:'#6b7280',fontFamily:'DM Mono,monospace'}},contrib.toFixed(1)+'%'),
+              ce('td',{style:{padding:'9px 12px',textAlign:'right',fontSize:12,fontWeight:700,color:clr.bar,fontFamily:'DM Mono,monospace'}},a.e2bPct.toFixed(2)+'%'),
               ce('td',{style:{padding:'9px 16px'}},
                 ce('div',{style:{display:'flex',alignItems:'center',gap:6}},
-                  ce('div',{style:{flex:1,height:6,background:'#F3F4F6',borderRadius:6,overflow:'hidden'}},
+                  ce('div',{style:{flex:1,height:isSub?5:6,background:'#F3F4F6',borderRadius:6,overflow:'hidden'}},
                     ce('div',{style:{height:'100%',width:barW+'%',background:clr.bar,borderRadius:6,transition:'width .4s ease'}})
                   ),
-                  ce('span',{style:{fontSize:10,fontFamily:'DM Mono,monospace',color:clr.bar,
-                    minWidth:36,textAlign:'right',fontWeight:700}},d.e2bPct.toFixed(2)+'%')
+                  ce('span',{style:{fontSize:isSub?9:10,fontFamily:'DM Mono,monospace',color:clr.bar,minWidth:36,textAlign:'right',fontWeight:700}},a.e2bPct.toFixed(2)+'%')
                 )
               )
             );
           }),
-          /* Grand Total */
           ce('tr',{style:{borderTop:'2px solid #E5E7EB',background:'#F8FAFC'}},
             ce('td',{style:{padding:'9px 16px',fontWeight:700,fontSize:12,color:'#111827'}},'Grand Total'),
-            ce('td',{style:{padding:'9px 12px',textAlign:'right',fontSize:12,fontWeight:700,
-              color:'#111827',fontFamily:'DM Mono,monospace'}},Nf(grand.uniqueLeads)),
-            ce('td',{style:{padding:'9px 12px',textAlign:'right',fontSize:12,fontWeight:700,
-              color:'#C9A227',fontFamily:'DM Mono,monospace'}},Nf(grand.bookings)),
-            ce('td',{style:{padding:'9px 12px',textAlign:'right',fontSize:11,fontWeight:700,
-              color:'#374151',fontFamily:'DM Mono,monospace'}},'100%'),
-            ce('td',{style:{padding:'9px 12px',textAlign:'right',fontSize:12,fontWeight:700,
-              color:'#2D6A4F',fontFamily:'DM Mono,monospace'}},grand.e2bPct.toFixed(2)+'%'),
+            ce('td',{style:{padding:'9px 12px',textAlign:'right',fontSize:12,fontWeight:700,color:'#111827',fontFamily:'DM Mono,monospace'}},Nf(grand.uniqueLeads)),
+            ce('td',{style:{padding:'9px 12px',textAlign:'right',fontSize:12,fontWeight:700,color:'#C9A227',fontFamily:'DM Mono,monospace'}},Nf(grand.bookings)),
+            ce('td',{style:{padding:'9px 12px',textAlign:'right',fontSize:11,fontWeight:700,color:'#374151',fontFamily:'DM Mono,monospace'}},'100%'),
+            ce('td',{style:{padding:'9px 12px',textAlign:'right',fontSize:12,fontWeight:700,color:'#2D6A4F',fontFamily:'DM Mono,monospace'}},grand.e2bPct.toFixed(2)+'%'),
             ce('td',{style:{padding:'9px 16px'}})
           )
         )
@@ -730,13 +753,188 @@ function SourceTab({rows}){
     ),
 
     /* Monthly performance grids */
-    activeMonths.map(M=>ce(MonthGrid,{
-      key:M,M,
-      rows,
-      sources,
-      srcColors
-    }))
+    activeMonths.map(M=>ce(MonthGrid,{key:M,M,rows}))
   );
+}
+
+/* ── Dimension × Source Monthly Grid (LT / Model / State) ─────────── */
+function renderMetricCells(a,ulClr,bkClr,e2bClr,keyPfx){
+  return[
+    ce('td',{key:keyPfx+'u',style:{padding:'6px 8px',textAlign:'right',fontSize:11,fontWeight:700,
+      color:ulClr,fontFamily:'DM Mono,monospace',borderLeft:'2px solid rgba(0,0,0,.05)'}},
+      a.uniqueLeads?Nf(a.uniqueLeads):'—'),
+    ce('td',{key:keyPfx+'b',style:{padding:'6px 8px',textAlign:'right',fontSize:11,fontWeight:600,
+      color:bkClr,fontFamily:'DM Mono,monospace'}},
+      a.bookings?Nf(a.bookings):'—'),
+    ce('td',{key:keyPfx+'e',style:{padding:'6px 8px',textAlign:'right',fontSize:11,fontWeight:700,
+      color:e2bClr,fontFamily:'DM Mono,monospace'}},
+      a.uniqueLeads>0?a.e2bPct.toFixed(1)+'%':'—'),
+  ];
+}
+
+function DimMonthGrid({M,rows,rowKey,dimLabel}){
+  const [expandedGrps,setExpandedGrps]=useState(new Set());
+  const toggleGrp=name=>setExpandedGrps(p=>{const n=new Set(p);n.has(name)?n.delete(name):n.add(name);return n;});
+
+  const grand=useMemo(()=>aggRE(rows,M),[rows,M]);
+  const allSrcs=useMemo(()=>[...new Set(rows.map(r=>r.source))].filter(Boolean),[rows]);
+
+  const dimVals=useMemo(()=>{
+    const all=[...new Set(rows.map(r=>r[rowKey]))].filter(Boolean);
+    return all.sort((a,b)=>aggRE(rows.filter(r=>r[rowKey]===b),M).uniqueLeads - aggRE(rows.filter(r=>r[rowKey]===a),M).uniqueLeads);
+  },[rows,rowKey,M]);
+
+  const dimRowsMap=useMemo(()=>{
+    const m={};
+    for(const v of dimVals) m[v]=rows.filter(r=>r[rowKey]===v);
+    return m;
+  },[rows,dimVals,rowKey]);
+
+  const visCols=useMemo(()=>{
+    const cols=[];const grouped=new Set(SRC_GROUPS.flatMap(g=>g.members));
+    SRC_GROUPS.forEach(g=>{
+      const avail=g.members.filter(m=>allSrcs.includes(m));
+      if(!avail.length) return;
+      cols.push({type:'group',name:g.name,clr:g.clr,members:avail});
+      if(expandedGrps.has(g.name)) avail.forEach(src=>cols.push({type:'src',src,clr:getSrcColor(src,0),parentGrp:g.name}));
+    });
+    allSrcs.filter(s=>!grouped.has(s)).forEach(src=>cols.push({type:'src',src,clr:getSrcColor(src,0)}));
+    return cols;
+  },[allSrcs,expandedGrps]);
+
+  const maxE2b=useMemo(()=>Math.max(0.001,...dimVals.map(v=>aggRE(dimRowsMap[v]||[],M).e2bPct)),[dimVals,dimRowsMap,M]);
+
+  const TH={padding:'6px 8px',fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:'.06em',
+    color:'#fff',textAlign:'center',border:'1px solid rgba(255,255,255,.12)',whiteSpace:'nowrap'};
+
+  return ce('div',{style:{background:'#fff',border:'1px solid #E5E7EB',borderRadius:12,overflow:'hidden',marginBottom:16}},
+    ce('div',{style:{padding:'10px 16px',background:'#F8FAFC',borderBottom:'1px solid #E5E7EB',
+      display:'flex',justifyContent:'space-between',alignItems:'center'}},
+      ce('span',{style:{fontSize:11,fontWeight:700,background:'#1B4332',color:'#fff',padding:'3px 12px',borderRadius:20}},M),
+      ce('span',{style:{fontSize:11,color:'#9ca3af',fontFamily:'DM Mono,monospace'}},Nf(grand.uniqueLeads)+' leads')
+    ),
+    ce('div',{style:{padding:'0 0 4px',overflowX:'auto'}},
+      ce('table',{style:{width:'100%',borderCollapse:'collapse',minWidth:520}},
+        ce('thead',null,
+          ce('tr',{style:{background:'#1B4332'}},
+            ce('th',{style:{...TH,textAlign:'left',minWidth:90,position:'sticky',left:0,background:'#1B4332',zIndex:2,
+              borderRight:'2px solid rgba(255,255,255,.3)'}},dimLabel||rowKey.toUpperCase()),
+            ce('th',{colSpan:3,style:{...TH,borderLeft:'2px solid rgba(255,255,255,.3)'}},'∑ Total'),
+            visCols.map(col=>col.type==='group'
+              ?ce('th',{key:'gh_'+col.name,colSpan:3,
+                  style:{...TH,background:col.clr.bar,borderLeft:'2px solid rgba(255,255,255,.3)',cursor:'pointer'},
+                  onClick:()=>toggleGrp(col.name)},
+                (expandedGrps.has(col.name)?'▼ ':'▶ ')+col.name)
+              :ce('th',{key:'sh_'+col.src,colSpan:3,
+                  style:{...TH,background:col.clr.bar+'bb',borderLeft:'1px solid rgba(255,255,255,.2)',fontSize:8}},
+                col.src)
+            ),
+            ce('th',{style:{...TH,minWidth:80,borderLeft:'2px solid rgba(255,255,255,.3)'}},'E2B BAR')
+          ),
+          ce('tr',{style:{background:'#0F3024'}},
+            ce('th',{style:{...TH,position:'sticky',left:0,background:'#0F3024',zIndex:2,borderRight:'2px solid rgba(255,255,255,.2)'}},''),
+            ['UL','Books','E2B%'].map((s,i)=>ce('th',{key:'ts'+i,
+              style:{...TH,fontSize:8,color:['#A8D5BA','#fbbf24','#86efac'][i],borderLeft:i===0?'2px solid rgba(255,255,255,.3)':'none'}},s)),
+            visCols.flatMap((col,ci)=>['UL','Books','E2B%'].map((s,i)=>ce('th',{key:'c'+ci+'_'+i,
+              style:{...TH,fontSize:8,color:i===0?'#fff':i===1?'#fbbf24':'#86efac',
+                borderLeft:i===0?'2px solid rgba(255,255,255,.2)':'none'}},s))),
+            ce('th',{style:{...TH,borderLeft:'2px solid rgba(255,255,255,.3)'}})
+          )
+        ),
+        ce('tbody',null,
+          ce('tr',{style:{background:'#081C15'}},
+            ce('td',{style:{padding:'6px 10px',fontSize:10,fontWeight:700,color:'#A8D5BA',
+              position:'sticky',left:0,background:'#081C15',zIndex:1,
+              borderRight:'2px solid rgba(255,255,255,.1)'}},'∑ Grand Total'),
+            renderMetricCells(grand,'#f0f7f4','#fbbf24','#86efac','GT_T'),
+            visCols.flatMap((col,ci)=>{
+              const a=col.type==='group'
+                ?aggRE(rows.filter(r=>col.members.includes(r.source)),M)
+                :aggRE(rows.filter(r=>r.source===col.src),M);
+              return renderMetricCells(a,col.clr.bar+'ee','#fbbf24','#86efac','GT_'+ci);
+            }),
+            ce('td',{style:{padding:'6px 10px',background:'#081C15'}})
+          ),
+          dimVals.map((v,ri)=>{
+            const dimR=dimRowsMap[v]||[];
+            const tot=aggRE(dimR,M);
+            const barW=maxE2b>0?(tot.e2bPct/maxE2b*100):0;
+            const bg=ri%2===0?'#fff':'#F0F7F4';
+            return ce('tr',{key:v,style:{borderBottom:'1px solid #F3F4F6',background:bg}},
+              ce('td',{style:{padding:'7px 10px',position:'sticky',left:0,background:bg,zIndex:1,
+                borderRight:'2px solid #D8EED8'}},
+                ce('span',{style:{display:'inline-block',padding:'2px 8px',borderRadius:20,
+                  fontSize:10,fontWeight:700,background:'#D8EED8',color:'#1B4332'}},v)
+              ),
+              renderMetricCells(tot,'#111827','#C9A227','#2D6A4F','R'+ri+'T'),
+              visCols.flatMap((col,ci)=>{
+                const colR=col.type==='group'
+                  ?dimR.filter(r=>col.members.includes(r.source))
+                  :dimR.filter(r=>r.source===col.src);
+                const a=aggRE(colR,M);
+                return renderMetricCells(a,col.clr.bar,col.clr.bar,col.clr.bar,'R'+ri+'C'+ci);
+              }),
+              ce('td',{style:{padding:'7px 10px'}},
+                ce('div',{style:{display:'flex',alignItems:'center',gap:5,minWidth:80}},
+                  ce('div',{style:{flex:1,height:6,background:'#F3F4F6',borderRadius:6,overflow:'hidden'}},
+                    ce('div',{style:{height:'100%',width:barW+'%',background:'#2D6A4F',borderRadius:6,transition:'width .4s ease'}})
+                  ),
+                  ce('span',{style:{fontSize:9,fontFamily:'DM Mono,monospace',color:'#2D6A4F',
+                    minWidth:32,textAlign:'right',fontWeight:700}},tot.e2bPct.toFixed(1)+'%')
+                )
+              )
+            );
+          })
+        )
+      )
+    )
+  );
+}
+
+/* ── Generic Dimension × Source Tab ──────────────────────────────── */
+function DimSourceTab({rows,mf,rowKey,dimLabel,xTabLabel}){
+  const allMonths=useMemo(()=>
+    [...new Set(rows.map(r=>r.lead_month))].filter(Boolean)
+      .sort((a,b)=>monthOrder(b)-monthOrder(a))
+  ,[rows]);
+  const [selMonths,setSelMonths]=useState(new Set(['all']));
+  function toggleMonth(m){
+    setSelMonths(prev=>{
+      if(m==='all') return new Set(['all']);
+      const next=new Set(prev);next.delete('all');
+      if(next.has(m)){next.delete(m);if(next.size===0)return new Set(['all']);}
+      else next.add(m);
+      return next;
+    });
+  }
+  const activeMonths=selMonths.has('all')?allMonths:allMonths.filter(m=>selMonths.has(m));
+  const pillBase={padding:'4px 14px',fontSize:11,fontWeight:600,borderRadius:20,
+    cursor:'pointer',border:'1px solid #D1D5DB',background:'#fff',color:'#374151',fontFamily:'inherit',transition:'all 120ms'};
+  const pillActive={...pillBase,background:'#1B4332',color:'#fff',borderColor:'#1B4332'};
+  return ce('div',{className:'fade-up'},
+    ce('div',{style:{display:'flex',alignItems:'center',gap:8,marginBottom:18,flexWrap:'wrap'}},
+      ce('span',{style:{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:'.08em',color:'#9ca3af',marginRight:4}},'MONTHS:'),
+      ce('button',{onClick:()=>toggleMonth('all'),style:selMonths.has('all')?pillActive:pillBase},'All'),
+      allMonths.map(m=>ce('button',{key:m,onClick:()=>toggleMonth(m),style:selMonths.has(m)?pillActive:pillBase},m))
+    ),
+    ce('div',{style:{fontSize:11,fontWeight:700,color:'#6b7280',textTransform:'uppercase',
+      letterSpacing:'.08em',marginBottom:12}},dimLabel+' Performance by Month'),
+    activeMonths.map(M=>ce(DimMonthGrid,{key:M,M,rows,rowKey,dimLabel})),
+    ce('div',{style:{margin:'24px 0 16px',borderTop:'2px solid #D8EED8'}}),
+    ce('div',{style:{fontSize:11,fontWeight:700,color:'#6b7280',textTransform:'uppercase',
+      letterSpacing:'.08em',marginBottom:12}},xTabLabel),
+    ce(CrossTab,{rows,mf,rowKey,rowLabel:xTabLabel,limit:60})
+  );
+}
+
+function LTSourceTab({rows,mf}){
+  return ce(DimSourceTab,{rows,mf,rowKey:'lt',dimLabel:'LT',xTabLabel:'LT × Source'});
+}
+function ModelSourceTab({rows,mf}){
+  return ce(DimSourceTab,{rows,mf,rowKey:'model',dimLabel:'Model',xTabLabel:'Model × Source'});
+}
+function StateSourceTab({rows,mf}){
+  return ce(DimSourceTab,{rows,mf,rowKey:'state',dimLabel:'State',xTabLabel:'State × Source'});
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -1011,16 +1209,17 @@ function UploadScreen({onData,onSync,syncing,syncErr,sheetUrl,setSheetUrl,urlDra
    MAIN APP
 ══════════════════════════════════════════════════════════════════════════ */
 const TABS=[
-  {id:'overview',  label:'Overview'},
-  {id:'source',    label:'Source Analysis'},
-  {id:'ltxsrc',   label:'LT × Source'},
-  {id:'primxsrc', label:'Primary Source × Source'},
+  {id:'overview',   label:'Overview'},
+  {id:'source',     label:'Source Analysis'},
+  {id:'ltxsrc',    label:'LT × Source'},
+  {id:'modelxsrc', label:'Model × Source'},
+  {id:'statexsrc', label:'State × Source'},
 ];
 
 function App(){
   const [rows,setRows]=useState(null);
   const [tab,setTab]=useState('overview');
-  const [filters,setFilters]=useState({month:'All',source:'All',primarySrc:'All'});
+  const [filters,setFilters]=useState({month:'All',source:'All',primarySrc:'All',state:'All',city:'All',model:'All'});
   const [syncing,setSyncing]=useState(false);
   const [syncErr,setSyncErr]=useState(null);
   const [lastSynced,setLastSynced]=useState(null);
@@ -1061,15 +1260,21 @@ function App(){
   const months=useMemo(()=>rows?[...new Set(rows.map(r=>r.lead_month))].filter(Boolean).sort((a,b)=>monthOrder(a)-monthOrder(b)):[], [rows]);
   const sources=useMemo(()=>rows?[...new Set(rows.map(r=>r.source))].filter(Boolean).sort():[],[rows]);
   const primSrcs=useMemo(()=>rows?[...new Set(rows.map(r=>r.primary_src))].filter(Boolean).sort():[],[rows]);
+  const states=useMemo(()=>rows?[...new Set(rows.map(r=>r.state))].filter(Boolean).sort():[],[rows]);
+  const cities=useMemo(()=>rows?[...new Set(rows.map(r=>r.city))].filter(Boolean).sort():[],[rows]);
+  const models=useMemo(()=>rows?[...new Set(rows.map(r=>r.model))].filter(Boolean).sort():[],[rows]);
 
-  /* Base rows: filtered by source + primarySrc, NOT by month (month handled in aggRE) */
+  /* Base rows: filtered by source + primarySrc + state + city + model, NOT by month */
   const baseRows=useMemo(()=>{
     if(!rows) return [];
     return rows.filter(r=>
       (filters.source==='All'||r.source===filters.source)&&
-      (filters.primarySrc==='All'||r.primary_src===filters.primarySrc)
+      (filters.primarySrc==='All'||r.primary_src===filters.primarySrc)&&
+      (filters.state==='All'||r.state===filters.state)&&
+      (filters.city==='All'||r.city===filters.city)&&
+      (filters.model==='All'||r.model===filters.model)
     );
-  },[rows,filters.source,filters.primarySrc]);
+  },[rows,filters.source,filters.primarySrc,filters.state,filters.city,filters.model]);
 
   const totalM=useMemo(()=>aggRE(baseRows,filters.month),[baseRows,filters.month]);
 
@@ -1156,15 +1361,18 @@ function App(){
           {k:'month',     label:'Lead Month',     opts:['All',...months]},
           {k:'source',    label:'Source',          opts:['All',...sources]},
           {k:'primarySrc',label:'Primary Source',  opts:['All',...primSrcs]},
+          {k:'model',     label:'Model',           opts:['All',...models]},
+          {k:'state',     label:'State',           opts:['All',...states]},
+          {k:'city',      label:'City',            opts:['All',...cities]},
         ].map(f=>ce('div',{key:f.k,style:{display:'flex',alignItems:'center',gap:5}},
           ce('span',{style:{fontSize:10,color:'#64748b',fontWeight:600}},f.label+':'),
           ce('select',{value:filters[f.k],onChange:e=>setFilters(p=>({...p,[f.k]:e.target.value}))},
             f.opts.map(o=>ce('option',{key:o,value:o},o))
           )
         )),
-        (filters.month!=='All'||filters.source!=='All'||filters.primarySrc!=='All')&&
+        (filters.month!=='All'||filters.source!=='All'||filters.primarySrc!=='All'||filters.state!=='All'||filters.city!=='All'||filters.model!=='All')&&
           ce('button',{
-            onClick:()=>setFilters({month:'All',source:'All',primarySrc:'All'}),
+            onClick:()=>setFilters({month:'All',source:'All',primarySrc:'All',state:'All',city:'All',model:'All'}),
             style:{padding:'4px 12px',fontSize:10,background:'#D8EED8',border:'1px solid #A8D5BA',borderRadius:20,cursor:'pointer',fontFamily:'inherit',color:'#1B4332',fontWeight:600}
           },'✕ Clear Filters'),
         ce('span',{style:{marginLeft:'auto',fontSize:10,fontFamily:'DM Mono',color:'#94a3b8'}},
@@ -1174,10 +1382,11 @@ function App(){
 
     /* Tab content */
     ce('div',{style:{maxWidth:1600,margin:'0 auto',padding:'14px 24px 32px'}},
-      tab==='overview'  && ce(OverviewTab,    {rows:baseRows, mf:filters.month}),
-      tab==='source'    && ce(SourceTab,      {rows:baseRows, mf:filters.month}),
-      tab==='ltxsrc'   && ce(CrossTab,       {rows:baseRows, mf:filters.month, rowKey:'lt',          rowLabel:'LT × Source',             limit:60}),
-      tab==='primxsrc' && ce(CrossTab,       {rows:baseRows, mf:filters.month, rowKey:'primary_src', rowLabel:'Primary Source × Source',  limit:60}),
+      tab==='overview'   && ce(OverviewTab,    {rows:baseRows, mf:filters.month}),
+      tab==='source'     && ce(SourceTab,      {rows:baseRows, mf:filters.month}),
+      tab==='ltxsrc'    && ce(LTSourceTab,    {rows:baseRows, mf:filters.month}),
+      tab==='modelxsrc' && ce(ModelSourceTab, {rows:baseRows, mf:filters.month}),
+      tab==='statexsrc' && ce(StateSourceTab, {rows:baseRows, mf:filters.month}),
     )
   );
 }
