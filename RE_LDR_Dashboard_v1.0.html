@@ -232,7 +232,7 @@ function dupBadge(pct){
 /* ══════════════════════════════════════════════════════════════════════════
    OVERVIEW TAB
 ══════════════════════════════════════════════════════════════════════════ */
-function OverviewTab({rows,mf}){
+const OverviewTab=React.memo(function OverviewTab({rows,mf}){
   const m=useMemo(()=>aggRE(rows,mf),[rows,mf]);
   const chartRef=useRef(); const chartInst=useRef();
 
@@ -539,7 +539,7 @@ function OverviewTab({rows,mf}){
       )
     )
   );
-}
+});
 
 /* ── Source color palette ─────────────────────────────────────────── */
 const SRC_PALETTE={
@@ -562,7 +562,7 @@ const SRC_GROUPS=[
 const GRP_MAP={};SRC_GROUPS.forEach(g=>g.members.forEach(m=>{GRP_MAP[m]=g.name;}));
 
 /* ── Per-source mini chart ────────────────────────────────────────── */
-function SourceMiniChart({src,srcRows,allMonths,colorCfg}){
+const SourceMiniChart=React.memo(function SourceMiniChart({src,srcRows,allMonths,colorCfg}){
   const chartRef=useRef(); const chartInst=useRef();
 
   /* Per-month data for this source (oldest → newest for chart x-axis) */
@@ -623,10 +623,10 @@ function SourceMiniChart({src,srcRows,allMonths,colorCfg}){
     ),
     ce('div',{style:{height:165,position:'relative'}},ce('canvas',{ref:chartRef}))
   );
-}
+});
 
 /* ── Monthly performance grid (Source Analysis — with grouping) ────── */
-function MonthGrid({M,rows}){
+const MonthGrid=React.memo(function MonthGrid({M,rows}){
   const [expanded,setExpanded]=useState(new Set());
   const toggleGrp=name=>setExpanded(p=>{const n=new Set(p);n.has(name)?n.delete(name):n.add(name);return n;});
 
@@ -724,12 +724,12 @@ function MonthGrid({M,rows}){
       )
     )
   );
-}
+});
 
 /* ══════════════════════════════════════════════════════════════════════════
    SOURCE ANALYSIS TAB
 ══════════════════════════════════════════════════════════════════════════ */
-function SourceTab({rows}){
+const SourceTab=React.memo(function SourceTab({rows,mf}){
   const sources=useMemo(()=>[...new Set(rows.map(r=>r.source))].filter(Boolean).sort(),[rows]);
 
   /* All months, newest first for pills; oldest first for charts is handled inside SourceMiniChart */
@@ -738,8 +738,11 @@ function SourceTab({rows}){
       .sort((a,b)=>monthOrder(b)-monthOrder(a))
   ,[rows]);
 
-  /* Month pill selection: 'all' or a Set of month strings */
-  const [selMonths,setSelMonths]=useState(new Set(['all']));
+  /* Month pill selection: sync with global month filter */
+  const [selMonths,setSelMonths]=useState(()=>mf&&mf!=='All'?new Set([mf]):new Set(['all']));
+  useEffect(()=>{
+    setSelMonths(mf&&mf!=='All'?new Set([mf]):new Set(['all']));
+  },[mf]);
 
   function toggleMonth(m){
     setSelMonths(prev=>{
@@ -800,7 +803,7 @@ function SourceTab({rows}){
     /* Monthly performance grids */
     activeMonths.map(M=>ce(MonthGrid,{key:M,M,rows}))
   );
-}
+});
 
 /* ── Dimension × Source Monthly Grid (LT / Model / State) ─────────── */
 function renderMetricCells(a,keyPfx,bold,grandLeads){
@@ -822,7 +825,7 @@ function renderMetricCells(a,keyPfx,bold,grandLeads){
   ];
 }
 
-function DimMonthGrid({M,rows,rowKey,dimLabel,flat=false}){
+const DimMonthGrid=React.memo(function DimMonthGrid({M,rows,rowKey,dimLabel,flat=false}){
   const [expandedGrps,setExpandedGrps]=useState(new Set());
   const toggleGrp=name=>setExpandedGrps(p=>{const n=new Set(p);n.has(name)?n.delete(name):n.add(name);return n;});
 
@@ -855,18 +858,7 @@ function DimMonthGrid({M,rows,rowKey,dimLabel,flat=false}){
   /* Pre-compute all source-group cell aggregations upfront */
   const cellAggs=useMemo(()=>{
     const result={};
-    const srcRows={};
-    for(const g of SRC_GROUPS) g.members.forEach(src=>{srcRows[src]=[];});
     const ungroupedSrcs=allSrcs.filter(s=>!grouped.has(s));
-    ungroupedSrcs.forEach(src=>{srcRows[src]=[];});
-
-    for(const r of rows){
-      const v=r[rowKey]||'Unknown';
-      if(!result[v]) result[v]={};
-      if(srcRows[r.source]!==undefined && dimRowsMap[v]){
-        // handled below per-dim
-      }
-    }
     for(const v of dimVals){
       result[v]={};
       const dimR=dimRowsMap[v]||[];
@@ -970,15 +962,18 @@ function DimMonthGrid({M,rows,rowKey,dimLabel,flat=false}){
       )
     )
   );
-}
+});
 
 /* ── Generic Dimension × Source Tab ──────────────────────────────── */
-function DimSourceTab({rows,mf,rowKey,dimLabel,xTabLabel,flat=false}){
+const DimSourceTab=React.memo(function DimSourceTab({rows,mf,rowKey,dimLabel,xTabLabel,flat=false}){
   const allMonths=useMemo(()=>
     [...new Set(rows.map(r=>r.lead_month))].filter(Boolean)
       .sort((a,b)=>monthOrder(b)-monthOrder(a))
   ,[rows]);
-  const [selMonths,setSelMonths]=useState(new Set(['all']));
+  const [selMonths,setSelMonths]=useState(()=>mf&&mf!=='All'?new Set([mf]):new Set(['all']));
+  useEffect(()=>{
+    setSelMonths(mf&&mf!=='All'?new Set([mf]):new Set(['all']));
+  },[mf]);
   function toggleMonth(m){
     setSelMonths(prev=>{
       if(m==='all') return new Set(['all']);
@@ -1006,26 +1001,21 @@ function DimSourceTab({rows,mf,rowKey,dimLabel,xTabLabel,flat=false}){
       letterSpacing:'.08em',marginBottom:12}},xTabLabel+' — All Months Summary'),
     ce(DimMonthGrid,{M:mf,rows,rowKey,dimLabel,flat})
   );
-}
+});
 
-function LTSourceTab({rows,mf}){
+const LTSourceTab=React.memo(function LTSourceTab({rows,mf}){
   return ce(DimSourceTab,{rows,mf,rowKey:'lt',dimLabel:'LT',xTabLabel:'LT × Source'});
-}
-function ModelSourceTab({rows,mf}){
+});
+const ModelSourceTab=React.memo(function ModelSourceTab({rows,mf}){
   return ce(DimSourceTab,{rows,mf,rowKey:'model',dimLabel:'Model',xTabLabel:'Model × Source'});
-}
-function StateSourceTab({rows,mf}){
+});
+const StateSourceTab=React.memo(function StateSourceTab({rows,mf}){
   return ce(DimSourceTab,{rows,mf,rowKey:'state',dimLabel:'State',xTabLabel:'State × Source'});
-}
+});
 
-/* ══════════════════════════════════════════════════════════════════════════
-   CROSS-TAB COMPONENT (shared by LT×Source and PrimarySource×Source)
-══════════════════════════════════════════════════════════════════════════ */
-function CrossTab({rows,mf,rowKey,rowLabel,rowSort,limit=60}){
-  const [showAll,setShowAll]=useState(false);
-  const [sortSrc,setSortSrc]=useState('__total__');
-  const [sortCol,setSortCol]=useState('uniqueLeads');
-  const [sortDir,setSortDir]=useState('desc');
+/* DEAD CODE REMOVED — was CrossTab, now replaced by DimMonthGrid */
+function UploadScreen_DEAD(){const[x]=useState(0);if(x)return null;
+  /* DEAD */
 
   const sources=useMemo(()=>[...new Set(rows.map(r=>r.source))].filter(Boolean).sort(),[rows]);
   const rowVals=useMemo(()=>[...new Set(rows.map(r=>r[rowKey]))].filter(Boolean),[rows,rowKey]);
@@ -1359,6 +1349,15 @@ function App(){
 
   const totalM=useMemo(()=>aggRE(baseRows,filters.month),[baseRows,filters.month]);
 
+  /* Stable element refs — React.memo components skip re-render when tab changes */
+  const tabEls=useMemo(()=>({
+    overview:  ce(OverviewTab,    {rows:baseRows, mf:filters.month}),
+    source:    ce(SourceTab,      {rows:baseRows, mf:filters.month}),
+    ltxsrc:   ce(LTSourceTab,    {rows:baseRows, mf:filters.month}),
+    modelxsrc: ce(ModelSourceTab, {rows:baseRows, mf:filters.month}),
+    statexsrc: ce(StateSourceTab, {rows:baseRows, mf:filters.month}),
+  }),[baseRows,filters.month]);
+
   if(!rows) return ce(UploadScreen,{onData:setRows,onSync:handleSync,syncing,syncErr,sheetUrl,setSheetUrl,urlDraft,setUrlDraft,lastSynced});
 
   return ce('div',{style:{minHeight:'100vh'}},
@@ -1461,16 +1460,10 @@ function App(){
       )
     ),
 
-    /* Tab content — all tabs kept mounted (display:none when inactive) so
-       useMemo caches survive tab switches, making toggle instant */
+    /* Tab content — all tabs kept mounted (display:none when inactive).
+       tabEls is memoized so React.memo components skip re-render on tab switch. */
     ce('div',{style:{maxWidth:1600,margin:'0 auto',padding:'14px 24px 32px'}},
-      [
-        {id:'overview',   el:ce(OverviewTab,    {rows:baseRows, mf:filters.month})},
-        {id:'source',     el:ce(SourceTab,      {rows:baseRows, mf:filters.month})},
-        {id:'ltxsrc',    el:ce(LTSourceTab,    {rows:baseRows, mf:filters.month})},
-        {id:'modelxsrc', el:ce(ModelSourceTab, {rows:baseRows, mf:filters.month})},
-        {id:'statexsrc', el:ce(StateSourceTab, {rows:baseRows, mf:filters.month})},
-      ].map(({id,el})=>ce('div',{key:id,style:{display:tab===id?'block':'none'}},el))
+      TABS.map(({id})=>ce('div',{key:id,style:{display:tab===id?'block':'none'}},tabEls[id]))
     )
   );
 }
