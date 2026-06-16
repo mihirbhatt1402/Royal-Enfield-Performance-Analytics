@@ -777,7 +777,7 @@ function renderMetricCells(a,keyPfx,bold,grandLeads){
   ];
 }
 
-function DimMonthGrid({M,rows,rowKey,dimLabel}){
+function DimMonthGrid({M,rows,rowKey,dimLabel,flat=false}){
   const [expandedGrps,setExpandedGrps]=useState(new Set());
   const toggleGrp=name=>setExpandedGrps(p=>{const n=new Set(p);n.has(name)?n.delete(name):n.add(name);return n;});
 
@@ -851,11 +851,11 @@ function DimMonthGrid({M,rows,rowKey,dimLabel}){
       const avail=g.members.filter(m=>allSrcs.includes(m));
       if(!avail.length) return;
       cols.push({type:'group',name:g.name,clr:g.clr,members:avail,key:'grp_'+g.name});
-      if(expandedGrps.has(g.name)) avail.forEach(src=>cols.push({type:'src',src,clr:getSrcColor(src,0),key:'src_'+src}));
+      if(!flat&&expandedGrps.has(g.name)) avail.forEach(src=>cols.push({type:'src',src,clr:getSrcColor(src,0),key:'src_'+src}));
     });
     allSrcs.filter(s=>!grouped.has(s)).forEach(src=>cols.push({type:'src',src,clr:getSrcColor(src,0),key:'src_'+src}));
     return cols;
-  },[allSrcs,expandedGrps,grouped]);
+  },[allSrcs,expandedGrps,grouped,flat]);
 
   const TH={padding:'6px 8px',fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:'.06em',
     color:'#fff',textAlign:'center',border:'1px solid rgba(255,255,255,.12)',whiteSpace:'nowrap'};
@@ -876,9 +876,10 @@ function DimMonthGrid({M,rows,rowKey,dimLabel}){
             ce('th',{colSpan:4,style:{...TH,borderLeft:'2px solid rgba(255,255,255,.3)'}},'∑ Total'),
             visCols.map(col=>col.type==='group'
               ?ce('th',{key:'gh_'+col.name,colSpan:4,
-                  style:{...TH,background:col.clr.bar,borderLeft:'2px solid rgba(255,255,255,.3)',cursor:'pointer'},
-                  onClick:()=>toggleGrp(col.name)},
-                (expandedGrps.has(col.name)?'▼ ':'▶ ')+col.name)
+                  style:{...TH,background:col.clr.bar,borderLeft:'2px solid rgba(255,255,255,.3)',
+                    cursor:flat?'default':'pointer'},
+                  onClick:flat?undefined:()=>toggleGrp(col.name)},
+                flat?col.name:(expandedGrps.has(col.name)?'▼ ':'▶ ')+col.name)
               :ce('th',{key:'sh_'+col.src,colSpan:4,
                   style:{...TH,background:col.clr.bar+'bb',borderLeft:'1px solid rgba(255,255,255,.2)',fontSize:8}},
                 col.src)
@@ -927,7 +928,7 @@ function DimMonthGrid({M,rows,rowKey,dimLabel}){
 }
 
 /* ── Generic Dimension × Source Tab ──────────────────────────────── */
-function DimSourceTab({rows,mf,rowKey,dimLabel,xTabLabel}){
+function DimSourceTab({rows,mf,rowKey,dimLabel,xTabLabel,flat=false}){
   const allMonths=useMemo(()=>
     [...new Set(rows.map(r=>r.lead_month))].filter(Boolean)
       .sort((a,b)=>monthOrder(b)-monthOrder(a))
@@ -954,11 +955,11 @@ function DimSourceTab({rows,mf,rowKey,dimLabel,xTabLabel}){
     ),
     ce('div',{style:{fontSize:11,fontWeight:700,color:'#6b7280',textTransform:'uppercase',
       letterSpacing:'.08em',marginBottom:12}},dimLabel+' Performance by Month'),
-    activeMonths.map(M=>ce(DimMonthGrid,{key:M,M,rows,rowKey,dimLabel})),
+    activeMonths.map(M=>ce(DimMonthGrid,{key:M,M,rows,rowKey,dimLabel,flat})),
     ce('div',{style:{margin:'24px 0 16px',borderTop:'2px solid #D8EED8'}}),
     ce('div',{style:{fontSize:11,fontWeight:700,color:'#6b7280',textTransform:'uppercase',
       letterSpacing:'.08em',marginBottom:12}},xTabLabel+' — All Months Summary'),
-    ce(DimMonthGrid,{M:mf,rows,rowKey,dimLabel})
+    ce(DimMonthGrid,{M:mf,rows,rowKey,dimLabel,flat})
   );
 }
 
@@ -969,7 +970,7 @@ function ModelSourceTab({rows,mf}){
   return ce(DimSourceTab,{rows,mf,rowKey:'model',dimLabel:'Model',xTabLabel:'Model × Source'});
 }
 function StateSourceTab({rows,mf}){
-  return ce(DimSourceTab,{rows,mf,rowKey:'state',dimLabel:'State',xTabLabel:'State × Source'});
+  return ce(DimSourceTab,{rows,mf,rowKey:'state',dimLabel:'State',xTabLabel:'State × Source',flat:true});
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
