@@ -1415,13 +1415,16 @@ function App(){
       )
     ),
 
-    /* Tab content */
+    /* Tab content — all tabs kept mounted (display:none when inactive) so
+       useMemo caches survive tab switches, making toggle instant */
     ce('div',{style:{maxWidth:1600,margin:'0 auto',padding:'14px 24px 32px'}},
-      tab==='overview'   && ce(OverviewTab,    {rows:baseRows, mf:filters.month}),
-      tab==='source'     && ce(SourceTab,      {rows:baseRows, mf:filters.month}),
-      tab==='ltxsrc'    && ce(LTSourceTab,    {rows:baseRows, mf:filters.month}),
-      tab==='modelxsrc' && ce(ModelSourceTab, {rows:baseRows, mf:filters.month}),
-      tab==='statexsrc' && ce(StateSourceTab, {rows:baseRows, mf:filters.month}),
+      [
+        {id:'overview',   el:ce(OverviewTab,    {rows:baseRows, mf:filters.month})},
+        {id:'source',     el:ce(SourceTab,      {rows:baseRows, mf:filters.month})},
+        {id:'ltxsrc',    el:ce(LTSourceTab,    {rows:baseRows, mf:filters.month})},
+        {id:'modelxsrc', el:ce(ModelSourceTab, {rows:baseRows, mf:filters.month})},
+        {id:'statexsrc', el:ce(StateSourceTab, {rows:baseRows, mf:filters.month})},
+      ].map(({id,el})=>ce('div',{key:id,style:{display:tab===id?'block':'none'}},el))
     )
   );
 }
