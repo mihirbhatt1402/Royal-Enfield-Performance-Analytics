@@ -625,106 +625,135 @@ const SourceMiniChart=React.memo(function SourceMiniChart({src,srcRows,allMonths
   );
 });
 
-/* ── Monthly performance grid (Source Analysis — with grouping) ────── */
-const MonthGrid=React.memo(function MonthGrid({M,rows}){
-  const [expanded,setExpanded]=useState(new Set());
-  const toggleGrp=name=>setExpanded(p=>{const n=new Set(p);n.has(name)?n.delete(name):n.add(name);return n;});
+/* ── Compact Matrix Grid (Source / LT / Model / State tabs) ─────────── */
+function l2rColor(pct){
+  if(!pct||pct<=0) return '#F3F4F6';
+  if(pct>=5) return '#B7DDBE';
+  if(pct>=2) return '#EBC98A';
+  return '#E3B0B0';
+}
+
+const CompactMonthGrid=React.memo(function CompactMonthGrid({M,rows,rowKey,dimLabel}){
+  const PAID_MBRS=SRC_GROUPS[0].members;
+  const ORG_MBRS=SRC_GROUPS[1].members;
 
   const grand=useMemo(()=>aggRE(rows,M),[rows,M]);
-  const allSrcs=useMemo(()=>[...new Set(rows.map(r=>r.source))].filter(Boolean),[rows]);
+  const paidAll=useMemo(()=>rows.filter(r=>PAID_MBRS.includes(r.source)),[rows]);
+  const orgAll=useMemo(()=>rows.filter(r=>ORG_MBRS.includes(r.source)),[rows]);
+  const grandPaid=useMemo(()=>aggRE(paidAll,M),[paidAll,M]);
+  const grandOrg=useMemo(()=>aggRE(orgAll,M),[orgAll,M]);
 
-  const displayRows=useMemo(()=>{
-    const result=[];const grouped=new Set();
-    SRC_GROUPS.forEach(g=>{
-      const avail=g.members.filter(m=>allSrcs.includes(m));
-      if(!avail.length) return;
-      avail.forEach(m=>grouped.add(m));
-      result.push({type:'group',name:g.name,members:avail,clr:g.clr});
-      if(expanded.has(g.name)) avail.forEach(src=>result.push({type:'src',src,parentGrp:g.name}));
-    });
-    allSrcs.filter(s=>!grouped.has(s)).forEach(src=>result.push({type:'src',src}));
-    return result;
-  },[allSrcs,expanded]);
+  const dimRowsMap=useMemo(()=>{
+    const m={};
+    for(const r of rows){const v=r[rowKey]||'Unknown';if(!m[v])m[v]=[];m[v].push(r);}
+    return m;
+  },[rows,rowKey]);
 
-  const maxE2b=useMemo(()=>{
-    let max=0.001;
-    SRC_GROUPS.forEach(g=>{const a=aggRE(rows.filter(r=>g.members.includes(r.source)),M);if(a.e2bPct>max)max=a.e2bPct;});
-    const grouped=new Set(SRC_GROUPS.flatMap(g=>g.members));
-    allSrcs.filter(s=>!grouped.has(s)).forEach(src=>{const a=aggRE(rows.filter(r=>r.source===src),M);if(a.e2bPct>max)max=a.e2bPct;});
-    return max;
-  },[rows,allSrcs,M]);
+  const dimAggs=useMemo(()=>{
+    const res={};
+    for(const [v,vr] of Object.entries(dimRowsMap)){
+      res[v]={
+        total:aggRE(vr,M),
+        paid:aggRE(vr.filter(r=>PAID_MBRS.includes(r.source)),M),
+        org:aggRE(vr.filter(r=>ORG_MBRS.includes(r.source)),M),
+      };
+    }
+    return res;
+  },[dimRowsMap,M]);
 
-  const getAgg=row=>row.type==='group'
-    ?aggRE(rows.filter(r=>row.members.includes(r.source)),M)
-    :aggRE(rows.filter(r=>r.source===row.src),M);
+  const dimVals=useMemo(()=>
+    Object.keys(dimAggs).sort((a,b)=>dimAggs[b].total.uniqueLeads-dimAggs[a].total.uniqueLeads)
+  ,[dimAggs]);
 
-  return ce('div',{style:{background:'#fff',border:'1px solid #E5E7EB',borderRadius:12,overflow:'hidden',marginBottom:16}},
-    ce('div',{style:{padding:'10px 16px',background:'#F8FAFC',borderBottom:'1px solid #E5E7EB',
+  function mkCells(agg,grandLeads,kpfx,bg){
+    const contrib=grandLeads>0&&agg.uniqueLeads>0?(agg.uniqueLeads/grandLeads*100):0;
+    const l2r=agg.uniqueLeads>0?agg.e2bPct:0;
+    const l2rBg=agg.uniqueLeads>0?l2rColor(l2r):'#F3F4F6';
+    const cs={padding:'5px 7px',textAlign:'right',fontSize:11,fontFamily:'DM Mono,monospace',
+      color:'#222222',border:'1px solid #E5E7EB',verticalAlign:'middle',background:bg};
+    return[
+      ce('td',{key:kpfx+'l',style:cs},agg.uniqueLeads?Nf(agg.uniqueLeads):'—'),
+      ce('td',{key:kpfx+'r',style:cs},agg.bookings?Nf(agg.bookings):'—'),
+      ce('td',{key:kpfx+'c',style:{...cs,padding:'3px 7px',minWidth:76}},
+        grandLeads>0&&agg.uniqueLeads>0
+          ?ce('div',null,
+            ce('div',{style:{fontSize:10,textAlign:'right',marginBottom:2}},contrib.toFixed(1)+'%'),
+            ce('div',{style:{height:4,background:'#EFEFEF',borderRadius:2}},
+              ce('div',{style:{height:'100%',width:Math.min(contrib,100)+'%',background:'#C8A96B',borderRadius:2}}))
+          )
+          :ce('span',{style:{color:'#9ca3af'}},'—')
+      ),
+      ce('td',{key:kpfx+'e',style:{...cs,background:l2rBg,fontWeight:700}},
+        agg.uniqueLeads>0?l2r.toFixed(1)+'%':'—'
+      ),
+    ];
+  }
+
+  const thBase={padding:'6px 7px',fontSize:9,fontWeight:700,textTransform:'uppercase',
+    letterSpacing:'.06em',textAlign:'center',border:'1px solid rgba(255,255,255,.18)',
+    whiteSpace:'nowrap',position:'sticky',top:0,zIndex:2,color:'#fff'};
+  const thSub={padding:'4px 6px',fontSize:8,fontWeight:600,textTransform:'uppercase',
+    letterSpacing:'.05em',color:'#2B2B2B',background:'#F3F4F6',textAlign:'center',
+    border:'1px solid #E5E7EB',whiteSpace:'nowrap',position:'sticky',top:30,zIndex:1};
+  const lblStyle={padding:'5px 10px',fontSize:11,fontWeight:600,color:'#222',
+    position:'sticky',left:0,zIndex:1,borderRight:'2px solid #D1D5DB',
+    whiteSpace:'nowrap',textAlign:'left'};
+
+  const GROUPS=[
+    {label:'Total',           bg:'#58616A',pfx:'T',grnd:grand.uniqueLeads},
+    {label:'Paid',            bg:'#B46B42',pfx:'P',grnd:grandPaid.uniqueLeads},
+    {label:'Organic + Non MS',bg:'#5F8B6F',pfx:'O',grnd:grandOrg.uniqueLeads},
+  ];
+  const SCOLS=['Leads','Retail','Contrib%','L2R%'];
+
+  return ce('div',{style:{background:'#fff',border:'1px solid #E5E7EB',borderRadius:12,
+    overflow:'hidden',marginBottom:16}},
+    ce('div',{style:{padding:'8px 16px',background:'#F8F9FA',borderBottom:'1px solid #E5E7EB',
       display:'flex',justifyContent:'space-between',alignItems:'center'}},
-      ce('span',{style:{fontSize:11,fontWeight:700,background:'#1B4332',color:'#fff',padding:'3px 12px',borderRadius:20}},M),
-      ce('span',{style:{fontSize:11,color:'#9ca3af',fontFamily:'DM Mono,monospace'}},Nf(grand.uniqueLeads)+' leads')
+      ce('span',{style:{fontSize:11,fontWeight:700,background:'#3C3C3C',color:'#fff',
+        padding:'3px 12px',borderRadius:20}},M),
+      ce('span',{style:{fontSize:11,color:'#9ca3af',fontFamily:'DM Mono,monospace'}},
+        Nf(grand.uniqueLeads)+' leads')
     ),
-    ce('div',{style:{padding:'0 0 4px'}},
-      ce('table',{style:{width:'100%',borderCollapse:'collapse'}},
+    ce('div',{style:{overflowX:'auto'}},
+      ce('table',{style:{borderCollapse:'collapse',fontSize:11,width:'100%'}},
         ce('thead',null,
-          ce('tr',{style:{background:'#1B4332'}},
-            ce('th',{style:{padding:'8px 16px',textAlign:'left',fontSize:9,fontWeight:700,letterSpacing:'.08em',color:'#A8D5BA',textTransform:'uppercase',width:'20%'}},'Source'),
-            ce('th',{style:{padding:'8px 12px',textAlign:'right',fontSize:9,fontWeight:700,letterSpacing:'.08em',color:'#A8D5BA',textTransform:'uppercase'}},'Unique Leads'),
-            ce('th',{style:{padding:'8px 12px',textAlign:'right',fontSize:9,fontWeight:700,letterSpacing:'.08em',color:'#fbbf24',textTransform:'uppercase'}},'Bookings'),
-            ce('th',{style:{padding:'8px 12px',textAlign:'right',fontSize:9,fontWeight:700,letterSpacing:'.08em',color:'#A8D5BA',textTransform:'uppercase'}},'Contrib%'),
-            ce('th',{style:{padding:'8px 12px',textAlign:'right',fontSize:9,fontWeight:700,letterSpacing:'.08em',color:'#86efac',textTransform:'uppercase'}},'E2B%'),
-            ce('th',{style:{padding:'8px 16px',textAlign:'left',fontSize:9,fontWeight:700,letterSpacing:'.08em',color:'#A8D5BA',textTransform:'uppercase',width:'22%'}},'E2B BAR'),
+          ce('tr',null,
+            ce('th',{rowSpan:2,style:{...thBase,textAlign:'left',minWidth:110,
+              background:'#3C3C3C',position:'sticky',left:0,zIndex:4,
+              borderRight:'2px solid rgba(255,255,255,.3)'}},dimLabel||rowKey.toUpperCase()),
+            ...GROUPS.map((g,gi)=>ce('th',{key:'gh'+gi,colSpan:4,style:{
+              ...thBase,background:g.bg,
+              borderLeft:gi>0?'2px solid rgba(255,255,255,.4)':undefined}},g.label))
+          ),
+          ce('tr',null,
+            ...GROUPS.flatMap((g,gi)=>SCOLS.map((s,si)=>ce('th',{key:g.pfx+si,style:{
+              ...thSub,borderLeft:si===0&&gi>0?'2px solid #D1D5DB':undefined}},s)))
           )
         ),
         ce('tbody',null,
-          displayRows.map((row,i)=>{
-            const a=getAgg(row);
-            const contrib=grand.uniqueLeads>0?(a.uniqueLeads/grand.uniqueLeads*100):0;
-            const barW=maxE2b>0?(a.e2bPct/maxE2b*100):0;
-            const isGroup=row.type==='group';
-            const isSub=row.type==='src'&&row.parentGrp;
-            const clr=isGroup?row.clr:getSrcColor(row.src,0);
-            const bg=isGroup?clr.light:(isSub?'#FAFAFE':(i%2===0?'#fff':'#FAFAFA'));
-            const isExp=isGroup&&expanded.has(row.name);
-            return ce('tr',{key:isGroup?row.name:row.src,style:{borderBottom:'1px solid #F3F4F6',background:bg}},
-              ce('td',{style:{padding:isSub?'7px 16px 7px 30px':'9px 16px'}},
-                isGroup
-                  ?ce('button',{onClick:()=>toggleGrp(row.name),
-                      style:{display:'inline-flex',alignItems:'center',gap:6,background:'none',border:'none',cursor:'pointer',padding:0,fontFamily:'inherit'}},
-                    ce('span',{style:{fontSize:10,color:clr.text,fontWeight:700}},isExp?'▼':'▶'),
-                    ce('span',{style:{display:'inline-block',padding:'2px 10px',borderRadius:20,fontSize:10,fontWeight:700,
-                      background:clr.light,color:clr.text,border:'1px solid '+clr.bar}},row.name)
-                  )
-                  :ce('span',{style:{display:'inline-block',padding:'2px 10px',borderRadius:20,fontSize:10,
-                      fontWeight:isSub?500:700,background:clr.light,color:clr.text}},row.src)
-              ),
-              ce('td',{style:{padding:'9px 12px',textAlign:'right',fontSize:12,fontWeight:isGroup?700:600,color:'#111827',fontFamily:'DM Mono,monospace'}},Nf(a.uniqueLeads)),
-              ce('td',{style:{padding:'9px 12px',textAlign:'right',fontSize:12,fontWeight:isGroup?700:600,color:'#C9A227',fontFamily:'DM Mono,monospace'}},Nf(a.bookings)),
-              ce('td',{style:{padding:'9px 12px',textAlign:'right',fontSize:11,color:'#6b7280',fontFamily:'DM Mono,monospace'}},contrib.toFixed(1)+'%'),
-              ce('td',{style:{padding:'9px 12px',textAlign:'right',fontSize:12,fontWeight:700,color:clr.bar,fontFamily:'DM Mono,monospace'}},a.e2bPct.toFixed(2)+'%'),
-              ce('td',{style:{padding:'9px 16px'}},
-                ce('div',{style:{display:'flex',alignItems:'center',gap:6}},
-                  ce('div',{style:{flex:1,height:isSub?5:6,background:'#F3F4F6',borderRadius:6,overflow:'hidden'}},
-                    ce('div',{style:{height:'100%',width:barW+'%',background:clr.bar,borderRadius:6,transition:'width .4s ease'}})
-                  ),
-                  ce('span',{style:{fontSize:isSub?9:10,fontFamily:'DM Mono,monospace',color:clr.bar,minWidth:36,textAlign:'right',fontWeight:700}},a.e2bPct.toFixed(2)+'%')
-                )
-              )
+          dimVals.map((v,ri)=>{
+            const a=dimAggs[v];
+            const bg=ri%2===0?'#FFFFFF':'#F8F8F6';
+            return ce('tr',{key:v,style:{background:bg}},
+              ce('td',{style:{...lblStyle,background:bg}},v),
+              ...mkCells(a.total,grand.uniqueLeads,v+'T_',bg),
+              ...mkCells(a.paid,grandPaid.uniqueLeads,v+'P_',bg),
+              ...mkCells(a.org,grandOrg.uniqueLeads,v+'O_',bg)
             );
           }),
-          ce('tr',{style:{borderTop:'2px solid #E5E7EB',background:'#F8FAFC'}},
-            ce('td',{style:{padding:'9px 16px',fontWeight:700,fontSize:12,color:'#111827'}},'Grand Total'),
-            ce('td',{style:{padding:'9px 12px',textAlign:'right',fontSize:12,fontWeight:700,color:'#111827',fontFamily:'DM Mono,monospace'}},Nf(grand.uniqueLeads)),
-            ce('td',{style:{padding:'9px 12px',textAlign:'right',fontSize:12,fontWeight:700,color:'#C9A227',fontFamily:'DM Mono,monospace'}},Nf(grand.bookings)),
-            ce('td',{style:{padding:'9px 12px',textAlign:'right',fontSize:11,fontWeight:700,color:'#374151',fontFamily:'DM Mono,monospace'}},'100%'),
-            ce('td',{style:{padding:'9px 12px',textAlign:'right',fontSize:12,fontWeight:700,color:'#2D6A4F',fontFamily:'DM Mono,monospace'}},grand.e2bPct.toFixed(2)+'%'),
-            ce('td',{style:{padding:'9px 16px'}})
+          ce('tr',{key:'GT',style:{background:'#E9EDF2',borderTop:'2px solid #D1D5DB'}},
+            ce('td',{style:{...lblStyle,background:'#E9EDF2',fontWeight:700,color:'#333'}},'∑ Grand Total'),
+            ...mkCells(grand,grand.uniqueLeads,'GT_T_','#E9EDF2'),
+            ...mkCells(grandPaid,grandPaid.uniqueLeads,'GT_P_','#E9EDF2'),
+            ...mkCells(grandOrg,grandOrg.uniqueLeads,'GT_O_','#E9EDF2')
           )
         )
       )
     )
   );
 });
+
 
 /* ══════════════════════════════════════════════════════════════════════════
    SOURCE ANALYSIS TAB
@@ -788,7 +817,7 @@ const SourceTab=React.memo(function SourceTab({rows,mf}){
 
     /* Section label */
     ce('div',{style:{fontSize:11,fontWeight:700,color:'#6b7280',textTransform:'uppercase',
-      letterSpacing:'.08em',marginBottom:12}},'Source Leads vs Bookings'),
+      letterSpacing:'.08em',marginBottom:12}},'Source Trend'),
 
     /* Mini charts grid — 2 columns */
     ce('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:24}},
@@ -800,169 +829,11 @@ const SourceTab=React.memo(function SourceTab({rows,mf}){
       }))
     ),
 
-    /* Monthly performance grids */
-    activeMonths.map(M=>ce(MonthGrid,{key:M,M,rows}))
+    /* Compact matrix grids — one per selected month */
+    activeMonths.map(M=>ce(CompactMonthGrid,{key:M,M,rows,rowKey:'source',dimLabel:'Source'}))
   );
 });
 
-/* ── Dimension × Source Monthly Grid (LT / Model / State) ─────────── */
-function renderMetricCells(a,keyPfx,bold,grandLeads){
-  const fw=bold?700:600;
-  const contrib=grandLeads>0?(a.uniqueLeads/grandLeads*100):0;
-  return[
-    ce('td',{key:keyPfx+'u',style:{padding:'6px 8px',textAlign:'right',fontSize:11,fontWeight:fw,
-      color:'#111827',fontFamily:'DM Mono,monospace',borderLeft:'2px solid rgba(0,0,0,.05)'}},
-      a.uniqueLeads?Nf(a.uniqueLeads):'—'),
-    ce('td',{key:keyPfx+'b',style:{padding:'6px 8px',textAlign:'right',fontSize:11,fontWeight:fw,
-      color:'#111827',fontFamily:'DM Mono,monospace'}},
-      a.bookings?Nf(a.bookings):'—'),
-    ce('td',{key:keyPfx+'c',style:{padding:'6px 8px',textAlign:'right',fontSize:11,fontWeight:fw,
-      color:'#111827',fontFamily:'DM Mono,monospace'}},
-      grandLeads>0?contrib.toFixed(1)+'%':'—'),
-    ce('td',{key:keyPfx+'e',style:{padding:'6px 8px',textAlign:'right',fontSize:11,fontWeight:fw,
-      color:'#111827',fontFamily:'DM Mono,monospace'}},
-      a.uniqueLeads>0?a.e2bPct.toFixed(1)+'%':'—'),
-  ];
-}
-
-const DimMonthGrid=React.memo(function DimMonthGrid({M,rows,rowKey,dimLabel,flat=false}){
-  const [expandedGrps,setExpandedGrps]=useState(new Set());
-  const toggleGrp=name=>setExpandedGrps(p=>{const n=new Set(p);n.has(name)?n.delete(name):n.add(name);return n;});
-
-  const grand=useMemo(()=>aggRE(rows,M),[rows,M]);
-  const allSrcs=useMemo(()=>[...new Set(rows.map(r=>r.source))].filter(Boolean),[rows]);
-  const grouped=useMemo(()=>new Set(SRC_GROUPS.flatMap(g=>g.members)),[]);
-
-  /* Build dimRowsMap in one pass — avoids repeated .filter() */
-  const dimRowsMap=useMemo(()=>{
-    const m={};
-    for(const r of rows){
-      const v=r[rowKey]||'Unknown';
-      if(!m[v]) m[v]=[];
-      m[v].push(r);
-    }
-    return m;
-  },[rows,rowKey]);
-
-  /* Pre-compute total per dim value — sort once, no repeated aggRE in comparator */
-  const dimTotals=useMemo(()=>{
-    const t={};
-    for(const v of Object.keys(dimRowsMap)) t[v]=aggRE(dimRowsMap[v],M);
-    return t;
-  },[dimRowsMap,M]);
-
-  const dimVals=useMemo(()=>
-    Object.keys(dimTotals).sort((a,b)=>dimTotals[b].uniqueLeads-dimTotals[a].uniqueLeads)
-  ,[dimTotals]);
-
-  /* Pre-compute all source-group cell aggregations upfront */
-  const cellAggs=useMemo(()=>{
-    const result={};
-    const ungroupedSrcs=allSrcs.filter(s=>!grouped.has(s));
-    for(const v of dimVals){
-      result[v]={};
-      const dimR=dimRowsMap[v]||[];
-      for(const g of SRC_GROUPS){
-        result[v]['grp_'+g.name]=aggRE(dimR.filter(r=>g.members.includes(r.source)),M);
-        g.members.forEach(src=>{ result[v]['src_'+src]=aggRE(dimR.filter(r=>r.source===src),M); });
-      }
-      ungroupedSrcs.forEach(src=>{ result[v]['src_'+src]=aggRE(dimR.filter(r=>r.source===src),M); });
-    }
-    return result;
-  },[dimVals,dimRowsMap,allSrcs,grouped,M]);
-
-  /* Grand total per source-group */
-  const grandColAggs=useMemo(()=>{
-    const result={};
-    for(const g of SRC_GROUPS){
-      result['grp_'+g.name]=aggRE(rows.filter(r=>g.members.includes(r.source)),M);
-      g.members.forEach(src=>{ result['src_'+src]=aggRE(rows.filter(r=>r.source===src),M); });
-    }
-    allSrcs.filter(s=>!grouped.has(s)).forEach(src=>{ result['src_'+src]=aggRE(rows.filter(r=>r.source===src),M); });
-    return result;
-  },[rows,allSrcs,grouped,M]);
-
-  const visCols=useMemo(()=>{
-    const cols=[];
-    SRC_GROUPS.forEach(g=>{
-      const avail=g.members.filter(m=>allSrcs.includes(m));
-      if(!avail.length) return;
-      cols.push({type:'group',name:g.name,clr:g.clr,members:avail,key:'grp_'+g.name});
-      if(!flat&&expandedGrps.has(g.name)) avail.forEach(src=>cols.push({type:'src',src,clr:getSrcColor(src,0),key:'src_'+src}));
-    });
-    allSrcs.filter(s=>!grouped.has(s)).forEach(src=>cols.push({type:'src',src,clr:getSrcColor(src,0),key:'src_'+src}));
-    return cols;
-  },[allSrcs,expandedGrps,grouped,flat]);
-
-  const TH={padding:'6px 8px',fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:'.06em',
-    color:'#fff',textAlign:'center',border:'1px solid rgba(255,255,255,.12)',whiteSpace:'nowrap'};
-  const SUB=['Lead','Booking','Contrib%','E2B%'];
-
-  return ce('div',{style:{background:'#fff',border:'1px solid #E5E7EB',borderRadius:12,overflow:'hidden',marginBottom:16}},
-    ce('div',{style:{padding:'10px 16px',background:'#F8FAFC',borderBottom:'1px solid #E5E7EB',
-      display:'flex',justifyContent:'space-between',alignItems:'center'}},
-      ce('span',{style:{fontSize:11,fontWeight:700,background:'#1B4332',color:'#fff',padding:'3px 12px',borderRadius:20}},M),
-      ce('span',{style:{fontSize:11,color:'#9ca3af',fontFamily:'DM Mono,monospace'}},Nf(grand.uniqueLeads)+' leads')
-    ),
-    ce('div',{style:{padding:'0 0 4px',overflowX:'auto'}},
-      ce('table',{style:{width:'100%',borderCollapse:'collapse',minWidth:400}},
-        ce('thead',null,
-          ce('tr',{style:{background:'#1B4332'}},
-            ce('th',{style:{...TH,textAlign:'left',minWidth:90,position:'sticky',left:0,background:'#1B4332',zIndex:2,
-              borderRight:'2px solid rgba(255,255,255,.3)'}},dimLabel||rowKey.toUpperCase()),
-            ce('th',{colSpan:4,style:{...TH,borderLeft:'2px solid rgba(255,255,255,.3)'}},'∑ Total'),
-            visCols.map(col=>col.type==='group'
-              ?ce('th',{key:'gh_'+col.name,colSpan:4,
-                  style:{...TH,background:col.clr.bar,borderLeft:'2px solid rgba(255,255,255,.3)',
-                    cursor:flat?'default':'pointer'},
-                  onClick:flat?undefined:()=>toggleGrp(col.name)},
-                flat?col.name:(expandedGrps.has(col.name)?'▼ ':'▶ ')+col.name)
-              :ce('th',{key:'sh_'+col.src,colSpan:4,
-                  style:{...TH,background:col.clr.bar+'bb',borderLeft:'1px solid rgba(255,255,255,.2)',fontSize:8}},
-                col.src)
-            )
-          ),
-          ce('tr',{style:{background:'#0F3024'}},
-            ce('th',{style:{...TH,position:'sticky',left:0,background:'#0F3024',zIndex:2,borderRight:'2px solid rgba(255,255,255,.2)'}},''),
-            SUB.map((s,i)=>ce('th',{key:'ts'+i,
-              style:{...TH,fontSize:8,borderLeft:i===0?'2px solid rgba(255,255,255,.3)':'none'}},s)),
-            visCols.flatMap((col,ci)=>SUB.map((s,i)=>ce('th',{key:'c'+ci+'_'+i,
-              style:{...TH,fontSize:8,borderLeft:i===0?'2px solid rgba(255,255,255,.2)':'none'}},s)))
-          )
-        ),
-        ce('tbody',null,
-          dimVals.map((v,ri)=>{
-            const tot=dimTotals[v];
-            const bg=ri%2===0?'#fff':'#F0F7F4';
-            return ce('tr',{key:v,style:{borderBottom:'1px solid #F3F4F6',background:bg}},
-              ce('td',{style:{padding:'7px 10px',position:'sticky',left:0,background:bg,zIndex:1,
-                borderRight:'2px solid #D8EED8'}},
-                ce('span',{style:{display:'inline-block',padding:'2px 8px',borderRadius:20,
-                  fontSize:10,fontWeight:700,background:'#D8EED8',color:'#1B4332'}},v)
-              ),
-              renderMetricCells(tot,'R'+ri+'T',false,grand.uniqueLeads),
-              visCols.flatMap((col,ci)=>{
-                const colGrand=grandColAggs[col.key]||aggRE([],M);
-                return renderMetricCells(cellAggs[v]?.[col.key]||aggRE([],M),'R'+ri+'C'+ci,false,colGrand.uniqueLeads);
-              })
-            );
-          }),
-          /* Grand Total at bottom */
-          ce('tr',{style:{borderTop:'2px solid #E5E7EB',background:'#F8FAFC'}},
-            ce('td',{style:{padding:'8px 10px',fontSize:11,fontWeight:700,color:'#111827',
-              position:'sticky',left:0,background:'#F8FAFC',zIndex:1,
-              borderRight:'2px solid #D8EED8'}},'Grand Total'),
-            renderMetricCells(grand,'GT_T',true,grand.uniqueLeads),
-            visCols.flatMap((col,ci)=>{
-              const colGrand=grandColAggs[col.key]||aggRE([],M);
-              return renderMetricCells(colGrand,'GT_C'+ci,true,colGrand.uniqueLeads);
-            })
-          )
-        )
-      )
-    )
-  );
-});
 
 /* ── Generic Dimension × Source Tab ──────────────────────────────── */
 const DimSourceTab=React.memo(function DimSourceTab({rows,mf,rowKey,dimLabel,xTabLabel,flat=false}){
@@ -994,12 +865,12 @@ const DimSourceTab=React.memo(function DimSourceTab({rows,mf,rowKey,dimLabel,xTa
       allMonths.map(m=>ce('button',{key:m,onClick:()=>toggleMonth(m),style:selMonths.has(m)?pillActive:pillBase},m))
     ),
     ce('div',{style:{fontSize:11,fontWeight:700,color:'#6b7280',textTransform:'uppercase',
-      letterSpacing:'.08em',marginBottom:12}},dimLabel+' Performance by Month'),
-    activeMonths.map(M=>ce(DimMonthGrid,{key:M,M,rows,rowKey,dimLabel,flat})),
-    ce('div',{style:{margin:'24px 0 16px',borderTop:'2px solid #D8EED8'}}),
+      letterSpacing:'.08em',marginBottom:12}},dimLabel+' × Source — by Month'),
+    activeMonths.map(M=>ce(CompactMonthGrid,{key:M,M,rows,rowKey,dimLabel})),
+    ce('div',{style:{margin:'24px 0 16px',borderTop:'2px solid #D1D5DB'}}),
     ce('div',{style:{fontSize:11,fontWeight:700,color:'#6b7280',textTransform:'uppercase',
       letterSpacing:'.08em',marginBottom:12}},xTabLabel+' — All Months Summary'),
-    ce(DimMonthGrid,{M:mf,rows,rowKey,dimLabel,flat})
+    ce(CompactMonthGrid,{M:mf,rows,rowKey,dimLabel})
   );
 });
 
