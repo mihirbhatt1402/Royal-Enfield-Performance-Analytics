@@ -634,6 +634,9 @@ function l2rColor(pct){
 }
 
 const CompactMonthGrid=React.memo(function CompactMonthGrid({M,rows,rowKey,dimLabel}){
+  const [expanded,setExpanded]=useState(new Set());
+  const toggleGrp=name=>setExpanded(p=>{const n=new Set(p);n.has(name)?n.delete(name):n.add(name);return n;});
+
   const PAID_MBRS=SRC_GROUPS[0].members;   // ['MS FB','Adwords']
   const ORG_MBRS=SRC_GROUPS[1].members;    // ['Organic','Non MS']
   const ALL_SRCS=[...PAID_MBRS,...ORG_MBRS];
@@ -658,7 +661,12 @@ const CompactMonthGrid=React.memo(function CompactMonthGrid({M,rows,rowKey,dimLa
     for(const [v,vr] of Object.entries(dimRowsMap)){
       const srcAgg={};
       ALL_SRCS.forEach(src=>{ srcAgg[src]=aggRE(vr.filter(r=>r.source===src),M); });
-      res[v]={total:aggRE(vr,M),src:srcAgg};
+      res[v]={
+        total:aggRE(vr,M),
+        paid:aggRE(vr.filter(r=>PAID_MBRS.includes(r.source)),M),
+        org:aggRE(vr.filter(r=>ORG_MBRS.includes(r.source)),M),
+        src:srcAgg,
+      };
     }
     return res;
   },[dimRowsMap,M]);
@@ -704,18 +712,19 @@ const CompactMonthGrid=React.memo(function CompactMonthGrid({M,rows,rowKey,dimLa
     position:'sticky',left:0,zIndex:1,borderRight:'2px solid #D1D5DB',
     whiteSpace:'nowrap',textAlign:'left'};
 
-  /* Top-level groups: Total (no children) | Paid (MS FB, Adwords) | Organic + Non MS (Organic, Non MS) */
+  /* Top-level groups: Total (fixed) | Paid (collapsible: MS FB, Adwords) | Organic + Non MS (collapsible: Organic, Non MS) */
   const TOPGROUPS=[
-    {label:'Total',           bg:'#58616A',children:null},
-    {label:'Paid',            bg:'#B46B42',children:PAID_MBRS},
-    {label:'Organic + Non MS',bg:'#5F8B6F',children:ORG_MBRS},
+    {label:'Total',           bg:'#58616A',name:null,           children:null,    aggKey:'total',grandLeads:grand.uniqueLeads},
+    {label:'Paid',            bg:'#B46B42',name:'Paid',          children:PAID_MBRS,aggKey:'paid', grandLeads:grandPaid.uniqueLeads},
+    {label:'Organic + Non MS',bg:'#5F8B6F',name:'Organic + Non MS',children:ORG_MBRS, aggKey:'org',  grandLeads:grandOrg.uniqueLeads},
   ];
   const SCOLS=['Leads','Retail','Contrib%','L2R%'];
-  /* flat column list: each col has {key,label,grand} — 'total' col + one per source */
-  const COLS=[
-    {key:'total',label:'Total',grandLeads:grand.uniqueLeads},
-    ...ALL_SRCS.map(src=>({key:src,label:src,grandLeads:grandSrc[src].uniqueLeads}))
-  ];
+  /* flat column list — each top group contributes either 1 aggregate col or N child-source cols */
+  const COLS=TOPGROUPS.flatMap(g=>{
+    if(!g.children) return[{key:'total',aggKey:'total',grandLeads:g.grandLeads}];
+    if(!expanded.has(g.name)) return[{key:g.aggKey,aggKey:g.aggKey,grandLeads:g.grandLeads}];
+    return g.children.map(src=>({key:src,aggKey:'src',src,grandLeads:grandSrc[src].uniqueLeads}));
+  });
 
   return ce('div',{style:{background:'#fff',border:'1px solid #E5E7EB',borderRadius:12,
     overflow:'hidden',marginBottom:16}},
@@ -729,21 +738,28 @@ const CompactMonthGrid=React.memo(function CompactMonthGrid({M,rows,rowKey,dimLa
     ce('div',{style:{overflowX:'auto'}},
       ce('table',{style:{borderCollapse:'collapse',fontSize:11,width:'100%'}},
         ce('thead',null,
-          /* Row 1: Total | Paid | Organic + Non MS */
+          /* Row 1: Total | Paid | Organic + Non MS — click Paid/Organic to expand/collapse */
           ce('tr',null,
             ce('th',{rowSpan:3,style:{...thBase,textAlign:'left',minWidth:110,
               background:'#3C3C3C',position:'sticky',left:0,zIndex:4,
               borderRight:'2px solid rgba(255,255,255,.3)'}},dimLabel||rowKey.toUpperCase()),
-            ...TOPGROUPS.map((g,gi)=>ce('th',{key:'tg'+gi,
-              colSpan:(g.children?g.children.length:1)*4,
-              style:{...thBase,background:g.bg,
-                borderLeft:gi>0?'2px solid rgba(255,255,255,.4)':undefined}},g.label))
+            ...TOPGROUPS.map((g,gi)=>{
+              const isExp=g.children&&expanded.has(g.name);
+              const span=(g.children?(isExp?g.children.length:1):1)*4;
+              return ce('th',{key:'tg'+gi,colSpan:span,
+                style:{...thBase,background:g.bg,cursor:g.children?'pointer':'default',
+                  borderLeft:gi>0?'2px solid rgba(255,255,255,.4)':undefined},
+                onClick:g.children?()=>toggleGrp(g.name):undefined},
+                g.children?(isExp?'▼ ':'▶ ')+g.label:g.label);
+            })
           ),
-          /* Row 2: (blank under Total) | MS FB | Adwords | Organic | Non MS */
+          /* Row 2: blank under Total | aggregate-or-children under Paid/Organic */
           ce('tr',null,
             ...TOPGROUPS.flatMap((g,gi)=>{
               if(!g.children) return[ce('th',{key:'sg'+gi,colSpan:4,
                 style:{...thSub2,background:g.bg,opacity:.75}},'')];
+              if(!expanded.has(g.name)) return[ce('th',{key:'sg'+gi,colSpan:4,
+                style:{...thSub2,background:g.bg,opacity:.75}},'∑ '+g.label)];
               return g.children.map((src,si)=>ce('th',{key:'sg'+gi+'_'+si,colSpan:4,
                 style:{...thSub2,background:g.bg,opacity:si%2===0?1:.8,
                   borderLeft:si>0?'1px solid rgba(255,255,255,.3)':'2px solid rgba(255,255,255,.4)'}},src));
@@ -762,7 +778,7 @@ const CompactMonthGrid=React.memo(function CompactMonthGrid({M,rows,rowKey,dimLa
             return ce('tr',{key:v,style:{background:bg}},
               ce('td',{style:{...lblStyle,background:bg}},v),
               ...COLS.flatMap(col=>mkCells(
-                col.key==='total'?a.total:a.src[col.key],
+                col.aggKey==='src'?a.src[col.src]:a[col.aggKey],
                 col.grandLeads,v+col.key+'_',bg
               ))
             );
@@ -770,7 +786,7 @@ const CompactMonthGrid=React.memo(function CompactMonthGrid({M,rows,rowKey,dimLa
           ce('tr',{key:'GT',style:{background:'#E9EDF2',borderTop:'2px solid #D1D5DB'}},
             ce('td',{style:{...lblStyle,background:'#E9EDF2',fontWeight:700,color:'#333'}},'∑ Grand Total'),
             ...COLS.flatMap(col=>mkCells(
-              col.key==='total'?grand:grandSrc[col.key],
+              col.aggKey==='src'?grandSrc[col.src]:(col.aggKey==='total'?grand:col.aggKey==='paid'?grandPaid:grandOrg),
               col.grandLeads,'GT_'+col.key+'_','#E9EDF2'
             ))
           )
