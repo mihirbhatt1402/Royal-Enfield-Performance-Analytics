@@ -671,6 +671,8 @@ const CompactMonthGrid=React.memo(function CompactMonthGrid({M,rows,rowKey,dimLa
       case 'retail': return agg.bookings||0;
       case 'contrib': return grandLeads>0&&agg.uniqueLeads>0?(agg.uniqueLeads/grandLeads*100):0;
       case 'l2r': return agg.uniqueLeads>0?agg.e2bPct:0;
+      case 'dup': return agg.dupLeads||0;
+      case 'duppct': return agg.totalLeads>0?agg.dupPct:0;
       default: return 0;
     }
   }
@@ -715,7 +717,7 @@ const CompactMonthGrid=React.memo(function CompactMonthGrid({M,rows,rowKey,dimLa
     {label:'Paid',            bg:'#B46B42',name:'Paid',            children:PAID_MBRS,aggKey:'paid', grandLeads:grandPaid.uniqueLeads},
     {label:'Organic + Non MS',bg:'#5F8B6F',name:'Organic + Non MS',children:ORG_MBRS, aggKey:'org',  grandLeads:grandOrg.uniqueLeads},
   ];
-  const SCOLS=[{label:'Leads',m:'leads'},{label:'Retail',m:'retail'},{label:'Contrib%',m:'contrib'},{label:'L2R%',m:'l2r'}];
+  const SCOLS=[{label:'Leads',m:'leads'},{label:'Retail',m:'retail'},{label:'Contrib%',m:'contrib'},{label:'L2R%',m:'l2r'},{label:'Duplicity',m:'dup'},{label:'Duplicity%',m:'duppct'}];
   /* flat column list — each top group contributes either 1 aggregate col or N child-source cols */
   const COLS=useMemo(()=>TOPGROUPS.flatMap(g=>{
     if(!g.children) return[{key:'total',aggKey:'total',grandLeads:g.grandLeads}];
@@ -759,6 +761,8 @@ const CompactMonthGrid=React.memo(function CompactMonthGrid({M,rows,rowKey,dimLa
       ce('td',{key:kpfx+'e',style:{...cs,background:l2rBg,fontWeight:700}},
         agg.uniqueLeads>0?l2r.toFixed(1)+'%':'—'
       ),
+      ce('td',{key:kpfx+'d',style:cs},agg.totalLeads>0?Nf(agg.dupLeads):'—'),
+      ce('td',{key:kpfx+'dp',style:cs},agg.totalLeads>0?agg.dupPct.toFixed(1)+'%':'—'),
     ];
   }
 
@@ -794,7 +798,7 @@ const CompactMonthGrid=React.memo(function CompactMonthGrid({M,rows,rowKey,dimLa
               borderRight:'2px solid rgba(255,255,255,.3)'}},dimLabel||rowKey.toUpperCase()),
             ...TOPGROUPS.map((g,gi)=>{
               const isExp=g.children&&expanded.has(g.name);
-              const span=(g.children?(isExp?g.children.length:1):1)*4;
+              const span=(g.children?(isExp?g.children.length:1):1)*SCOLS.length;
               return ce('th',{key:'tg'+gi,colSpan:span,
                 style:{...thBase,background:g.bg,cursor:g.children?'pointer':'default',
                   borderLeft:gi>0?'2px solid rgba(255,255,255,.4)':undefined},
@@ -805,11 +809,11 @@ const CompactMonthGrid=React.memo(function CompactMonthGrid({M,rows,rowKey,dimLa
           /* Row 2: blank under Total | aggregate-or-children under Paid/Organic */
           ce('tr',null,
             ...TOPGROUPS.flatMap((g,gi)=>{
-              if(!g.children) return[ce('th',{key:'sg'+gi,colSpan:4,
+              if(!g.children) return[ce('th',{key:'sg'+gi,colSpan:SCOLS.length,
                 style:{...thSub2,background:g.bg,opacity:.75}},'')];
-              if(!expanded.has(g.name)) return[ce('th',{key:'sg'+gi,colSpan:4,
+              if(!expanded.has(g.name)) return[ce('th',{key:'sg'+gi,colSpan:SCOLS.length,
                 style:{...thSub2,background:g.bg,opacity:.75}},'∑ '+g.label)];
-              return g.children.map((src,si)=>ce('th',{key:'sg'+gi+'_'+si,colSpan:4,
+              return g.children.map((src,si)=>ce('th',{key:'sg'+gi+'_'+si,colSpan:SCOLS.length,
                 style:{...thSub2,background:g.bg,opacity:si%2===0?1:.8,
                   borderLeft:si>0?'1px solid rgba(255,255,255,.3)':'2px solid rgba(255,255,255,.4)'}},src));
             })
