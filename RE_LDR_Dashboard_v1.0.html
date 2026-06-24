@@ -717,7 +717,7 @@ const CompactMonthGrid=React.memo(function CompactMonthGrid({M,rows,rowKey,dimLa
     {label:'Paid',            bg:'#B46B42',name:'Paid',            children:PAID_MBRS,aggKey:'paid', grandLeads:grandPaid.uniqueLeads},
     {label:'Organic + Non MS',bg:'#5F8B6F',name:'Organic + Non MS',children:ORG_MBRS, aggKey:'org',  grandLeads:grandOrg.uniqueLeads},
   ];
-  const SCOLS=[{label:'Leads',m:'leads'},{label:'Retail',m:'retail'},{label:'Contrib%',m:'contrib'},{label:'L2R%',m:'l2r'},{label:'Duplicity',m:'dup'},{label:'Duplicity%',m:'duppct'}];
+  const SCOLS=[{label:'Leads',m:'leads'},{label:'Bookings',m:'retail'},{label:'Contrib%',m:'contrib'},{label:'E2B%',m:'l2r'},{label:'Duplicity',m:'dup'},{label:'Duplicity%',m:'duppct'}];
   /* flat column list — each top group contributes either 1 aggregate col or N child-source cols */
   const COLS=useMemo(()=>TOPGROUPS.flatMap(g=>{
     if(!g.children) return[{key:'total',aggKey:'total',grandLeads:g.grandLeads}];
@@ -1179,6 +1179,20 @@ function UploadScreen({onData,onSync,syncing,syncErr,sheetUrl,setSheetUrl,urlDra
   }
 
   return ce('div',{style:{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',padding:24}},
+
+    syncing&&ce('div',{style:{position:'fixed',inset:0,background:'rgba(8,28,21,.45)',
+      display:'flex',alignItems:'center',justifyContent:'center',zIndex:999}},
+      ce('div',{style:{width:'30%',minWidth:280,maxWidth:420,background:'#fff',borderRadius:16,
+        padding:'32px 28px',textAlign:'center',boxShadow:'0 12px 40px rgba(0,0,0,.25)'}},
+        ce('div',{style:{fontSize:34,marginBottom:14,display:'inline-block',animation:'spin 1s linear infinite'}},'⟳'),
+        ce('div',{style:{fontSize:14,fontWeight:700,color:'#1B4332',marginBottom:6}},'Syncing from Google Sheets…'),
+        ce('div',{style:{fontSize:11,color:'#6b7280',marginBottom:16}},'Fetching and parsing your sheet data'),
+        ce('div',{style:{height:5,background:'#f0f2f7',borderRadius:10,overflow:'hidden'}},
+          ce('div',{className:'prog-fill',style:{height:'100%',width:'70%',borderRadius:10}})
+        )
+      )
+    ),
+
     ce('div',{style:{maxWidth:560,width:'100%'}},
       ce('div',{style:{textAlign:'center',marginBottom:32}},
         ce('div',{style:{display:'inline-flex',alignItems:'center',gap:12,background:'#2D6A4F',padding:'12px 28px',borderRadius:16,marginBottom:16,boxShadow:'0 4px 20px rgba(45,106,79,.35)'}},
