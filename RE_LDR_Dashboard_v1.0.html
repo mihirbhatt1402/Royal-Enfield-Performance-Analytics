@@ -788,10 +788,24 @@ const CompactMonthGrid=React.memo(function CompactMonthGrid({M,rows,rowKey,dimLa
     {label:'Paid',            bg:'#B46B42',name:'Paid',            children:PAID_MBRS,aggKey:'paid', grandLeads:grandPaid.uniqueLeads},
     {label:'Organic + Non MS',bg:'#5F8B6F',name:'Organic + Non MS',children:ORG_MBRS, aggKey:'org',  grandLeads:grandOrg.uniqueLeads},
   ];
-  const SCOLS=[{label:'Unique Leads',m:'leads'},{label:'Bookings',m:'retail'},{label:'Contrib%',m:'contrib'},{label:'E2B%',m:'l2r'},{label:'Duplicity',m:'dup'},{label:'Duplicity%',m:'duppct'}];
+  const SCOLS=[
+    {label:'Unique Leads',m:'leads'},
+    {label:'Lead Contrib%',m:'contrib'},
+    {label:'Bookings',m:'retail'},
+    {label:'Booking Contrib%',m:'bcontrib'},
+    {label:'E2B',m:'l2r'},
+    {label:'Duplicate Leads',m:'dup'},
+    {label:'Duplicity%',m:'duppct'},
+  ];
   /* State × Source tab: drop Duplicity/Duplicity%, add Booking Contrib% + Vahan industry columns */
   const isStateGrid=rowKey==='state';
-  const SCOLS_STATE=[{label:'Unique Leads',m:'leads'},{label:'Bookings',m:'retail'},{label:'Contrib%',m:'contrib'},{label:'E2B%',m:'l2r'}];
+  const SCOLS_STATE=[
+    {label:'Unique Leads',m:'leads'},
+    {label:'Lead Contrib%',m:'contrib'},
+    {label:'Booking',m:'retail'},
+    {label:'Booking Contrib%',m:'bcontrib'},
+    {label:'E2B%',m:'l2r'},
+  ];
   const SCOLS_TOTAL_STATE=[
     {label:'Unique Leads',m:'leads'},
     {label:'Lead Contrib%',m:'contrib'},
