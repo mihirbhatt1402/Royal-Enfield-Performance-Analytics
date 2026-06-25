@@ -792,9 +792,18 @@ const CompactMonthGrid=React.memo(function CompactMonthGrid({M,rows,rowKey,dimLa
   /* State × Source tab: drop Duplicity/Duplicity%, add Booking Contrib% + Vahan industry columns */
   const isStateGrid=rowKey==='state';
   const SCOLS_STATE=[{label:'Unique Leads',m:'leads'},{label:'Bookings',m:'retail'},{label:'Contrib%',m:'contrib'},{label:'E2B%',m:'l2r'}];
-  const EXTRA_SCOLS=[{label:'Booking Contrib%',m:'bcontrib'},{label:'Vahan Retail',m:'vahan'},{label:'Retail Share%',m:'vshare'},{label:'State Retail Contrib%',m:'vcontrib'}];
+  const SCOLS_TOTAL_STATE=[
+    {label:'Unique Leads',m:'leads'},
+    {label:'Lead Contrib%',m:'contrib'},
+    {label:'Booking',m:'retail'},
+    {label:'Booking Contrib%',m:'bcontrib'},
+    {label:'E2B',m:'l2r'},
+    {label:'Vahan Retails',m:'vahan'},
+    {label:'State Contrib%',m:'vcontrib'},
+    {label:'BD Retail Contrib%',m:'vshare'},
+  ];
   const SCOLS_NONTOTAL=isStateGrid?SCOLS_STATE:SCOLS;
-  const SCOLS_TOTAL=isStateGrid?[...SCOLS_STATE,...EXTRA_SCOLS]:SCOLS;
+  const SCOLS_TOTAL=isStateGrid?SCOLS_TOTAL_STATE:SCOLS;
 
   /* flat column list — each top group contributes either 1 aggregate col or N child-source cols */
   const COLS=useMemo(()=>TOPGROUPS.flatMap(g=>{
