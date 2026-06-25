@@ -743,6 +743,7 @@ const CompactMonthGrid=React.memo(function CompactMonthGrid({M,rows,rowKey,dimLa
       case 'l2r': return agg.uniqueLeads>0?agg.e2bPct:0;
       case 'dup': return agg.dupLeads||0;
       case 'duppct': return agg.totalLeads>0?agg.dupPct:0;
+      case 'bcontrib': return grand.bookings>0&&agg.bookings>0?(agg.bookings/grand.bookings*100):0;
       default: return 0;
     }
   }
@@ -788,16 +789,18 @@ const CompactMonthGrid=React.memo(function CompactMonthGrid({M,rows,rowKey,dimLa
     {label:'Organic + Non MS',bg:'#5F8B6F',name:'Organic + Non MS',children:ORG_MBRS, aggKey:'org',  grandLeads:grandOrg.uniqueLeads},
   ];
   const SCOLS=[{label:'Unique Leads',m:'leads'},{label:'Bookings',m:'retail'},{label:'Contrib%',m:'contrib'},{label:'E2B%',m:'l2r'},{label:'Duplicity',m:'dup'},{label:'Duplicity%',m:'duppct'}];
-  /* State × Source tab only: Vahan industry retail + dashboard's retail share of it, appended to the Total column */
+  /* State × Source tab: drop Duplicity/Duplicity%, add Booking Contrib% + Vahan industry columns */
   const isStateGrid=rowKey==='state';
-  const EXTRA_SCOLS=[{label:'Vahan Retail',m:'vahan'},{label:'Retail Share%',m:'vshare'},{label:'State Retail Contrib%',m:'vcontrib'}];
-  const SCOLS_TOTAL=isStateGrid?[...SCOLS,...EXTRA_SCOLS]:SCOLS;
+  const SCOLS_STATE=[{label:'Unique Leads',m:'leads'},{label:'Bookings',m:'retail'},{label:'Contrib%',m:'contrib'},{label:'E2B%',m:'l2r'}];
+  const EXTRA_SCOLS=[{label:'Booking Contrib%',m:'bcontrib'},{label:'Vahan Retail',m:'vahan'},{label:'Retail Share%',m:'vshare'},{label:'State Retail Contrib%',m:'vcontrib'}];
+  const SCOLS_NONTOTAL=isStateGrid?SCOLS_STATE:SCOLS;
+  const SCOLS_TOTAL=isStateGrid?[...SCOLS_STATE,...EXTRA_SCOLS]:SCOLS;
 
   /* flat column list — each top group contributes either 1 aggregate col or N child-source cols */
   const COLS=useMemo(()=>TOPGROUPS.flatMap(g=>{
     if(!g.children) return[{key:'total',aggKey:'total',grandLeads:g.grandLeads,scols:SCOLS_TOTAL}];
-    if(!expanded.has(g.name)) return[{key:g.aggKey,aggKey:g.aggKey,grandLeads:g.grandLeads,scols:SCOLS}];
-    return g.children.map(src=>({key:src,aggKey:'src',src,grandLeads:grandSrc[src].uniqueLeads,scols:SCOLS}));
+    if(!expanded.has(g.name)) return[{key:g.aggKey,aggKey:g.aggKey,grandLeads:g.grandLeads,scols:SCOLS_NONTOTAL}];
+    return g.children.map(src=>({key:src,aggKey:'src',src,grandLeads:grandSrc[src].uniqueLeads,scols:SCOLS_NONTOTAL}));
   }),[expanded,grand,grandPaid,grandOrg,grandSrc,isStateGrid]);
 
   function aggForCol(v,col){
@@ -833,6 +836,7 @@ const CompactMonthGrid=React.memo(function CompactMonthGrid({M,rows,rowKey,dimLa
 
   function mkCells(agg,grandLeads,kpfx,bg,scols,vahanRetail,vahanAll){
     const contrib=grandLeads>0&&agg.uniqueLeads>0?(agg.uniqueLeads/grandLeads*100):0;
+    const bcontrib=grand.bookings>0&&agg.bookings>0?(agg.bookings/grand.bookings*100):null;
     const l2r=agg.uniqueLeads>0?agg.e2bPct:0;
     const l2rBg=agg.uniqueLeads>0?l2rColor(l2r):'#F3F4F6';
     const share=vahanRetail>0?(agg.bookings/vahanRetail*100):null;
@@ -849,6 +853,14 @@ const CompactMonthGrid=React.memo(function CompactMonthGrid({M,rows,rowKey,dimLa
               ce('div',{style:{fontSize:10,textAlign:'right',marginBottom:2}},contrib.toFixed(1)+'%'),
               ce('div',{style:{height:4,background:'#EFEFEF',borderRadius:2}},
                 ce('div',{style:{height:'100%',width:Math.min(contrib,100)+'%',background:'#C8A96B',borderRadius:2}}))
+            )
+            :ce('span',{style:{color:'#9ca3af'}},'—'));
+        case 'bcontrib': return ce('td',{key:kpfx+'bc',style:{...cs,padding:'3px 7px',minWidth:76}},
+          bcontrib!=null
+            ?ce('div',null,
+              ce('div',{style:{fontSize:10,textAlign:'right',marginBottom:2}},bcontrib.toFixed(1)+'%'),
+              ce('div',{style:{height:4,background:'#EFEFEF',borderRadius:2}},
+                ce('div',{style:{height:'100%',width:Math.min(bcontrib,100)+'%',background:'#C8A96B',borderRadius:2}}))
             )
             :ce('span',{style:{color:'#9ca3af'}},'—'));
         case 'l2r': return ce('td',{key:kpfx+'e',style:{...cs,background:l2rBg,fontWeight:700}},
@@ -904,7 +916,7 @@ const CompactMonthGrid=React.memo(function CompactMonthGrid({M,rows,rowKey,dimLa
             ...TOPGROUPS.map((g,gi)=>{
               const isExp=g.children&&expanded.has(g.name);
               const span=g.children
-                ?(isExp?g.children.length*SCOLS.length:SCOLS.length)
+                ?(isExp?g.children.length*SCOLS_NONTOTAL.length:SCOLS_NONTOTAL.length)
                 :SCOLS_TOTAL.length;
               return ce('th',{key:'tg'+gi,colSpan:span,
                 style:{...thBase,background:g.bg,cursor:g.children?'pointer':'default',
@@ -918,9 +930,9 @@ const CompactMonthGrid=React.memo(function CompactMonthGrid({M,rows,rowKey,dimLa
             ...TOPGROUPS.flatMap((g,gi)=>{
               if(!g.children) return[ce('th',{key:'sg'+gi,colSpan:SCOLS_TOTAL.length,
                 style:{...thSub2,background:g.bg,opacity:.75}},'')];
-              if(!expanded.has(g.name)) return[ce('th',{key:'sg'+gi,colSpan:SCOLS.length,
+              if(!expanded.has(g.name)) return[ce('th',{key:'sg'+gi,colSpan:SCOLS_NONTOTAL.length,
                 style:{...thSub2,background:g.bg,opacity:.75}},'∑ '+g.label)];
-              return g.children.map((src,si)=>ce('th',{key:'sg'+gi+'_'+si,colSpan:SCOLS.length,
+              return g.children.map((src,si)=>ce('th',{key:'sg'+gi+'_'+si,colSpan:SCOLS_NONTOTAL.length,
                 style:{...thSub2,background:g.bg,opacity:si%2===0?1:.8,
                   borderLeft:si>0?'1px solid rgba(255,255,255,.3)':'2px solid rgba(255,255,255,.4)'}},src));
             })
