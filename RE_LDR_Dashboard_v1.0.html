@@ -153,6 +153,14 @@ function monthOrder(m){
   return parseInt(match[2])*100+mi;
 }
 
+/* Default month-pill selection: a specific global filter month if set, otherwise just the
+   latest available month — NOT every month, which would render one heavy grid per month
+   by default and make every dimension tab slow to open. */
+function defaultMonthSel(mf,allMonths){
+  if(mf&&mf!=='All') return new Set([mf]);
+  return allMonths&&allMonths.length?new Set([allMonths[0]]):new Set(['all']);
+}
+
 /* Returns a Set of n month strings starting from m going backwards (inclusive) */
 function prevMonthsSet(m,n){
   if(!m||m==='-'||m==='') return new Set();
@@ -1034,11 +1042,12 @@ const SourceTab=React.memo(function SourceTab({rows,mf}){
       .sort((a,b)=>monthOrder(b)-monthOrder(a))
   ,[rows]);
 
-  /* Month pill selection: sync with global month filter */
-  const [selMonths,setSelMonths]=useState(()=>mf&&mf!=='All'?new Set([mf]):new Set(['all']));
+  /* Month pill selection: sync with global month filter — defaults to latest month only,
+     not every month, so opening this tab doesn't render a heavy grid per month. */
+  const [selMonths,setSelMonths]=useState(()=>defaultMonthSel(mf,allMonths));
   useEffect(()=>{
-    setSelMonths(mf&&mf!=='All'?new Set([mf]):new Set(['all']));
-  },[mf]);
+    setSelMonths(defaultMonthSel(mf,allMonths));
+  },[mf]);// eslint-disable-line
 
   function toggleMonth(m){
     setSelMonths(prev=>{
@@ -1108,10 +1117,12 @@ const DimSourceTab=React.memo(function DimSourceTab({rows,mf,rowKey,dimLabel,xTa
     [...new Set(rows.map(r=>r.lead_month))].filter(Boolean)
       .sort((a,b)=>monthOrder(b)-monthOrder(a))
   ,[rows]);
-  const [selMonths,setSelMonths]=useState(()=>mf&&mf!=='All'?new Set([mf]):new Set(['all']));
+  /* Defaults to latest month only, not every month — rendering one heavy grid per month
+     by default made this tab slow to open whenever there were several months of data. */
+  const [selMonths,setSelMonths]=useState(()=>defaultMonthSel(mf,allMonths));
   useEffect(()=>{
-    setSelMonths(mf&&mf!=='All'?new Set([mf]):new Set(['all']));
-  },[mf]);
+    setSelMonths(defaultMonthSel(mf,allMonths));
+  },[mf]);// eslint-disable-line
   function toggleMonth(m){
     setSelMonths(prev=>{
       if(m==='all') return new Set(['all']);
@@ -1371,8 +1382,10 @@ function UploadScreen({onData,onSync,syncing,syncErr,sheetUrl,setSheetUrl,urlDra
             const parsed=parseRows(raw);
             if(!parsed.length){setErr('No valid rows found. Check the file format.');setProg(0);return;}
             setProg(100);setStep('Done!');
-            try{localStorage.setItem('re_ldr_data',JSON.stringify(parsed.slice(0,50000)));}catch(e){}
-            setTimeout(()=>onData(parsed),400);
+            setTimeout(()=>{
+              onData(parsed);
+              setTimeout(()=>{ try{localStorage.setItem('re_ldr_data',JSON.stringify(parsed.slice(0,50000)));}catch(e){} },0);
+            },400);
           },50);
         },50);
       }catch(ex){setErr('Parse error: '+ex.message);setProg(0);}
@@ -1481,6 +1494,10 @@ const TABS=[
 function App(){
   const [rows,setRows]=useState(null);
   const [tab,setTab]=useState('overview');
+  /* Only mount a tab's heavy grids once it's actually been opened — mounting all 6 tabs
+     up front meant every filter change recomputed every tab, not just the visible one. */
+  const [visitedTabs,setVisitedTabs]=useState(()=>new Set(['overview']));
+  useEffect(()=>{ setVisitedTabs(prev=>prev.has(tab)?prev:new Set(prev).add(tab)); },[tab]);
   const [filters,setFilters]=useState({month:'All',source:'All',primarySrc:'All',state:'All',city:'All',model:'All'});
   const [syncing,setSyncing]=useState(false);
   const [syncErr,setSyncErr]=useState(null);
@@ -1499,10 +1516,12 @@ function App(){
       if(!raw.length) throw new Error('No rows found in sheet.');
       const parsed=parseRows(raw);
       if(!parsed.length) throw new Error('Rows found but none matched expected column format.');
-      try{localStorage.setItem('re_ldr_data',JSON.stringify(parsed.slice(0,50000)));}catch(e){}
       setRows(parsed);
       setLastSynced(new Date());
       setShowSyncPanel(false);
+      /* Cache to localStorage after the UI updates — JSON.stringify on tens of
+         thousands of rows is blocking and shouldn't delay the paint. */
+      setTimeout(()=>{ try{localStorage.setItem('re_ldr_data',JSON.stringify(parsed.slice(0,50000)));}catch(e){} },0);
     }catch(e){setSyncErr(e.message);setShowSyncPanel(true);}
     finally{setSyncing(false);}
   },[sheetUrl]);
@@ -1540,15 +1559,22 @@ function App(){
 
   const totalM=useMemo(()=>aggRE(baseRows,filters.month),[baseRows,filters.month]);
 
-  /* Stable element refs — React.memo components skip re-render when tab changes */
-  const tabEls=useMemo(()=>({
-    overview:  ce(OverviewTab,    {rows:baseRows, mf:filters.month}),
-    source:    ce(SourceTab,      {rows:baseRows, mf:filters.month}),
-    ltxsrc:   ce(LTSourceTab,    {rows:baseRows, mf:filters.month}),
-    modelxsrc: ce(ModelSourceTab, {rows:baseRows, mf:filters.month}),
-    statexsrc: ce(StateSourceTab, {rows:baseRows, mf:filters.month}),
-    geomodel:  ce(GeoModelTab,    {rows:baseRows, mf:filters.month}),
-  }),[baseRows,filters.month]);
+  /* Stable element refs — React.memo components skip re-render when tab changes.
+     Only build elements for tabs that have actually been visited, so a filter change
+     doesn't force every tab (including ones the user never opened) to recompute. */
+  const tabEls=useMemo(()=>{
+    const COMPONENTS={
+      overview:  OverviewTab,
+      source:    SourceTab,
+      ltxsrc:    LTSourceTab,
+      modelxsrc: ModelSourceTab,
+      statexsrc: StateSourceTab,
+      geomodel:  GeoModelTab,
+    };
+    const out={};
+    visitedTabs.forEach(id=>{ out[id]=ce(COMPONENTS[id],{rows:baseRows, mf:filters.month}); });
+    return out;
+  },[baseRows,filters.month,visitedTabs]);
 
   if(!rows) return ce(UploadScreen,{onData:setRows,onSync:handleSync,syncing,syncErr,sheetUrl,setSheetUrl,urlDraft,setUrlDraft,lastSynced});
 
@@ -1655,7 +1681,7 @@ function App(){
     /* Tab content — all tabs kept mounted (display:none when inactive).
        tabEls is memoized so React.memo components skip re-render on tab switch. */
     ce('div',{style:{maxWidth:1600,margin:'0 auto',padding:'14px 24px 32px'}},
-      TABS.map(({id})=>ce('div',{key:id,style:{display:tab===id?'block':'none'}},tabEls[id]))
+      TABS.filter(({id})=>visitedTabs.has(id)).map(({id})=>ce('div',{key:id,style:{display:tab===id?'block':'none'}},tabEls[id]))
     )
   );
 }
