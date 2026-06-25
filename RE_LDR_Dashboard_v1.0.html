@@ -294,15 +294,28 @@ const VAHAN_RAW={
 const VAHAN_RETAILS=Object.fromEntries(Object.entries(VAHAN_RAW).map(([m,obj])=>
   [m,Object.fromEntries(Object.entries(obj).map(([k,v])=>[normState(k),v]))]
 ));
-function vahanRetailFor(state,M){
-  const monthData=VAHAN_RETAILS[M];
-  if(!monthData) return undefined;
-  return monthData[normState(state)];
+/* monthOrMonths may be a single month string or an array — sums across all of them
+   (used by grids that aggregate multiple months, e.g. Geo wise Model tab). */
+function vahanRetailFor(state,monthOrMonths){
+  const months=Array.isArray(monthOrMonths)?monthOrMonths:[monthOrMonths];
+  let total=0,found=false;
+  for(const M of months){
+    const monthData=VAHAN_RETAILS[M];
+    if(!monthData) continue;
+    const v=monthData[normState(state)];
+    if(v!=null){ total+=v; found=true; }
+  }
+  return found?total:undefined;
 }
-function vahanMonthTotal(M){
-  const monthData=VAHAN_RETAILS[M];
-  if(!monthData) return 0;
-  return Object.values(monthData).reduce((s,v)=>s+v,0);
+function vahanMonthTotal(monthOrMonths){
+  const months=Array.isArray(monthOrMonths)?monthOrMonths:[monthOrMonths];
+  let total=0;
+  for(const M of months){
+    const monthData=VAHAN_RETAILS[M];
+    if(!monthData) continue;
+    total+=Object.values(monthData).reduce((s,v)=>s+v,0);
+  }
+  return total;
 }
 
 /* ── Formatters & badges ──────────────────────────────────────────── */
@@ -724,7 +737,8 @@ function l2rColor(pct){
   return '#E3B0B0';
 }
 
-const CompactMonthGrid=React.memo(function CompactMonthGrid({M,rows,rowKey,dimLabel}){
+const CompactMonthGrid=React.memo(function CompactMonthGrid({M,rows,rowKey,dimLabel,badgeLabel,vahanMonths}){
+  const vMonths=useMemo(()=>vahanMonths&&vahanMonths.length?vahanMonths:[M],[vahanMonths,M]);
   const [expanded,setExpanded]=useState(new Set());
   const toggleGrp=name=>setExpanded(p=>{const n=new Set(p);n.has(name)?n.delete(name):n.add(name);return n;});
 
@@ -837,17 +851,17 @@ const CompactMonthGrid=React.memo(function CompactMonthGrid({M,rows,rowKey,dimLa
 
   const grandVahan=useMemo(()=>{
     if(!isStateGrid) return undefined;
-    return Object.keys(dimAggs).reduce((s,v)=>s+(vahanRetailFor(v,M)||0),0);
-  },[isStateGrid,dimAggs,M]);
+    return Object.keys(dimAggs).reduce((s,v)=>s+(vahanRetailFor(v,vMonths)||0),0);
+  },[isStateGrid,dimAggs,vMonths]);
 
-  const vahanAllIndia=useMemo(()=>isStateGrid?vahanMonthTotal(M):undefined,[isStateGrid,M]);
+  const vahanAllIndia=useMemo(()=>isStateGrid?vahanMonthTotal(vMonths):undefined,[isStateGrid,vMonths]);
 
   const dimVals=useMemo(()=>{
     const sortCol=COLS.find(c=>c.key===sort.colKey)||COLS[0];
     const vals=Object.keys(dimAggs).sort((a,b)=>{
       let av,bv;
       if(isStateGrid&&(sort.metric==='vahan'||sort.metric==='vshare'||sort.metric==='vcontrib')){
-        const va=vahanRetailFor(a,M)||0, vb=vahanRetailFor(b,M)||0;
+        const va=vahanRetailFor(a,vMonths)||0, vb=vahanRetailFor(b,vMonths)||0;
         const aggA=aggForCol(a,sortCol), aggB=aggForCol(b,sortCol);
         if(sort.metric==='vahan'){ av=va; bv=vb; }
         else if(sort.metric==='vshare'){ av=va>0?(aggA.bookings/va*100):0; bv=vb>0?(aggB.bookings/vb*100):0; }
@@ -859,7 +873,7 @@ const CompactMonthGrid=React.memo(function CompactMonthGrid({M,rows,rowKey,dimLa
       return sort.dir==='desc'?bv-av:av-bv;
     });
     return vals;
-  },[dimAggs,COLS,sort,isStateGrid,M,vahanAllIndia]);
+  },[dimAggs,COLS,sort,isStateGrid,vMonths,vahanAllIndia]);
 
   function mkCells(agg,grandLeads,kpfx,bg,scols,vahanRetail,vahanAll){
     const contrib=grandLeads>0&&agg.uniqueLeads>0?(agg.uniqueLeads/grandLeads*100):0;
@@ -928,7 +942,7 @@ const CompactMonthGrid=React.memo(function CompactMonthGrid({M,rows,rowKey,dimLa
     ce('div',{style:{padding:'8px 16px',background:'#F8F9FA',borderBottom:'1px solid #E5E7EB',
       display:'flex',justifyContent:'space-between',alignItems:'center'}},
       ce('span',{style:{fontSize:11,fontWeight:700,background:'#3C3C3C',color:'#fff',
-        padding:'3px 12px',borderRadius:20}},M),
+        padding:'3px 12px',borderRadius:20}},badgeLabel||M),
       ce('span',{style:{fontSize:11,color:'#9ca3af',fontFamily:'DM Mono,monospace'}},
         Nf(grand.uniqueLeads)+' leads')
     ),
@@ -987,7 +1001,7 @@ const CompactMonthGrid=React.memo(function CompactMonthGrid({M,rows,rowKey,dimLa
               ...COLS.flatMap(col=>mkCells(
                 col.aggKey==='src'?a.src[col.src]:a[col.aggKey],
                 col.grandLeads,v+col.key+'_',bg,col.scols,
-                col.aggKey==='total'&&isStateGrid?vahanRetailFor(v,M):undefined,
+                col.aggKey==='total'&&isStateGrid?vahanRetailFor(v,vMonths):undefined,
                 col.aggKey==='total'&&isStateGrid?vahanAllIndia:undefined
               ))
             );
@@ -1135,6 +1149,83 @@ const ModelSourceTab=React.memo(function ModelSourceTab({rows,mf}){
 });
 const StateSourceTab=React.memo(function StateSourceTab({rows,mf}){
   return ce(DimSourceTab,{rows,mf,rowKey:'state',dimLabel:'State',xTabLabel:'State × Source'});
+});
+
+/* ── Geo wise Model — replica of State × Source, one grid per Model instead of per Month ── */
+function pillToggleFactory(setFn){
+  return function toggle(v){
+    setFn(prev=>{
+      if(v==='all') return new Set(['all']);
+      const next=new Set(prev);next.delete('all');
+      if(next.has(v)){next.delete(v);if(next.size===0)return new Set(['all']);}
+      else next.add(v);
+      return next;
+    });
+  };
+}
+
+const GeoModelTab=React.memo(function GeoModelTab({rows,mf}){
+  const allMonths=useMemo(()=>
+    [...new Set(rows.map(r=>r.lead_month))].filter(Boolean).sort((a,b)=>monthOrder(b)-monthOrder(a))
+  ,[rows]);
+  const allLTs=useMemo(()=>[...new Set(rows.map(r=>r.lt))].filter(Boolean).sort(),[rows]);
+  const allCities=useMemo(()=>[...new Set(rows.map(r=>r.city))].filter(Boolean).sort(),[rows]);
+
+  const [selMonths,setSelMonths]=useState(()=>mf&&mf!=='All'?new Set([mf]):new Set(['all']));
+  useEffect(()=>{ setSelMonths(mf&&mf!=='All'?new Set([mf]):new Set(['all'])); },[mf]);
+  const [selLTs,setSelLTs]=useState(()=>new Set(['all']));
+  const [selCities,setSelCities]=useState(()=>new Set(['all']));
+
+  const toggleMonth=useCallback(pillToggleFactory(setSelMonths),[]);
+  const toggleLT=useCallback(pillToggleFactory(setSelLTs),[]);
+  const toggleCity=useCallback(pillToggleFactory(setSelCities),[]);
+
+  const resolvedMonths=selMonths.has('all')?allMonths:allMonths.filter(m=>selMonths.has(m));
+
+  const filteredRows=useMemo(()=>rows.filter(r=>
+    (selMonths.has('all')||selMonths.has(r.lead_month))&&
+    (selLTs.has('all')||selLTs.has(r.lt))&&
+    (selCities.has('all')||selCities.has(r.city))
+  ),[rows,selMonths,selLTs,selCities]);
+
+  const modelGroups=useMemo(()=>{
+    const m={};
+    for(const r of filteredRows){ const v=r.model||'Unknown'; if(!m[v]) m[v]=[]; m[v].push(r); }
+    return Object.keys(m)
+      .sort((a,b)=>m[b].length-m[a].length)
+      .map(model=>({model,rows:m[model]}));
+  },[filteredRows]);
+
+  const pillBase={padding:'4px 14px',fontSize:11,fontWeight:600,borderRadius:20,
+    cursor:'pointer',border:'1px solid #D1D5DB',background:'#fff',color:'#374151',fontFamily:'inherit',transition:'all 120ms'};
+  const pillActive={...pillBase,background:'#1B4332',color:'#fff',borderColor:'#1B4332'};
+
+  function pillRow(label,allVals,sel,toggle){
+    return ce('div',{style:{display:'flex',alignItems:'center',gap:8,marginBottom:12,flexWrap:'wrap'}},
+      ce('span',{style:{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:'.08em',color:'#9ca3af',marginRight:4,minWidth:70}},label+':'),
+      ce('button',{onClick:()=>toggle('all'),style:sel.has('all')?pillActive:pillBase},'All'),
+      allVals.map(v=>ce('button',{key:v,onClick:()=>toggle(v),style:sel.has(v)?pillActive:pillBase},v))
+    );
+  }
+
+  return ce('div',{className:'fade-up'},
+    pillRow('Months',allMonths,selMonths,toggleMonth),
+    pillRow('Lead Types',allLTs,selLTs,toggleLT),
+    pillRow('City',allCities,selCities,toggleCity),
+    ce('div',{style:{fontSize:11,fontWeight:700,color:'#6b7280',textTransform:'uppercase',
+      letterSpacing:'.08em',marginBottom:12,marginTop:8}},'State × Source — by Model'),
+    modelGroups.map(({model,rows:mr})=>ce(CompactMonthGrid,{
+      key:model,M:'All',rows:mr,rowKey:'state',dimLabel:'State',
+      badgeLabel:model,vahanMonths:resolvedMonths
+    })),
+    ce('div',{style:{margin:'24px 0 16px',borderTop:'2px solid #D1D5DB'}}),
+    ce('div',{style:{fontSize:11,fontWeight:700,color:'#6b7280',textTransform:'uppercase',
+      letterSpacing:'.08em',marginBottom:12}},'Geo wise Model — All Models Summary'),
+    ce(CompactMonthGrid,{
+      M:'All',rows:filteredRows,rowKey:'state',dimLabel:'State',
+      badgeLabel:'All Models',vahanMonths:resolvedMonths
+    })
+  );
 });
 
 /* DEAD CODE REMOVED — was CrossTab, now replaced by DimMonthGrid */
@@ -1423,6 +1514,7 @@ const TABS=[
   {id:'ltxsrc',    label:'LT × Source'},
   {id:'modelxsrc', label:'Model × Source'},
   {id:'statexsrc', label:'State × Source'},
+  {id:'geomodel',  label:'Geo wise Model'},
 ];
 
 function App(){
@@ -1494,6 +1586,7 @@ function App(){
     ltxsrc:   ce(LTSourceTab,    {rows:baseRows, mf:filters.month}),
     modelxsrc: ce(ModelSourceTab, {rows:baseRows, mf:filters.month}),
     statexsrc: ce(StateSourceTab, {rows:baseRows, mf:filters.month}),
+    geomodel:  ce(GeoModelTab,    {rows:baseRows, mf:filters.month}),
   }),[baseRows,filters.month]);
 
   if(!rows) return ce(UploadScreen,{onData:setRows,onSync:handleSync,syncing,syncErr,sheetUrl,setSheetUrl,urlDraft,setUrlDraft,lastSynced});
