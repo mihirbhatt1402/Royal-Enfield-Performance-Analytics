@@ -104,11 +104,39 @@ async function fetchSheetCsv(url){
   return text;
 }
 
+/* Dedicated single-pass CSV parser — gviz/tq output is well-formed CSV, so this
+   avoids SheetJS's much heavier general-purpose type-inference parser, which was
+   the main bottleneck on large sheets (tens of thousands of rows). */
 function parseCsvToRows(csvText){
-  if(!window.XLSX) throw new Error('XLSX library not loaded — check internet connection.');
-  const wb=window.XLSX.read(csvText,{type:'string',raw:false});
-  const ws=wb.Sheets[wb.SheetNames[0]];
-  return window.XLSX.utils.sheet_to_json(ws,{defval:'',raw:false});
+  let text=csvText;
+  if(text.charCodeAt(0)===0xFEFF) text=text.slice(1);
+  const rows=[];
+  let row=[],field='',inQuotes=false;
+  for(let i=0;i<text.length;i++){
+    const c=text[i];
+    if(inQuotes){
+      if(c==='"'){
+        if(text[i+1]==='"'){ field+='"'; i++; }
+        else inQuotes=false;
+      } else field+=c;
+    } else if(c==='"'){ inQuotes=true; }
+    else if(c===','){ row.push(field); field=''; }
+    else if(c==='\r'){ /* skip — \n handles the line break */ }
+    else if(c==='\n'){ row.push(field); field=''; rows.push(row); row=[]; }
+    else field+=c;
+  }
+  if(field.length||row.length){ row.push(field); rows.push(row); }
+  if(!rows.length) return[];
+  const headers=rows[0];
+  const out=[];
+  for(let r=1;r<rows.length;r++){
+    const rv=rows[r];
+    if(rv.length===1&&rv[0]==='') continue;
+    const obj={};
+    for(let c=0;c<headers.length;c++) obj[headers[c]]=rv[c]!==undefined?rv[c]:'';
+    out.push(obj);
+  }
+  return out;
 }
 
 const ce=React.createElement;
@@ -143,13 +171,19 @@ function prevMonthsSet(m,n){
 
 /* ── Parse raw rows into structured records ───────────────────────── */
 function parseRows(raw){
+  if(!raw.length) return [];
+  /* Build a normalized-column-name -> actual-key map ONCE, instead of
+     re-normalizing every column name for every field on every row. */
+  const keyMap={};
+  Object.keys(raw[0]).forEach(rk=>{
+    keyMap[rk.toLowerCase().replace(/\s+/g,' ').trim()]=rk;
+  });
   return raw.map(function(r){
     function get(keys){
       for(const k of(Array.isArray(keys)?keys:[keys])){
         const kl=k.toLowerCase().replace(/\s+/g,' ').trim();
-        for(const rk of Object.keys(r)){
-          if(rk.toLowerCase().replace(/\s+/g,' ').trim()===kl) return String(r[rk]||'').trim();
-        }
+        const rk=keyMap[kl];
+        if(rk!==undefined) return String(r[rk]||'').trim();
       }
       return '';
     }
