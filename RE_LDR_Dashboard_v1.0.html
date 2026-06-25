@@ -265,6 +265,11 @@ function vahanRetailFor(state,M){
   if(!monthData) return undefined;
   return monthData[normState(state)];
 }
+function vahanMonthTotal(M){
+  const monthData=VAHAN_RETAILS[M];
+  if(!monthData) return 0;
+  return Object.values(monthData).reduce((s,v)=>s+v,0);
+}
 
 /* ── Formatters & badges ──────────────────────────────────────────── */
 function Nf(n){return n==null||isNaN(n)?'—':Number(n).toLocaleString('en-IN');}
@@ -751,7 +756,7 @@ const CompactMonthGrid=React.memo(function CompactMonthGrid({M,rows,rowKey,dimLa
   const SCOLS=[{label:'Unique Leads',m:'leads'},{label:'Bookings',m:'retail'},{label:'Contrib%',m:'contrib'},{label:'E2B%',m:'l2r'},{label:'Duplicity',m:'dup'},{label:'Duplicity%',m:'duppct'}];
   /* State × Source tab only: Vahan industry retail + dashboard's retail share of it, appended to the Total column */
   const isStateGrid=rowKey==='state';
-  const EXTRA_SCOLS=[{label:'Vahan Retail',m:'vahan'},{label:'Retail Share%',m:'vshare'}];
+  const EXTRA_SCOLS=[{label:'Vahan Retail',m:'vahan'},{label:'Retail Share%',m:'vshare'},{label:'State Retail Contrib%',m:'vcontrib'}];
   const SCOLS_TOTAL=isStateGrid?[...SCOLS,...EXTRA_SCOLS]:SCOLS;
 
   /* flat column list — each top group contributes either 1 aggregate col or N child-source cols */
@@ -771,15 +776,18 @@ const CompactMonthGrid=React.memo(function CompactMonthGrid({M,rows,rowKey,dimLa
     return Object.keys(dimAggs).reduce((s,v)=>s+(vahanRetailFor(v,M)||0),0);
   },[isStateGrid,dimAggs,M]);
 
+  const vahanAllIndia=useMemo(()=>isStateGrid?vahanMonthTotal(M):undefined,[isStateGrid,M]);
+
   const dimVals=useMemo(()=>{
     const sortCol=COLS.find(c=>c.key===sort.colKey)||COLS[0];
     const vals=Object.keys(dimAggs).sort((a,b)=>{
       let av,bv;
-      if(isStateGrid&&(sort.metric==='vahan'||sort.metric==='vshare')){
+      if(isStateGrid&&(sort.metric==='vahan'||sort.metric==='vshare'||sort.metric==='vcontrib')){
         const va=vahanRetailFor(a,M)||0, vb=vahanRetailFor(b,M)||0;
         const aggA=aggForCol(a,sortCol), aggB=aggForCol(b,sortCol);
-        av=sort.metric==='vahan'?va:(va>0?(aggA.bookings/va*100):0);
-        bv=sort.metric==='vahan'?vb:(vb>0?(aggB.bookings/vb*100):0);
+        if(sort.metric==='vahan'){ av=va; bv=vb; }
+        else if(sort.metric==='vshare'){ av=va>0?(aggA.bookings/va*100):0; bv=vb>0?(aggB.bookings/vb*100):0; }
+        else { av=vahanAllIndia>0?(va/vahanAllIndia*100):0; bv=vahanAllIndia>0?(vb/vahanAllIndia*100):0; }
       } else {
         av=metricVal(aggForCol(a,sortCol),sortCol.grandLeads,sort.metric);
         bv=metricVal(aggForCol(b,sortCol),sortCol.grandLeads,sort.metric);
@@ -787,13 +795,14 @@ const CompactMonthGrid=React.memo(function CompactMonthGrid({M,rows,rowKey,dimLa
       return sort.dir==='desc'?bv-av:av-bv;
     });
     return vals;
-  },[dimAggs,COLS,sort,isStateGrid,M]);
+  },[dimAggs,COLS,sort,isStateGrid,M,vahanAllIndia]);
 
-  function mkCells(agg,grandLeads,kpfx,bg,scols,vahanRetail){
+  function mkCells(agg,grandLeads,kpfx,bg,scols,vahanRetail,vahanAll){
     const contrib=grandLeads>0&&agg.uniqueLeads>0?(agg.uniqueLeads/grandLeads*100):0;
     const l2r=agg.uniqueLeads>0?agg.e2bPct:0;
     const l2rBg=agg.uniqueLeads>0?l2rColor(l2r):'#F3F4F6';
     const share=vahanRetail>0?(agg.bookings/vahanRetail*100):null;
+    const vcontrib=vahanAll>0&&vahanRetail>0?(vahanRetail/vahanAll*100):null;
     const cs={padding:'5px 7px',textAlign:'right',fontSize:11,fontFamily:'DM Mono,monospace',
       color:'#222222',border:'1px solid #E5E7EB',verticalAlign:'middle',background:bg};
     return scols.map((s,i)=>{
@@ -812,6 +821,14 @@ const CompactMonthGrid=React.memo(function CompactMonthGrid({M,rows,rowKey,dimLa
           agg.uniqueLeads>0?l2r.toFixed(1)+'%':'—');
         case 'dup': return ce('td',{key:kpfx+'d',style:cs},agg.totalLeads>0?Nf(agg.dupLeads):'—');
         case 'duppct': return ce('td',{key:kpfx+'dp',style:cs},agg.totalLeads>0?agg.dupPct.toFixed(1)+'%':'—');
+        case 'vcontrib': return ce('td',{key:kpfx+'vc',style:{...cs,padding:'3px 7px',minWidth:76}},
+          vcontrib!=null
+            ?ce('div',null,
+              ce('div',{style:{fontSize:10,textAlign:'right',marginBottom:2}},vcontrib.toFixed(1)+'%'),
+              ce('div',{style:{height:4,background:'#EFEFEF',borderRadius:2}},
+                ce('div',{style:{height:'100%',width:Math.min(vcontrib,100)+'%',background:'#C8A96B',borderRadius:2}}))
+            )
+            :ce('span',{style:{color:'#9ca3af'}},'—'));
         case 'vahan': return ce('td',{key:kpfx+'va',style:cs},vahanRetail>0?Nf(vahanRetail):'—');
         case 'vshare': return ce('td',{key:kpfx+'vs',style:{...cs,background:share!=null?l2rColor(share>100?100:share):'#F3F4F6',fontWeight:700}},
           share!=null?share.toFixed(1)+'%':'—');
@@ -897,7 +914,8 @@ const CompactMonthGrid=React.memo(function CompactMonthGrid({M,rows,rowKey,dimLa
               ...COLS.flatMap(col=>mkCells(
                 col.aggKey==='src'?a.src[col.src]:a[col.aggKey],
                 col.grandLeads,v+col.key+'_',bg,col.scols,
-                col.aggKey==='total'&&isStateGrid?vahanRetailFor(v,M):undefined
+                col.aggKey==='total'&&isStateGrid?vahanRetailFor(v,M):undefined,
+                col.aggKey==='total'&&isStateGrid?vahanAllIndia:undefined
               ))
             );
           }),
@@ -906,7 +924,8 @@ const CompactMonthGrid=React.memo(function CompactMonthGrid({M,rows,rowKey,dimLa
             ...COLS.flatMap(col=>mkCells(
               col.aggKey==='src'?grandSrc[col.src]:(col.aggKey==='total'?grand:col.aggKey==='paid'?grandPaid:grandOrg),
               col.grandLeads,'GT_'+col.key+'_','#E9EDF2',col.scols,
-              col.aggKey==='total'&&isStateGrid?grandVahan:undefined
+              col.aggKey==='total'&&isStateGrid?grandVahan:undefined,
+              col.aggKey==='total'&&isStateGrid?vahanAllIndia:undefined
             ))
           )
         )
