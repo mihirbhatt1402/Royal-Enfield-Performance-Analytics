@@ -140,7 +140,7 @@ function parseCsvToRows(csvText){
 }
 
 const ce=React.createElement;
-const {useState,useEffect,useMemo,useRef,useCallback}=React;
+const {useState,useEffect,useMemo,useRef,useCallback,useTransition}=React;
 
 /* ── Month helpers ────────────────────────────────────────────────── */
 const MONTH_NAMES=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -159,22 +159,6 @@ function monthOrder(m){
 function defaultMonthSel(mf,allMonths){
   if(mf&&mf!=='All') return new Set([mf]);
   return allMonths&&allMonths.length?new Set([allMonths[0]]):new Set(['all']);
-}
-
-/* Returns a Set of n month strings starting from m going backwards (inclusive) */
-function prevMonthsSet(m,n){
-  if(!m||m==='-'||m==='') return new Set();
-  const match=m.match(/([A-Za-z]+)'(\d+)/);
-  if(!match) return new Set();
-  let mi=MONTH_NAMES.indexOf(match[1]);
-  let yr=parseInt(match[2]);
-  const result=new Set();
-  for(let i=0;i<n;i++){
-    result.add(MONTH_NAMES[mi]+"'"+yr);
-    mi--;
-    if(mi<0){mi=11;yr--;}
-  }
-  return result;
 }
 
 /* ── Parse raw rows into structured records ───────────────────────── */
@@ -227,52 +211,70 @@ function parseRows(raw){
 
 /* ── Core aggregate function ──────────────────────────────────────── */
 /* rows   = already filtered by source / lt / primarySrc (NOT by lead_month)
-   mf     = monthFilter string ('All' or e.g. "Mar'2026")                    */
+   mf     = monthFilter string ('All' or e.g. "Mar'2026")
+   Single pass over `rows` instead of one filter pass per distinct month — the old
+   'All' branch was O(months × n), which dominated render time once grids started
+   aggregating across many months (Geo wise Model, "All Months Summary" grids, etc). */
 function aggRE(rows,mf){
-  const leadRows=mf==='All'?rows:rows.filter(r=>r.lead_month===mf);
-  const uniqueLeads=new Set(leadRows.filter(r=>r.isUnique).map(r=>r.lead_number)).size;
-  const totalLeads=leadRows.length;
-  const dupLeads=totalLeads-uniqueLeads;
-  const dupPct=totalLeads>0?(totalLeads-uniqueLeads)/totalLeads*100:0;
+  const isAll=mf==='All';
+  let totalLeads=0;
+  const uniqueSet=new Set();
+  const bookingSet=new Set();
 
-  let bookings=0;
-  if(mf!=='All'){
-    const valid=prevMonthsSet(mf,3);
-    bookings=new Set(
-      rows.filter(r=>r.booking_month===mf&&valid.has(r.lead_month))
-          .map(r=>r.lead_number)
-    ).size;
+  if(isAll){
+    const leadMonthsPresent=new Set();
+    for(const r of rows){ if(r.lead_month) leadMonthsPresent.add(r.lead_month); }
+    for(const r of rows){
+      totalLeads++;
+      if(r.isUnique) uniqueSet.add(r.lead_number);
+      if(r.booking_month&&leadMonthsPresent.has(r.booking_month)){
+        const diff=monthOrder(r.booking_month)-monthOrder(r.lead_month);
+        if(diff>=0&&diff<=2) bookingSet.add(r.lead_number);
+      }
+    }
   } else {
-    const months=[...new Set(rows.map(r=>r.lead_month))].filter(m=>m&&m!=='-'&&m!=='');
-    for(const M of months){
-      const valid=prevMonthsSet(M,3);
-      bookings+=new Set(
-        rows.filter(r=>r.booking_month===M&&valid.has(r.lead_month))
-            .map(r=>r.lead_number)
-      ).size;
+    const mfOrder=monthOrder(mf);
+    for(const r of rows){
+      if(r.lead_month===mf){
+        totalLeads++;
+        if(r.isUnique) uniqueSet.add(r.lead_number);
+      }
+      if(r.booking_month===mf){
+        const diff=mfOrder-monthOrder(r.lead_month);
+        if(diff>=0&&diff<=2) bookingSet.add(r.lead_number);
+      }
     }
   }
+
+  const uniqueLeads=uniqueSet.size;
+  const dupLeads=totalLeads-uniqueLeads;
+  const dupPct=totalLeads>0?(totalLeads-uniqueLeads)/totalLeads*100:0;
+  const bookings=bookingSet.size;
   const e2bPct=uniqueLeads>0?(bookings/uniqueLeads*100):0;
   return{totalLeads,uniqueLeads,dupLeads,dupPct,bookings,e2bPct};
 }
 
-/* Aggregate across an arbitrary set of selected months (used by mini-charts) */
+/* Aggregate across an arbitrary set of selected months (used by mini-charts) — single pass. */
 function aggMulti(rows,months){
   if(!months||!months.length) return{totalLeads:0,uniqueLeads:0,dupLeads:0,dupPct:0,bookings:0,e2bPct:0};
   const monthSet=new Set(months);
-  const leadRows=rows.filter(r=>monthSet.has(r.lead_month));
-  const uniqueLeads=new Set(leadRows.filter(r=>r.isUnique).map(r=>r.lead_number)).size;
-  const totalLeads=leadRows.length;
+  let totalLeads=0;
+  const uniqueSet=new Set();
+  const bookingSet=new Set();
+  for(const r of rows){
+    if(monthSet.has(r.lead_month)){
+      totalLeads++;
+      if(r.isUnique) uniqueSet.add(r.lead_number);
+    }
+    if(r.booking_month&&monthSet.has(r.booking_month)){
+      const diff=monthOrder(r.booking_month)-monthOrder(r.lead_month);
+      if(diff>=0&&diff<=2) bookingSet.add(r.lead_number);
+    }
+  }
+  const uniqueLeads=uniqueSet.size;
   const dupLeads=totalLeads-uniqueLeads;
   const dupPct=totalLeads>0?(totalLeads-uniqueLeads)/totalLeads*100:0;
-  let bookings=0;
-  for(const M of months){
-    const valid=prevMonthsSet(M,3);
-    bookings+=new Set(
-      rows.filter(r=>r.booking_month===M&&valid.has(r.lead_month))
-          .map(r=>r.lead_number)
-    ).size;
-  }
+  const bookings=bookingSet.size;
   const e2bPct=uniqueLeads>0?(bookings/uniqueLeads*100):0;
   return{totalLeads,uniqueLeads,dupLeads,dupPct,bookings,e2bPct};
 }
@@ -1045,19 +1047,20 @@ const SourceTab=React.memo(function SourceTab({rows,mf}){
   /* Month pill selection: sync with global month filter — defaults to latest month only,
      not every month, so opening this tab doesn't render a heavy grid per month. */
   const [selMonths,setSelMonths]=useState(()=>defaultMonthSel(mf,allMonths));
+  const [isPending,startTransition]=useTransition();
   useEffect(()=>{
     setSelMonths(defaultMonthSel(mf,allMonths));
   },[mf]);// eslint-disable-line
 
   function toggleMonth(m){
-    setSelMonths(prev=>{
+    startTransition(()=>setSelMonths(prev=>{
       if(m==='all') return new Set(['all']);
       const next=new Set(prev);
       next.delete('all');
       if(next.has(m)){next.delete(m);if(next.size===0)return new Set(['all']);}
       else next.add(m);
       return next;
-    });
+    }));
   }
 
   const activeMonths=selMonths.has('all')?allMonths:allMonths.filter(m=>selMonths.has(m));
@@ -1088,12 +1091,13 @@ const SourceTab=React.memo(function SourceTab({rows,mf}){
       ce('span',{style:{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:'.08em',color:'#9ca3af',marginRight:4}},'MONTHS:'),
       ce('button',{onClick:()=>toggleMonth('all'),style:selMonths.has('all')?pillActive:pillBase},'All'),
       allMonths.map(m=>ce('button',{key:m,onClick:()=>toggleMonth(m),
-        style:selMonths.has(m)?pillActive:pillBase},m))
+        style:selMonths.has(m)?pillActive:pillBase},m)),
+      isPending&&ce('span',{style:{fontSize:11,color:'#9ca3af'}},'Loading…')
     ),
 
     /* Section label */
     ce('div',{style:{fontSize:11,fontWeight:700,color:'#6b7280',textTransform:'uppercase',
-      letterSpacing:'.08em',marginBottom:12}},'Source Trend'),
+      letterSpacing:'.08em',marginBottom:12,opacity:isPending?0.6:1,transition:'opacity .15s'}},'Source Trend'),
 
     /* Mini charts grid — 2 columns */
     ce('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:24}},
@@ -1120,17 +1124,18 @@ const DimSourceTab=React.memo(function DimSourceTab({rows,mf,rowKey,dimLabel,xTa
   /* Defaults to latest month only, not every month — rendering one heavy grid per month
      by default made this tab slow to open whenever there were several months of data. */
   const [selMonths,setSelMonths]=useState(()=>defaultMonthSel(mf,allMonths));
+  const [isPending,startTransition]=useTransition();
   useEffect(()=>{
     setSelMonths(defaultMonthSel(mf,allMonths));
   },[mf]);// eslint-disable-line
   function toggleMonth(m){
-    setSelMonths(prev=>{
+    startTransition(()=>setSelMonths(prev=>{
       if(m==='all') return new Set(['all']);
       const next=new Set(prev);next.delete('all');
       if(next.has(m)){next.delete(m);if(next.size===0)return new Set(['all']);}
       else next.add(m);
       return next;
-    });
+    }));
   }
   const activeMonths=selMonths.has('all')?allMonths:allMonths.filter(m=>selMonths.has(m));
   const pillBase={padding:'4px 14px',fontSize:11,fontWeight:600,borderRadius:20,
@@ -1140,10 +1145,11 @@ const DimSourceTab=React.memo(function DimSourceTab({rows,mf,rowKey,dimLabel,xTa
     ce('div',{style:{display:'flex',alignItems:'center',gap:8,marginBottom:18,flexWrap:'wrap'}},
       ce('span',{style:{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:'.08em',color:'#9ca3af',marginRight:4}},'MONTHS:'),
       ce('button',{onClick:()=>toggleMonth('all'),style:selMonths.has('all')?pillActive:pillBase},'All'),
-      allMonths.map(m=>ce('button',{key:m,onClick:()=>toggleMonth(m),style:selMonths.has(m)?pillActive:pillBase},m))
+      allMonths.map(m=>ce('button',{key:m,onClick:()=>toggleMonth(m),style:selMonths.has(m)?pillActive:pillBase},m)),
+      isPending&&ce('span',{style:{fontSize:11,color:'#9ca3af'}},'Loading…')
     ),
     ce('div',{style:{fontSize:11,fontWeight:700,color:'#6b7280',textTransform:'uppercase',
-      letterSpacing:'.08em',marginBottom:12}},dimLabel+' × Source — by Month'),
+      letterSpacing:'.08em',marginBottom:12,opacity:isPending?0.6:1,transition:'opacity .15s'}},dimLabel+' × Source — by Month'),
     activeMonths.map(M=>ce(CompactMonthGrid,{key:M,M,rows,rowKey,dimLabel})),
     ce('div',{style:{margin:'24px 0 16px',borderTop:'2px solid #D1D5DB'}}),
     ce('div',{style:{fontSize:11,fontWeight:700,color:'#6b7280',textTransform:'uppercase',
@@ -1494,6 +1500,10 @@ const TABS=[
 function App(){
   const [rows,setRows]=useState(null);
   const [tab,setTab]=useState('overview');
+  /* startTransition keeps the click feeling instant — the active-tab highlight updates
+     right away while the new tab's grids render in the background (isPending drives a
+     subtle loading cue instead of the UI appearing to freeze). */
+  const [isPending,startTransition]=useTransition();
   /* Only mount a tab's heavy grids once it's actually been opened — mounting all 6 tabs
      up front meant every filter change recomputed every tab, not just the visible one. */
   const [visitedTabs,setVisitedTabs]=useState(()=>new Set(['overview']));
@@ -1646,13 +1656,14 @@ function App(){
 
     /* Tab bar */
     ce('div',{style:{background:'#fff',borderBottom:'2px solid #D8EED8',position:'sticky',top:54,zIndex:99,boxShadow:'0 2px 8px rgba(45,106,79,.08)'}},
-      ce('div',{style:{maxWidth:1600,margin:'0 auto',display:'flex',alignItems:'center',gap:0,padding:'0 24px'}},
-        TABS.map(t=>ce('button',{key:t.id,className:'tab-pill'+(tab===t.id?' active':''),onClick:()=>setTab(t.id)},t.label))
+      ce('div',{style:{maxWidth:1600,margin:'0 auto',display:'flex',alignItems:'center',gap:0,padding:'0 24px',opacity:isPending?0.6:1,transition:'opacity .15s'}},
+        TABS.map(t=>ce('button',{key:t.id,className:'tab-pill'+(tab===t.id?' active':''),onClick:()=>startTransition(()=>setTab(t.id))},t.label)),
+        isPending&&ce('span',{style:{marginLeft:12,fontSize:12,color:'#6B7280'}},'Loading…')
       )
     ),
 
     /* Filter bar */
-    ce('div',{style:{maxWidth:1600,margin:'0 auto',padding:'14px 24px 0'}},
+    ce('div',{style:{maxWidth:1600,margin:'0 auto',padding:'14px 24px 0',opacity:isPending?0.6:1,transition:'opacity .15s'}},
       ce('div',{className:'filter-bar'},
         ce('label',null,'Filters'),
         ...[
@@ -1664,13 +1675,13 @@ function App(){
           {k:'city',      label:'City',            opts:['All',...cities]},
         ].map(f=>ce('div',{key:f.k,style:{display:'flex',alignItems:'center',gap:5}},
           ce('span',{style:{fontSize:10,color:'#64748b',fontWeight:600}},f.label+':'),
-          ce('select',{value:filters[f.k],onChange:e=>setFilters(p=>({...p,[f.k]:e.target.value}))},
+          ce('select',{value:filters[f.k],onChange:e=>{const v=e.target.value;startTransition(()=>setFilters(p=>({...p,[f.k]:v})));}},
             f.opts.map(o=>ce('option',{key:o,value:o},o))
           )
         )),
         (filters.month!=='All'||filters.source!=='All'||filters.primarySrc!=='All'||filters.state!=='All'||filters.city!=='All'||filters.model!=='All')&&
           ce('button',{
-            onClick:()=>setFilters({month:'All',source:'All',primarySrc:'All',state:'All',city:'All',model:'All'}),
+            onClick:()=>startTransition(()=>setFilters({month:'All',source:'All',primarySrc:'All',state:'All',city:'All',model:'All'})),
             style:{padding:'4px 12px',fontSize:10,background:'#D8EED8',border:'1px solid #A8D5BA',borderRadius:20,cursor:'pointer',fontFamily:'inherit',color:'#1B4332',fontWeight:600}
           },'✕ Clear Filters'),
         ce('span',{style:{marginLeft:'auto',fontSize:10,fontFamily:'DM Mono',color:'#94a3b8'}},
