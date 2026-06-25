@@ -782,8 +782,12 @@ const CompactMonthGrid=React.memo(function CompactMonthGrid({M,rows,rowKey,dimLa
     return res;
   },[dimRowsMap,M]);
 
-  /* Top-level groups: Total (fixed) | Paid (collapsible: MS FB, Adwords) | Organic + Non MS (collapsible: Organic, Non MS) */
-  const TOPGROUPS=[
+  /* Top-level groups: Total (fixed) | Paid (collapsible: MS FB, Adwords) | Organic + Non MS (collapsible: Organic, Non MS)
+     — on the Source tab the rows ARE the sources already, so the Paid/Organic column split is redundant; show Total only. */
+  const isSourceGrid=rowKey==='source';
+  const TOPGROUPS=isSourceGrid?[
+    {label:'Total',bg:'#58616A',name:null,children:null,aggKey:'total',grandLeads:grand.uniqueLeads},
+  ]:[
     {label:'Total',           bg:'#58616A',name:null,             children:null,     aggKey:'total',grandLeads:grand.uniqueLeads},
     {label:'Paid',            bg:'#B46B42',name:'Paid',            children:PAID_MBRS,aggKey:'paid', grandLeads:grandPaid.uniqueLeads},
     {label:'Organic + Non MS',bg:'#5F8B6F',name:'Organic + Non MS',children:ORG_MBRS, aggKey:'org',  grandLeads:grandOrg.uniqueLeads},
