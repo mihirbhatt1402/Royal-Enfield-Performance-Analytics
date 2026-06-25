@@ -235,6 +235,37 @@ function aggMulti(rows,months){
   return{totalLeads,uniqueLeads,dupLeads,dupPct,bookings,e2bPct};
 }
 
+/* ── Vahan state-wise industry retails (source: RE Vahan retails.xlsx) ──── */
+function normState(s){
+  let t=(s||'').toLowerCase().replace(/&/g,' and ').replace(/[^a-z]/g,'');
+  const ALIAS={
+    jammukashmir:'jammuandkashmir',
+    andamannicobarislands:'andamannicobarisland',
+    andamanandnicobarislands:'andamannicobarisland',
+    dadranagarhavelidamandiu:'utofdnhanddd',
+    dadraandnagarhavelianddamananddiu:'utofdnhanddd',
+    dnhdd:'utofdnhanddd',
+    pondicherry:'puducherry',
+    orissa:'odisha',
+    nctofdelhi:'delhi',
+  };
+  return ALIAS[t]||t;
+}
+const VAHAN_RAW={
+  "Mar'2026":{'Andaman & Nicobar Island':23,'Andhra Pradesh':3508,'Arunachal Pradesh':143,'Assam':2777,'Bihar':6543,'Chandigarh':226,'Chhattisgarh':1105,'Delhi':3205,'Goa':317,'Gujarat':4112,'Haryana':3169,'Himachal Pradesh':564,'Jammu and Kashmir':762,'Jharkhand':2717,'Karnataka':5718,'Kerala':3968,'Lakshadweep':7,'Madhya Pradesh':3194,'Maharashtra':14049,'Manipur':254,'Meghalaya':97,'Mizoram':68,'Nagaland':92,'Odisha':4508,'Puducherry':241,'Punjab':3371,'Rajasthan':2871,'Sikkim':144,'Tamil Nadu':6935,'Tripura':220,'UT of DNH and DD':45,'Uttar Pradesh':13570,'Uttarakhand':1275,'West Bengal':8114},
+  "Apr'2026":{'Andaman & Nicobar Island':16,'Andhra Pradesh':3535,'Arunachal Pradesh':171,'Assam':3010,'Bihar':6259,'Chandigarh':252,'Chhattisgarh':1125,'Delhi':3375,'Goa':187,'Gujarat':3763,'Haryana':3190,'Himachal Pradesh':636,'Jammu and Kashmir':930,'Jharkhand':2805,'Karnataka':5728,'Kerala':3175,'Ladakh':12,'Lakshadweep':9,'Madhya Pradesh':2957,'Maharashtra':12897,'Manipur':161,'Meghalaya':120,'Mizoram':98,'Nagaland':57,'Odisha':4635,'Puducherry':240,'Punjab':3496,'Rajasthan':2914,'Sikkim':148,'Tamil Nadu':6516,'Tripura':217,'UT of DNH and DD':39,'Uttar Pradesh':14954,'Uttarakhand':1318,'West Bengal':7717},
+  "May'2026":{'Andaman & Nicobar Island':10,'Andhra Pradesh':2832,'Arunachal Pradesh':111,'Assam':2601,'Bihar':6141,'Chandigarh':181,'Chhattisgarh':951,'Delhi':3116,'Goa':140,'Gujarat':3028,'Haryana':2720,'Himachal Pradesh':662,'Jammu and Kashmir':737,'Jharkhand':2728,'Karnataka':4808,'Kerala':2931,'Ladakh':56,'Lakshadweep':10,'Madhya Pradesh':2484,'Maharashtra':7723,'Manipur':241,'Meghalaya':79,'Mizoram':87,'Nagaland':110,'Odisha':4236,'Puducherry':263,'Punjab':2731,'Rajasthan':2466,'Sikkim':117,'Tamil Nadu':5702,'Telangana':2635,'Tripura':173,'UT of DNH and DD':46,'Uttar Pradesh':12645,'Uttarakhand':1273,'West Bengal':7299},
+  "Jun'2026":{}, // not yet published in source file as of last sync
+};
+const VAHAN_RETAILS=Object.fromEntries(Object.entries(VAHAN_RAW).map(([m,obj])=>
+  [m,Object.fromEntries(Object.entries(obj).map(([k,v])=>[normState(k),v]))]
+));
+function vahanRetailFor(state,M){
+  const monthData=VAHAN_RETAILS[M];
+  if(!monthData) return undefined;
+  return monthData[normState(state)];
+}
+
 /* ── Formatters & badges ──────────────────────────────────────────── */
 function Nf(n){return n==null||isNaN(n)?'—':Number(n).toLocaleString('en-IN');}
 function Pf(n,d=1){return(n==null||isNaN(n))?'—':n.toFixed(d)+'%';}
@@ -718,52 +749,75 @@ const CompactMonthGrid=React.memo(function CompactMonthGrid({M,rows,rowKey,dimLa
     {label:'Organic + Non MS',bg:'#5F8B6F',name:'Organic + Non MS',children:ORG_MBRS, aggKey:'org',  grandLeads:grandOrg.uniqueLeads},
   ];
   const SCOLS=[{label:'Unique Leads',m:'leads'},{label:'Bookings',m:'retail'},{label:'Contrib%',m:'contrib'},{label:'E2B%',m:'l2r'},{label:'Duplicity',m:'dup'},{label:'Duplicity%',m:'duppct'}];
+  /* State × Source tab only: Vahan industry retail + dashboard's retail share of it, appended to the Total column */
+  const isStateGrid=rowKey==='state';
+  const EXTRA_SCOLS=[{label:'Vahan Retail',m:'vahan'},{label:'Retail Share%',m:'vshare'}];
+  const SCOLS_TOTAL=isStateGrid?[...SCOLS,...EXTRA_SCOLS]:SCOLS;
+
   /* flat column list — each top group contributes either 1 aggregate col or N child-source cols */
   const COLS=useMemo(()=>TOPGROUPS.flatMap(g=>{
-    if(!g.children) return[{key:'total',aggKey:'total',grandLeads:g.grandLeads}];
-    if(!expanded.has(g.name)) return[{key:g.aggKey,aggKey:g.aggKey,grandLeads:g.grandLeads}];
-    return g.children.map(src=>({key:src,aggKey:'src',src,grandLeads:grandSrc[src].uniqueLeads}));
-  }),[expanded,grand,grandPaid,grandOrg,grandSrc]);
+    if(!g.children) return[{key:'total',aggKey:'total',grandLeads:g.grandLeads,scols:SCOLS_TOTAL}];
+    if(!expanded.has(g.name)) return[{key:g.aggKey,aggKey:g.aggKey,grandLeads:g.grandLeads,scols:SCOLS}];
+    return g.children.map(src=>({key:src,aggKey:'src',src,grandLeads:grandSrc[src].uniqueLeads,scols:SCOLS}));
+  }),[expanded,grand,grandPaid,grandOrg,grandSrc,isStateGrid]);
 
   function aggForCol(v,col){
     const a=dimAggs[v];
     return col.aggKey==='src'?a.src[col.src]:a[col.aggKey];
   }
 
+  const grandVahan=useMemo(()=>{
+    if(!isStateGrid) return undefined;
+    return Object.keys(dimAggs).reduce((s,v)=>s+(vahanRetailFor(v,M)||0),0);
+  },[isStateGrid,dimAggs,M]);
+
   const dimVals=useMemo(()=>{
     const sortCol=COLS.find(c=>c.key===sort.colKey)||COLS[0];
     const vals=Object.keys(dimAggs).sort((a,b)=>{
-      const av=metricVal(aggForCol(a,sortCol),sortCol.grandLeads,sort.metric);
-      const bv=metricVal(aggForCol(b,sortCol),sortCol.grandLeads,sort.metric);
+      let av,bv;
+      if(isStateGrid&&(sort.metric==='vahan'||sort.metric==='vshare')){
+        const va=vahanRetailFor(a,M)||0, vb=vahanRetailFor(b,M)||0;
+        const aggA=aggForCol(a,sortCol), aggB=aggForCol(b,sortCol);
+        av=sort.metric==='vahan'?va:(va>0?(aggA.bookings/va*100):0);
+        bv=sort.metric==='vahan'?vb:(vb>0?(aggB.bookings/vb*100):0);
+      } else {
+        av=metricVal(aggForCol(a,sortCol),sortCol.grandLeads,sort.metric);
+        bv=metricVal(aggForCol(b,sortCol),sortCol.grandLeads,sort.metric);
+      }
       return sort.dir==='desc'?bv-av:av-bv;
     });
     return vals;
-  },[dimAggs,COLS,sort]);
+  },[dimAggs,COLS,sort,isStateGrid,M]);
 
-  function mkCells(agg,grandLeads,kpfx,bg){
+  function mkCells(agg,grandLeads,kpfx,bg,scols,vahanRetail){
     const contrib=grandLeads>0&&agg.uniqueLeads>0?(agg.uniqueLeads/grandLeads*100):0;
     const l2r=agg.uniqueLeads>0?agg.e2bPct:0;
     const l2rBg=agg.uniqueLeads>0?l2rColor(l2r):'#F3F4F6';
+    const share=vahanRetail>0?(agg.bookings/vahanRetail*100):null;
     const cs={padding:'5px 7px',textAlign:'right',fontSize:11,fontFamily:'DM Mono,monospace',
       color:'#222222',border:'1px solid #E5E7EB',verticalAlign:'middle',background:bg};
-    return[
-      ce('td',{key:kpfx+'l',style:cs},agg.uniqueLeads?Nf(agg.uniqueLeads):'—'),
-      ce('td',{key:kpfx+'r',style:cs},agg.bookings?Nf(agg.bookings):'—'),
-      ce('td',{key:kpfx+'c',style:{...cs,padding:'3px 7px',minWidth:76}},
-        grandLeads>0&&agg.uniqueLeads>0
-          ?ce('div',null,
-            ce('div',{style:{fontSize:10,textAlign:'right',marginBottom:2}},contrib.toFixed(1)+'%'),
-            ce('div',{style:{height:4,background:'#EFEFEF',borderRadius:2}},
-              ce('div',{style:{height:'100%',width:Math.min(contrib,100)+'%',background:'#C8A96B',borderRadius:2}}))
-          )
-          :ce('span',{style:{color:'#9ca3af'}},'—')
-      ),
-      ce('td',{key:kpfx+'e',style:{...cs,background:l2rBg,fontWeight:700}},
-        agg.uniqueLeads>0?l2r.toFixed(1)+'%':'—'
-      ),
-      ce('td',{key:kpfx+'d',style:cs},agg.totalLeads>0?Nf(agg.dupLeads):'—'),
-      ce('td',{key:kpfx+'dp',style:cs},agg.totalLeads>0?agg.dupPct.toFixed(1)+'%':'—'),
-    ];
+    return scols.map((s,i)=>{
+      switch(s.m){
+        case 'leads': return ce('td',{key:kpfx+'l',style:cs},agg.uniqueLeads?Nf(agg.uniqueLeads):'—');
+        case 'retail': return ce('td',{key:kpfx+'r',style:cs},agg.bookings?Nf(agg.bookings):'—');
+        case 'contrib': return ce('td',{key:kpfx+'c',style:{...cs,padding:'3px 7px',minWidth:76}},
+          grandLeads>0&&agg.uniqueLeads>0
+            ?ce('div',null,
+              ce('div',{style:{fontSize:10,textAlign:'right',marginBottom:2}},contrib.toFixed(1)+'%'),
+              ce('div',{style:{height:4,background:'#EFEFEF',borderRadius:2}},
+                ce('div',{style:{height:'100%',width:Math.min(contrib,100)+'%',background:'#C8A96B',borderRadius:2}}))
+            )
+            :ce('span',{style:{color:'#9ca3af'}},'—'));
+        case 'l2r': return ce('td',{key:kpfx+'e',style:{...cs,background:l2rBg,fontWeight:700}},
+          agg.uniqueLeads>0?l2r.toFixed(1)+'%':'—');
+        case 'dup': return ce('td',{key:kpfx+'d',style:cs},agg.totalLeads>0?Nf(agg.dupLeads):'—');
+        case 'duppct': return ce('td',{key:kpfx+'dp',style:cs},agg.totalLeads>0?agg.dupPct.toFixed(1)+'%':'—');
+        case 'vahan': return ce('td',{key:kpfx+'va',style:cs},vahanRetail>0?Nf(vahanRetail):'—');
+        case 'vshare': return ce('td',{key:kpfx+'vs',style:{...cs,background:share!=null?l2rColor(share>100?100:share):'#F3F4F6',fontWeight:700}},
+          share!=null?share.toFixed(1)+'%':'—');
+        default: return ce('td',{key:kpfx+i,style:cs},'—');
+      }
+    });
   }
 
   const thBase={padding:'6px 7px',fontSize:9,fontWeight:700,textTransform:'uppercase',
@@ -798,7 +852,9 @@ const CompactMonthGrid=React.memo(function CompactMonthGrid({M,rows,rowKey,dimLa
               borderRight:'2px solid rgba(255,255,255,.3)'}},dimLabel||rowKey.toUpperCase()),
             ...TOPGROUPS.map((g,gi)=>{
               const isExp=g.children&&expanded.has(g.name);
-              const span=(g.children?(isExp?g.children.length:1):1)*SCOLS.length;
+              const span=g.children
+                ?(isExp?g.children.length*SCOLS.length:SCOLS.length)
+                :SCOLS_TOTAL.length;
               return ce('th',{key:'tg'+gi,colSpan:span,
                 style:{...thBase,background:g.bg,cursor:g.children?'pointer':'default',
                   borderLeft:gi>0?'2px solid rgba(255,255,255,.4)':undefined},
@@ -809,7 +865,7 @@ const CompactMonthGrid=React.memo(function CompactMonthGrid({M,rows,rowKey,dimLa
           /* Row 2: blank under Total | aggregate-or-children under Paid/Organic */
           ce('tr',null,
             ...TOPGROUPS.flatMap((g,gi)=>{
-              if(!g.children) return[ce('th',{key:'sg'+gi,colSpan:SCOLS.length,
+              if(!g.children) return[ce('th',{key:'sg'+gi,colSpan:SCOLS_TOTAL.length,
                 style:{...thSub2,background:g.bg,opacity:.75}},'')];
               if(!expanded.has(g.name)) return[ce('th',{key:'sg'+gi,colSpan:SCOLS.length,
                 style:{...thSub2,background:g.bg,opacity:.75}},'∑ '+g.label)];
@@ -818,9 +874,9 @@ const CompactMonthGrid=React.memo(function CompactMonthGrid({M,rows,rowKey,dimLa
                   borderLeft:si>0?'1px solid rgba(255,255,255,.3)':'2px solid rgba(255,255,255,.4)'}},src));
             })
           ),
-          /* Row 3: Leads | Retail | Contrib% | L2R% for every column — click to sort */
+          /* Row 3: per-column metric headers — click to sort */
           ce('tr',null,
-            ...COLS.flatMap((col,ci)=>SCOLS.map((s,si)=>{
+            ...COLS.flatMap((col,ci)=>col.scols.map((s,si)=>{
               const active=sort.colKey===col.key&&sort.metric===s.m;
               return ce('th',{key:col.key+si,
                 style:{...thSub,cursor:'pointer',userSelect:'none',
@@ -840,7 +896,8 @@ const CompactMonthGrid=React.memo(function CompactMonthGrid({M,rows,rowKey,dimLa
               ce('td',{style:{...lblStyle,background:bg}},v),
               ...COLS.flatMap(col=>mkCells(
                 col.aggKey==='src'?a.src[col.src]:a[col.aggKey],
-                col.grandLeads,v+col.key+'_',bg
+                col.grandLeads,v+col.key+'_',bg,col.scols,
+                col.aggKey==='total'&&isStateGrid?vahanRetailFor(v,M):undefined
               ))
             );
           }),
@@ -848,7 +905,8 @@ const CompactMonthGrid=React.memo(function CompactMonthGrid({M,rows,rowKey,dimLa
             ce('td',{style:{...lblStyle,background:'#E9EDF2',fontWeight:700,color:'#333'}},'∑ Grand Total'),
             ...COLS.flatMap(col=>mkCells(
               col.aggKey==='src'?grandSrc[col.src]:(col.aggKey==='total'?grand:col.aggKey==='paid'?grandPaid:grandOrg),
-              col.grandLeads,'GT_'+col.key+'_','#E9EDF2'
+              col.grandLeads,'GT_'+col.key+'_','#E9EDF2',col.scols,
+              col.aggKey==='total'&&isStateGrid?grandVahan:undefined
             ))
           )
         )
