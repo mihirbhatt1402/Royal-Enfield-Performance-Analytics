@@ -285,6 +285,95 @@ function aggMulti(rows,months){
   return{totalLeads,uniqueLeads,dupLeads,dupPct,bookings,e2bPct};
 }
 
+const EMPTY_AGG=Object.freeze({totalLeads:0,uniqueLeads:0,dupLeads:0,dupPct:0,bookings:0,e2bPct:0});
+
+/* Single-pass grouped aggregation — computes grand total + per-source + per-Paid/Organic-group +
+   (if dimKey given) per-dimension-value + per-(dimension×source) stats all in ONE pass over `rows`.
+   This replaces calling aggRE() once per (dim,source) combination, which was O(rows × dims × sources)
+   and the dominant cost behind multi-second tab/filter renders once a real dataset (hundreds of
+   thousands of rows, 30+ states) was loaded — that blew up to millions of redundant row scans per
+   render. Here every row is visited exactly once; sorting/finalizing the resulting (small) group
+   map afterward is essentially free by comparison. */
+function aggGrouped(rows,mf,dimKey){
+  const isAll=mf==='All';
+  let leadMonthsPresent=null;
+  if(isAll){
+    leadMonthsPresent=new Set();
+    for(const r of rows){ if(r.lead_month) leadMonthsPresent.add(r.lead_month); }
+  }
+  const mfOrder=isAll?0:monthOrder(mf);
+  const PAID_MBRS=SRC_GROUPS[0].members,ORG_MBRS=SRC_GROUPS[1].members;
+
+  function mk(){ return{totalLeads:0,uniqueSet:new Set(),bookingSet:new Set()}; }
+  const total=mk(),paid=mk(),org=mk();
+  const bySrc=new Map(),byDim=new Map(),byDimSrc=new Map(),byDimPaid=new Map(),byDimOrg=new Map();
+  function acc(map,key){ let a=map.get(key); if(a===undefined){a=mk();map.set(key,a);} return a; }
+
+  for(const r of rows){
+    let countsLead,countsBooking;
+    if(isAll){
+      countsLead=true;
+      if(r.booking_month&&leadMonthsPresent.has(r.booking_month)){
+        const d=monthOrder(r.booking_month)-monthOrder(r.lead_month);
+        countsBooking=d>=0&&d<=2;
+      } else countsBooking=false;
+    } else {
+      countsLead=r.lead_month===mf;
+      if(r.booking_month===mf){
+        const d=mfOrder-monthOrder(r.lead_month);
+        countsBooking=d>=0&&d<=2;
+      } else countsBooking=false;
+    }
+    if(!countsLead&&!countsBooking) continue;
+    const countsUnique=countsLead&&r.isUnique;
+    const src=r.source;
+    const inPaid=PAID_MBRS.includes(src),inOrg=ORG_MBRS.includes(src);
+    const dv=dimKey?dimKey(r):null;
+
+    const bump=a=>{
+      if(countsLead){ a.totalLeads++; if(countsUnique) a.uniqueSet.add(r.lead_number); }
+      if(countsBooking) a.bookingSet.add(r.lead_number);
+    };
+    bump(total);
+    if(inPaid) bump(paid);
+    if(inOrg) bump(org);
+    bump(acc(bySrc,src));
+    if(dv!=null){
+      bump(acc(byDim,dv));
+      bump(acc(byDimSrc,dv+''+src));
+      if(inPaid) bump(acc(byDimPaid,dv));
+      if(inOrg) bump(acc(byDimOrg,dv));
+    }
+  }
+
+  function fin(a){
+    const uniqueLeads=a.uniqueSet.size,dupLeads=a.totalLeads-uniqueLeads;
+    const dupPct=a.totalLeads>0?dupLeads/a.totalLeads*100:0;
+    const bookings=a.bookingSet.size;
+    const e2bPct=uniqueLeads>0?bookings/uniqueLeads*100:0;
+    return{totalLeads:a.totalLeads,uniqueLeads,dupLeads,dupPct,bookings,e2bPct};
+  }
+
+  const grandSrc={}; for(const[k,v] of bySrc) grandSrc[k]=fin(v);
+  const dimAggs={};
+  if(dimKey){
+    for(const dv of byDim.keys()){
+      const srcAgg={};
+      for(const k of bySrc.keys()){
+        const a=byDimSrc.get(dv+''+k);
+        srcAgg[k]=a?fin(a):EMPTY_AGG;
+      }
+      dimAggs[dv]={
+        total:fin(byDim.get(dv)),
+        paid:byDimPaid.has(dv)?fin(byDimPaid.get(dv)):EMPTY_AGG,
+        org:byDimOrg.has(dv)?fin(byDimOrg.get(dv)):EMPTY_AGG,
+        src:srcAgg,
+      };
+    }
+  }
+  return{grand:fin(total),grandPaid:fin(paid),grandOrg:fin(org),grandSrc,dimAggs};
+}
+
 /* ── Vahan state-wise industry retails (source: RE Vahan retails.xlsx) ──── */
 function normState(s){
   let t=(s||'').toLowerCase().replace(/&/g,' and ').replace(/[^a-z]/g,'');
@@ -353,7 +442,10 @@ function dupBadge(pct){
    OVERVIEW TAB
 ══════════════════════════════════════════════════════════════════════════ */
 const OverviewTab=React.memo(function OverviewTab({rows,mf}){
-  const m=useMemo(()=>aggRE(rows,mf),[rows,mf]);
+  /* One single pass over `rows` (no dimKey) gives the grand total + per-source breakdown
+     used by the KPI strip and Source Summary table below. */
+  const grouped=useMemo(()=>aggGrouped(rows,mf,null),[rows,mf]);
+  const m=grouped.grand;
   const chartRef=useRef(); const chartInst=useRef();
 
   /* Month-wise trend data */
@@ -365,29 +457,33 @@ const OverviewTab=React.memo(function OverviewTab({rows,mf}){
     });
   },[rows]);
 
-  /* Source breakdown — [source, agg] pairs, computed once (was re-running aggRE per
-     source on every render inside the table body) and sorted by the same month-filtered
-     Unique Leads value the table actually displays. */
-  const srcBreak=useMemo(()=>{
-    const srcs=[...new Set(rows.map(r=>r.source||'Unknown'))];
-    return srcs.map(s=>[s,aggRE(rows.filter(r=>r.source===s),mf)])
-      .sort((a,b)=>b[1].uniqueLeads-a[1].uniqueLeads);
-  },[rows,mf]);
+  /* Source breakdown — [source, agg] pairs straight from the single-pass grouped totals,
+     sorted by the same month-filtered Unique Leads value the table actually displays. */
+  const srcBreak=useMemo(()=>
+    Object.entries(grouped.grandSrc).sort((a,b)=>b[1].uniqueLeads-a[1].uniqueLeads)
+  ,[grouped]);
 
-  /* Insights */
+  /* Insights — three single passes (by LT, by Primary Source, by State), each crossed with
+     Source via aggGrouped's built-in per-(dim×source) breakdown. Previously this nested
+     rows.filter() by source, then again by lt/primary_src/state, then ran aggRE on each
+     resulting slice — O(rows × sources × dims), which with 30+ real states and hundreds of
+     thousands of rows was the single biggest contributor to Overview's render time. */
   const insights=useMemo(()=>{
-    const srcs=[...new Set(rows.map(r=>r.source))].filter(Boolean).sort();
+    const srcs=Object.keys(grouped.grandSrc).sort();
+    const byLT=aggGrouped(rows,mf,r=>r.lt);
+    const byPrim=aggGrouped(rows,mf,r=>r.primary_src);
+    const byState=aggGrouped(rows,mf,r=>r.state);
+
     const bySrc={};
     for(const s of srcs){
-      const sRows=rows.filter(r=>r.source===s);
-      const lts=[...new Set(sRows.map(r=>r.lt))].filter(Boolean);
-      const ltM=lts.map(lt=>({lt,m:aggRE(sRows.filter(r=>r.lt===lt),mf)}))
+      const ltM=Object.keys(byLT.dimAggs).filter(Boolean)
+        .map(lt=>({lt,m:byLT.dimAggs[lt].src[s]||EMPTY_AGG}))
         .filter(x=>x.m.uniqueLeads>=5).sort((a,b)=>a.m.e2bPct-b.m.e2bPct);
-      const prims=[...new Set(sRows.map(r=>r.primary_src))].filter(Boolean);
-      const primM=prims.map(p=>({prim:p,m:aggRE(sRows.filter(r=>r.primary_src===p),mf)}))
+      const primM=Object.keys(byPrim.dimAggs).filter(Boolean)
+        .map(p=>({prim:p,m:byPrim.dimAggs[p].src[s]||EMPTY_AGG}))
         .filter(x=>x.m.uniqueLeads>=5).sort((a,b)=>a.m.e2bPct-b.m.e2bPct);
       bySrc[s]={
-        total:aggRE(sRows,mf),
+        total:grouped.grandSrc[s]||EMPTY_AGG,
         worstLT:ltM[0]||null,
         bestLT:ltM[ltM.length-1]||null,
         worst5:primM.slice(0,5),
@@ -402,9 +498,8 @@ const OverviewTab=React.memo(function OverviewTab({rows,mf}){
     /* Per-source worst/best 5 states by E2B% */
     const statesBySrc={};
     for(const s of srcs){
-      const sRows=rows.filter(r=>r.source===s);
-      const states=[...new Set(sRows.map(r=>r.state))].filter(Boolean);
-      const sm=states.map(st=>({state:st,m:aggRE(sRows.filter(r=>r.state===st),mf)}))
+      const sm=Object.keys(byState.dimAggs).filter(Boolean)
+        .map(st=>({state:st,m:byState.dimAggs[st].src[s]||EMPTY_AGG}))
         .filter(x=>x.m.uniqueLeads>=200).sort((a,b)=>a.m.e2bPct-b.m.e2bPct);
       statesBySrc[s]={worst5:sm.slice(0,5),best5:[...sm].reverse().slice(0,5)};
     }
@@ -413,7 +508,7 @@ const OverviewTab=React.memo(function OverviewTab({rows,mf}){
       worstSrc:srcSorted[0]||null,
       bestSrc:srcSorted[srcSorted.length-1]||null,
       highDupSrc:dupSorted[0]||null};
-  },[rows,mf]);
+  },[rows,mf,grouped]);
 
   /* Trend chart */
   useEffect(()=>{
@@ -743,7 +838,6 @@ const SourceMiniChart=React.memo(function SourceMiniChart({src,srcRows,months,co
 });
 
 /* ── Compact Matrix Grid (Source / LT / Model / State tabs) ─────────── */
-const EMPTY_AGG=Object.freeze({totalLeads:0,uniqueLeads:0,dupLeads:0,dupPct:0,bookings:0,e2bPct:0});
 function l2rColor(pct){
   if(!pct||pct<=0) return '#F3F4F6';
   if(pct>=5) return '#B7DDBE';
@@ -781,44 +875,24 @@ const CompactMonthGrid=React.memo(function CompactMonthGrid({M,rows,rowKey,dimLa
   const ALL_SRCS=[...PAID_MBRS,...ORG_MBRS];
 
   /* On the Source tab the rows ARE the sources already, so the Paid/Organic/per-source
-     breakdowns are never rendered there (TOPGROUPS below collapses to just "Total") —
-     skip computing them entirely instead of running 6 wasted aggRE passes per row. */
+     breakdowns are never rendered there (TOPGROUPS below collapses to just "Total"). */
   const isSourceGrid=rowKey==='source';
 
-  const grand=useMemo(()=>aggRE(rows,M),[rows,M]);
-  const grandSrc=useMemo(()=>{
-    if(isSourceGrid) return {};
-    const r={};
-    ALL_SRCS.forEach(src=>{ r[src]=aggRE(rows.filter(x=>x.source===src),M); });
-    return r;
-  },[rows,M,isSourceGrid]);
-  const grandPaid=useMemo(()=>isSourceGrid?EMPTY_AGG:aggRE(rows.filter(r=>PAID_MBRS.includes(r.source)),M),[rows,M,isSourceGrid]);
-  const grandOrg=useMemo(()=>isSourceGrid?EMPTY_AGG:aggRE(rows.filter(r=>ORG_MBRS.includes(r.source)),M),[rows,M,isSourceGrid]);
-
-  const dimRowsMap=useMemo(()=>{
-    const m={};
-    for(const r of rows){const v=r[rowKey]||'Unknown';if(!m[v])m[v]=[];m[v].push(r);}
-    return m;
-  },[rows,rowKey]);
-
+  /* Single pass over `rows` computes grand total, per-source, per-dim and per-(dim×source)
+     stats together — see aggGrouped() for why this replaced one aggRE() call per
+     (dim,source) combination (was O(rows × dims × sources), the dominant cost on real
+     datasets with hundreds of thousands of rows and 30+ states). */
+  const grouped=useMemo(()=>aggGrouped(rows,M,r=>r[rowKey]||'Unknown'),[rows,M,rowKey]);
+  const grand=grouped.grand;
+  const grandSrc=isSourceGrid?{}:grouped.grandSrc;
+  const grandPaid=isSourceGrid?EMPTY_AGG:grouped.grandPaid;
+  const grandOrg=isSourceGrid?EMPTY_AGG:grouped.grandOrg;
   const dimAggs=useMemo(()=>{
+    if(!isSourceGrid) return grouped.dimAggs;
     const res={};
-    for(const [v,vr] of Object.entries(dimRowsMap)){
-      if(isSourceGrid){
-        res[v]={total:aggRE(vr,M),paid:EMPTY_AGG,org:EMPTY_AGG,src:{}};
-        continue;
-      }
-      const srcAgg={};
-      ALL_SRCS.forEach(src=>{ srcAgg[src]=aggRE(vr.filter(r=>r.source===src),M); });
-      res[v]={
-        total:aggRE(vr,M),
-        paid:aggRE(vr.filter(r=>PAID_MBRS.includes(r.source)),M),
-        org:aggRE(vr.filter(r=>ORG_MBRS.includes(r.source)),M),
-        src:srcAgg,
-      };
-    }
+    for(const v of Object.keys(grouped.dimAggs)) res[v]={total:grouped.dimAggs[v].total,paid:EMPTY_AGG,org:EMPTY_AGG,src:{}};
     return res;
-  },[dimRowsMap,M,isSourceGrid]);
+  },[grouped,isSourceGrid]);
   const TOPGROUPS=isSourceGrid?[
     {label:'Total',bg:'#58616A',name:null,children:null,aggKey:'total',grandLeads:grand.uniqueLeads},
   ]:[
@@ -1048,32 +1122,19 @@ const CompactMonthGrid=React.memo(function CompactMonthGrid({M,rows,rowKey,dimLa
 const SourceTab=React.memo(function SourceTab({rows,mf}){
   const sources=useMemo(()=>[...new Set(rows.map(r=>r.source))].filter(Boolean).sort(),[rows]);
 
-  /* All months, newest first for pills; oldest first for charts is handled inside SourceMiniChart */
+  /* All months, oldest first for charts (handled inside SourceMiniChart) */
   const allMonths=useMemo(()=>
     [...new Set(rows.map(r=>r.lead_month))].filter(Boolean)
       .sort((a,b)=>monthOrder(b)-monthOrder(a))
   ,[rows]);
 
-  /* Month pill selection: sync with global month filter — defaults to latest month only,
-     not every month, so opening this tab doesn't render a heavy grid per month. */
-  const [selMonths,setSelMonths]=useState(()=>defaultMonthSel(mf,allMonths));
-  const [isPending,startTransition]=useTransition();
-  useEffect(()=>{
-    setSelMonths(defaultMonthSel(mf,allMonths));
-  },[mf]);// eslint-disable-line
-
-  function toggleMonth(m){
-    startTransition(()=>setSelMonths(prev=>{
-      if(m==='all') return new Set(['all']);
-      const next=new Set(prev);
-      next.delete('all');
-      if(next.has(m)){next.delete(m);if(next.size===0)return new Set(['all']);}
-      else next.add(m);
-      return next;
-    }));
-  }
-
-  const activeMonths=selMonths.has('all')?allMonths:allMonths.filter(m=>selMonths.has(m));
+  /* Driven solely by the global Lead Month filter — no local month-pill row.
+     A specific month shows just that month; "All" defaults to the latest month only,
+     so opening this tab doesn't render a heavy grid per month. */
+  const activeMonths=useMemo(()=>{
+    const s=defaultMonthSel(mf,allMonths);
+    return s.has('all')?allMonths:allMonths.filter(m=>s.has(m));
+  },[mf,allMonths]);
 
   /* Pre-compute per-source rows (all months, used by mini charts) */
   const srcRowsMap=useMemo(()=>{
@@ -1089,25 +1150,11 @@ const SourceTab=React.memo(function SourceTab({rows,mf}){
     return m;
   },[sources]);
 
-  const pillBase={padding:'4px 14px',fontSize:11,fontWeight:600,borderRadius:20,
-    cursor:'pointer',border:'1px solid #D1D5DB',background:'#fff',color:'#374151',
-    fontFamily:'inherit',transition:'all 120ms'};
-  const pillActive={...pillBase,background:'#1B4332',color:'#fff',borderColor:'#1B4332'};
-
   return ce('div',{className:'fade-up'},
-
-    /* Month pills */
-    ce('div',{style:{display:'flex',alignItems:'center',gap:8,marginBottom:18,flexWrap:'wrap'}},
-      ce('span',{style:{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:'.08em',color:'#9ca3af',marginRight:4}},'MONTHS:'),
-      ce('button',{onClick:()=>toggleMonth('all'),style:selMonths.has('all')?pillActive:pillBase},'All'),
-      allMonths.map(m=>ce('button',{key:m,onClick:()=>toggleMonth(m),
-        style:selMonths.has(m)?pillActive:pillBase},m)),
-      isPending&&ce('span',{style:{fontSize:11,color:'#9ca3af'}},'Loading…')
-    ),
 
     /* Section label */
     ce('div',{style:{fontSize:11,fontWeight:700,color:'#6b7280',textTransform:'uppercase',
-      letterSpacing:'.08em',marginBottom:12,opacity:isPending?0.6:1,transition:'opacity .15s'}},'Source Trend'),
+      letterSpacing:'.08em',marginBottom:12}},'Source Trend'),
 
     /* Mini charts grid — 2 columns */
     ce('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:24}},
@@ -1119,7 +1166,7 @@ const SourceTab=React.memo(function SourceTab({rows,mf}){
       }))
     ),
 
-    /* Compact matrix grids — one per selected month */
+    /* Compact matrix grids — one per active month */
     activeMonths.map(M=>ce(CompactMonthGrid,{key:M,M,rows,rowKey:'source',dimLabel:'Source'}))
   );
 });
@@ -1131,35 +1178,16 @@ const DimSourceTab=React.memo(function DimSourceTab({rows,mf,rowKey,dimLabel,xTa
     [...new Set(rows.map(r=>r.lead_month))].filter(Boolean)
       .sort((a,b)=>monthOrder(b)-monthOrder(a))
   ,[rows]);
-  /* Defaults to latest month only, not every month — rendering one heavy grid per month
+  /* Driven solely by the global Lead Month filter — no local month-pill row.
+     Defaults to latest month only, not every month — rendering one heavy grid per month
      by default made this tab slow to open whenever there were several months of data. */
-  const [selMonths,setSelMonths]=useState(()=>defaultMonthSel(mf,allMonths));
-  const [isPending,startTransition]=useTransition();
-  useEffect(()=>{
-    setSelMonths(defaultMonthSel(mf,allMonths));
-  },[mf]);// eslint-disable-line
-  function toggleMonth(m){
-    startTransition(()=>setSelMonths(prev=>{
-      if(m==='all') return new Set(['all']);
-      const next=new Set(prev);next.delete('all');
-      if(next.has(m)){next.delete(m);if(next.size===0)return new Set(['all']);}
-      else next.add(m);
-      return next;
-    }));
-  }
-  const activeMonths=selMonths.has('all')?allMonths:allMonths.filter(m=>selMonths.has(m));
-  const pillBase={padding:'4px 14px',fontSize:11,fontWeight:600,borderRadius:20,
-    cursor:'pointer',border:'1px solid #D1D5DB',background:'#fff',color:'#374151',fontFamily:'inherit',transition:'all 120ms'};
-  const pillActive={...pillBase,background:'#1B4332',color:'#fff',borderColor:'#1B4332'};
+  const activeMonths=useMemo(()=>{
+    const s=defaultMonthSel(mf,allMonths);
+    return s.has('all')?allMonths:allMonths.filter(m=>s.has(m));
+  },[mf,allMonths]);
   return ce('div',{className:'fade-up'},
-    ce('div',{style:{display:'flex',alignItems:'center',gap:8,marginBottom:18,flexWrap:'wrap'}},
-      ce('span',{style:{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:'.08em',color:'#9ca3af',marginRight:4}},'MONTHS:'),
-      ce('button',{onClick:()=>toggleMonth('all'),style:selMonths.has('all')?pillActive:pillBase},'All'),
-      allMonths.map(m=>ce('button',{key:m,onClick:()=>toggleMonth(m),style:selMonths.has(m)?pillActive:pillBase},m)),
-      isPending&&ce('span',{style:{fontSize:11,color:'#9ca3af'}},'Loading…')
-    ),
     ce('div',{style:{fontSize:11,fontWeight:700,color:'#6b7280',textTransform:'uppercase',
-      letterSpacing:'.08em',marginBottom:12,opacity:isPending?0.6:1,transition:'opacity .15s'}},dimLabel+' × Source — by Month'),
+      letterSpacing:'.08em',marginBottom:12}},dimLabel+' × Source — by Month'),
     activeMonths.map(M=>ce(CompactMonthGrid,{key:M,M,rows,rowKey,dimLabel})),
     ce('div',{style:{margin:'24px 0 16px',borderTop:'2px solid #D1D5DB'}}),
     ce('div',{style:{fontSize:11,fontWeight:700,color:'#6b7280',textTransform:'uppercase',
@@ -1362,10 +1390,6 @@ function App(){
      right away while the new tab's grids render in the background (isPending drives a
      subtle loading cue instead of the UI appearing to freeze). */
   const [isPending,startTransition]=useTransition();
-  /* Only mount a tab's heavy grids once it's actually been opened — mounting all 6 tabs
-     up front meant every filter change recomputed every tab, not just the visible one. */
-  const [visitedTabs,setVisitedTabs]=useState(()=>new Set(['overview']));
-  useEffect(()=>{ setVisitedTabs(prev=>prev.has(tab)?prev:new Set(prev).add(tab)); },[tab]);
   const [filters,setFilters]=useState({month:'All',source:'All',primarySrc:'All',state:'All',city:'All',model:'All'});
   const [syncing,setSyncing]=useState(false);
   const [syncErr,setSyncErr]=useState(null);
@@ -1427,10 +1451,13 @@ function App(){
 
   const totalM=useMemo(()=>aggRE(baseRows,filters.month),[baseRows,filters.month]);
 
-  /* Stable element refs — React.memo components skip re-render when tab changes.
-     Only build elements for tabs that have actually been visited, so a filter change
-     doesn't force every tab (including ones the user never opened) to recompute. */
-  const tabEls=useMemo(()=>{
+  /* Only render the active tab. Every dimension's aggregation now runs through the
+     single-pass aggGrouped() (see aggGrouped above), so even a fresh mount of the
+     heaviest grid is a handful of milliseconds on real-world data sizes — there's no
+     longer a reason to keep every previously-visited tab mounted (display:none) in the
+     background, and doing so meant a filter change re-ran every visited tab's
+     aggregations, not just the one on screen. */
+  const activeTabEl=useMemo(()=>{
     const COMPONENTS={
       overview:  OverviewTab,
       source:    SourceTab,
@@ -1439,10 +1466,8 @@ function App(){
       statexsrc: StateSourceTab,
       geomodel:  GeoModelTab,
     };
-    const out={};
-    visitedTabs.forEach(id=>{ out[id]=ce(COMPONENTS[id],{rows:baseRows, mf:filters.month}); });
-    return out;
-  },[baseRows,filters.month,visitedTabs]);
+    return ce(COMPONENTS[tab],{key:tab,rows:baseRows,mf:filters.month});
+  },[tab,baseRows,filters.month]);
 
   if(!rows) return ce(UploadScreen,{onData:setRows,onSync:handleSync,syncing,syncErr,sheetUrl,setSheetUrl,urlDraft,setUrlDraft,lastSynced});
 
@@ -1547,10 +1572,9 @@ function App(){
       )
     ),
 
-    /* Tab content — all tabs kept mounted (display:none when inactive).
-       tabEls is memoized so React.memo components skip re-render on tab switch. */
+    /* Tab content — only the active tab is mounted. */
     ce('div',{style:{maxWidth:1600,margin:'0 auto',padding:'14px 24px 32px'}},
-      TABS.filter(({id})=>visitedTabs.has(id)).map(({id})=>ce('div',{key:id,style:{display:tab===id?'block':'none'}},tabEls[id]))
+      activeTabEl
     )
   );
 }
