@@ -160,6 +160,26 @@ function monthOrder(m){
 }
 
 /* ── Parse raw rows into structured records ───────────────────────── */
+/* Real CRM exports carry messy/inconsistent free-text values for State and Model —
+   confirmed against the live sheet: "Jammu & Kashmir" vs "Jammu and Kashmir" and
+   "Orissa" vs "Odisha" both appear as distinct literal values for the same state,
+   fragmenting State × Source grid rows; "#N/A" and "\0" appear as literal State values
+   instead of blank; "Royan Enfield Bullet 350" (typo, missing the "l") appears alongside
+   "Royal Enfield Bullet 350" as a separate Model. Canonicalize at parse time so every
+   tab groups these into one row instead of splitting the same real-world value in two. */
+const STATE_GARBAGE=new Set(['#N/A','\\0','\0','N/A','NA']);
+const STATE_FIX={'Jammu & Kashmir':'Jammu and Kashmir','Orissa':'Odisha'};
+function canonicalState(s){
+  const t=(s||'').trim();
+  if(!t||STATE_GARBAGE.has(t)) return '';
+  return STATE_FIX[t]||t;
+}
+const MODEL_FIX={'Royan Enfield Bullet 350':'Royal Enfield Bullet 350'};
+function canonicalModel(s){
+  const t=(s||'').trim();
+  return MODEL_FIX[t]||t;
+}
+
 function parseRows(raw){
   if(!raw.length) return [];
   /* Build a normalized-column-name -> actual-key map ONCE, instead of
@@ -195,9 +215,9 @@ function parseRows(raw){
       lt:lt||'Unknown',
       source:source||'Unknown',
       primary_src:primary_src||'Unknown',
-      model:model||'Unknown',
+      model:canonicalModel(model)||'Unknown',
       city:city||'Unknown',
-      state:state||'Unknown',
+      state:canonicalState(state)||'Unknown',
       lead_month,
       booking_status,
       booking_month:bm,
@@ -458,8 +478,16 @@ function normState(s){
   let t=(s||'').toLowerCase().replace(/&/g,' and ').replace(/[^a-z]/g,'');
   const ALIAS={
     jammukashmir:'jammuandkashmir',
-    andamannicobarislands:'andamannicobarisland',
-    andamanandnicobarislands:'andamannicobarisland',
+    /* Target corrected to 'andamanandnicobarisland' — that's what normState() actually
+       produces for the real Vahan key "Andaman & Nicobar Island" (it keeps the "and"
+       from the & replacement). The previous target 'andamannicobarisland' (no "and")
+       didn't match that key under ANY input, so this state's Vahan column silently
+       failed to resolve regardless of which alias fired. */
+    andamanandnicobar:'andamanandnicobarisland',
+    andamannicobarislands:'andamanandnicobarisland',
+    andamanandnicobarislands:'andamanandnicobarisland',
+    dadraandnagarhaveli:'utofdnhanddd',
+    damananddiu:'utofdnhanddd',
     dadranagarhavelidamandiu:'utofdnhanddd',
     dadraandnagarhavelianddamananddiu:'utofdnhanddd',
     dnhdd:'utofdnhanddd',
