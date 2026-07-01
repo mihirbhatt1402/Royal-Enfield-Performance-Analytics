@@ -206,7 +206,24 @@ function Nf(n){ return n==null||isNaN(n)?'—':Number(n).toLocaleString('en-IN')
 function Pf(n,d=1){ return (n==null||isNaN(n))?'—':n.toFixed(d)+'%'; }
 
 /* ── Parse raw XLSX rows into structured records ────────────────────────── */
+/* ── Auto-detect mobile column by value pattern ───────────────────────────
+   Scans up to 50 rows across all columns; picks the column where the most
+   values are valid 10-digit Indian mobile numbers (start with 6-9).       */
+function detectMobileCol(raw){
+  if(!raw||!raw.length) return null;
+  const sample=raw.slice(0,Math.min(50,raw.length));
+  const allKeys=Object.keys(raw[0]);
+  const scores={};
+  const isMob=v=>{const d=String(v||'').replace(/\D/g,'').slice(-10);return d.length===10&&/^[6-9]/.test(d);};
+  for(const k of allKeys){
+    scores[k]=sample.filter(r=>isMob(r[k])).length;
+  }
+  const best=allKeys.reduce((a,b)=>scores[b]>scores[a]?b:a,allKeys[0]);
+  return scores[best]>=3?best:null;  /* require at least 3 hits to be confident */
+}
+
 function parseRows(raw){
+  const mobileColKey=detectMobileCol(raw);
   return raw.map(function(r){
     /* Flexible column key finder — exact match first, then substring fallback */
     const rKeys=Object.keys(r);
@@ -216,13 +233,6 @@ function parseRows(raw){
         for(const rk of rKeys){
           if(rk.toLowerCase().replace(/\s+/g,' ').trim()===kl) return String(r[rk]||'').trim();
         }
-      }
-      return '';
-    }
-    function getSubstr(substr){
-      const sl=substr.toLowerCase();
-      for(const rk of rKeys){
-        if(rk.toLowerCase().includes(sl)){const v=String(r[rk]||'').trim();if(v) return v;}
       }
       return '';
     }
@@ -248,9 +258,7 @@ function parseRows(raw){
       attStatuses.push(v);
     }
 
-    const mobile = (get(['Mobile','Mobile Number','Mobile No','Phone','Phone Number',
-      'Contact Number','Contact','Mob No','Mob','Customer Mobile'])||
-      getSubstr('mobile')||getSubstr('phone')||getSubstr('mob')||'')
+    const mobile = (mobileColKey?String(r[mobileColKey]||''):'')
       .replace(/\D/g,'').slice(-10);
 
     return {month,lt:lt||'Unknown',source:source||'Organic',city,state:state||'Unknown',
