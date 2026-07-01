@@ -2243,7 +2243,14 @@ function App(){
       if(saved){
         const p=JSON.parse(saved);
         if(p&&p.length){
+          /* If cached data pre-dates mobile parsing, discard it so the user
+             re-uploads and gets correct isMonthDup values.              */
+          if(p[0].mobile===undefined){
+            localStorage.removeItem('hd_ldr_data');
+            return;
+          }
           const norm=p.map(r=>{const ns=normSrc(r.source);return ns===r.source?r:{...r,source:ns};});
+          markMonthDuplicates(norm);
           setRows(norm);
           try{localStorage.setItem('hd_ldr_data',JSON.stringify(norm));}catch(e){}
         }
