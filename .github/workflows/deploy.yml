@@ -1,4 +1,4 @@
-name: Deploy Royal Enfield LDR Dashboard
+name: Deploy HMSI Analytics Dashboard
 
 on:
   push:
@@ -25,26 +25,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Inject Google Sheets URL
-        env:
-          RE_SHEET_URL: ${{ secrets.RE_SHEET_URL }}
-        run: |
-          python3 - <<'EOF'
-          import os
-          import json
-          url = os.environ['RE_SHEET_URL'].strip().strip("'\"")
-          with open('RE_LDR_Dashboard_v1.0.html', 'r', encoding='utf-8') as f:
-              content = f.read()
-          content = content.replace('"INJECT_SHEET_URL_HERE"', json.dumps(url))
-          with open('RE_LDR_Dashboard_v1.0.html', 'w', encoding='utf-8') as f:
-              f.write(content)
-          print('Injected URL:', url[:40], '...')
-          EOF
-
       - name: Prepare site
         run: |
           mkdir -p _site
-          cp RE_LDR_Dashboard_v1.0.html _site/index.html
+          cp "HMSI_RW_Dashboard_v4.02.html" _site/index.html
           cp _site/index.html _site/404.html
 
       - name: Setup Pages
