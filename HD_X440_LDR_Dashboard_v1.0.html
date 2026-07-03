@@ -137,7 +137,7 @@ select:focus{border-color:var(--orange);box-shadow:0 0 0 2px rgba(249,115,22,.15
    3. Paste the sheet URL below OR in the dashboard Sync panel
    ═══════════════════════════════════════════════════════════════════ */
 const SHEETS_CONFIG = Object.freeze({
-  LDR_SHEET_URL:         '',    /* paste Google Sheets URL here      */
+  LDR_SHEET_URL:         'https://docs.google.com/spreadsheets/d/1l2ApJonWSC6yK1GNwX0X8ZaygdhxQjdBGTF7cmHDfd4/edit?gid=0#gid=0',
   AUTO_SYNC_ON_LOAD:     true,  /* auto-fetch every time page opens  */
   AUTO_SYNC_INTERVAL_MS: 0,     /* 0=off; 300000=every 5 min         */
 });
@@ -244,11 +244,11 @@ function parseRows(raw){
     const city   = get('City');
     const state  = get('State');
     const status = get(['Status','Final Status']);
-    const attRaw = get(['Status Attempts','Status  Attempts']);
+    const attRaw = get(['Dialler Attempts','Status Attempts','Status  Attempts']);
     const conn   = get('Connected');
     const dup    = get(['Duplicate/Unique','Duplicate']);
     const attempts = parseInt(attRaw)||0;
-    const isConnected = (conn||'').toLowerCase()==='yes';
+    const isConnected = (()=>{const c=(conn||'').toLowerCase().trim();return c==='yes'||c==='connected';})();
     const isDuplicate = (dup||'').toLowerCase()==='duplicate';
 
     /* Per-attempt statuses */
