@@ -257,14 +257,9 @@ function aggRE(rows,mf){
   const uniqueSet=new Set();
   const bookingSet=new Set();
 
-  /* Forward attribution: a lead in month M is credited with a booking if the booking
-     falls in months M through M+2 AND that booking month is present in the dataset.
-     The leadMonthsPresent guard prevents inflating counts with future months not yet
-     uploaded — same guard used in both isAll and specific-month branches for consistency. */
-  const leadMonthsPresent=new Set();
-  for(const r of rows){ if(r.lead_month) leadMonthsPresent.add(r.lead_month); }
-
   if(isAll){
+    const leadMonthsPresent=new Set();
+    for(const r of rows){ if(r.lead_month) leadMonthsPresent.add(r.lead_month); }
     for(const r of rows){
       totalLeads++;
       if(r.isUnique) uniqueSet.add(r.lead_number);
@@ -279,11 +274,11 @@ function aggRE(rows,mf){
       if(r.lead_month===mf){
         totalLeads++;
         if(r.isUnique) uniqueSet.add(r.lead_number);
-        /* Forward: credit booking to the lead month (mf), not the booking month */
-        if(r.booking_month&&leadMonthsPresent.has(r.booking_month)){
-          const diff=monthOrder(r.booking_month)-mfOrder;
-          if(diff>=0&&diff<=2) bookingSet.add(r.lead_number);
-        }
+      }
+      /* Backward attribution: count bookings that happened IN mf from leads mf, mf-1, mf-2 */
+      if(r.booking_month===mf){
+        const diff=mfOrder-monthOrder(r.lead_month);
+        if(diff>=0&&diff<=2) bookingSet.add(r.lead_number);
       }
     }
   }
@@ -300,8 +295,6 @@ function aggRE(rows,mf){
 function aggMulti(rows,months){
   if(!months||!months.length) return{totalLeads:0,uniqueLeads:0,dupLeads:0,dupPct:0,bookings:0,e2bPct:0};
   const monthSet=new Set(months);
-  const leadMonthsPresent=new Set();
-  for(const r of rows){ if(r.lead_month) leadMonthsPresent.add(r.lead_month); }
   let totalLeads=0;
   const uniqueSet=new Set();
   const bookingSet=new Set();
@@ -309,11 +302,11 @@ function aggMulti(rows,months){
     if(monthSet.has(r.lead_month)){
       totalLeads++;
       if(r.isUnique) uniqueSet.add(r.lead_number);
-      /* Forward: credit booking to the lead month, not the booking month */
-      if(r.booking_month&&leadMonthsPresent.has(r.booking_month)){
-        const diff=monthOrder(r.booking_month)-monthOrder(r.lead_month);
-        if(diff>=0&&diff<=2) bookingSet.add(r.lead_number);
-      }
+    }
+    /* Backward attribution: bookings IN a month in monthSet, from leads within 0-2 months before */
+    if(r.booking_month&&monthSet.has(r.booking_month)){
+      const diff=monthOrder(r.booking_month)-monthOrder(r.lead_month);
+      if(diff>=0&&diff<=2) bookingSet.add(r.lead_number);
     }
   }
   const uniqueLeads=uniqueSet.size;
@@ -468,10 +461,10 @@ function aggGrouped(rows,mf,dimKey){
    produces a Map<month, {grand,grandPaid,grandOrg,grandSrc,dimAggs}> instead of calling
    aggGrouped() once per month (which would re-scan the full row set per month just to find
    the handful of rows that belong to it). A row's lead-side counts land in its own
-   lead_month's bucket; its booking-side count (if within the M+2 forward attribution window
-   AND the booking month is present in the dataset) also lands in the lead_month's bucket —
-   consistent with aggRE's forward attribution: a lead in M gets credit for bookings in
-   M through M+2, not for bookings that happened to fall in M from earlier leads. */
+   lead_month's bucket; its booking-side count (if within the M-2 attribution window) lands
+   in its own booking_month's bucket — independently, exactly like aggRE's per-month branch,
+   just computed for every month in one traversal. This is what makes showing "by month"
+   grids for every month (not just the latest) affordable on large datasets. */
 function aggGroupedByMonth(rows,dimKey){
   const PAID_MBRS=SRC_GROUPS[0].members,ORG_MBRS=SRC_GROUPS[1].members;
   function mk(){ return{totalLeads:0,uniqueSet:new Set(),bookingSet:new Set()}; }
@@ -480,10 +473,6 @@ function aggGroupedByMonth(rows,dimKey){
 
   const bundles=new Map();
   function getBundle(m){ let b=bundles.get(m); if(!b){b=newBundle();bundles.set(m,b);} return b; }
-
-  /* Booking month must be in the dataset to avoid inflating counts with future months */
-  const leadMonthsPresent=new Set();
-  for(const r of rows){ if(r.lead_month) leadMonthsPresent.add(r.lead_month); }
 
   for(const r of rows){
     const src=r.source;
@@ -504,11 +493,11 @@ function aggGroupedByMonth(rows,dimKey){
         if(inOrg) bumpLead(acc(b.byDimOrg,dv));
       }
     }
-    /* Forward attribution: booking credited to lead_month, not booking_month */
-    if(r.booking_month&&r.lead_month&&leadMonthsPresent.has(r.booking_month)){
+    /* Backward attribution: booking credited to booking_month bucket; lead must be within 0-2 months before */
+    if(r.booking_month&&r.lead_month){
       const diff=monthOrder(r.booking_month)-monthOrder(r.lead_month);
       if(diff>=0&&diff<=2){
-        const b=getBundle(r.lead_month);
+        const b=getBundle(r.booking_month);
         const bumpBooking=a=>a.bookingSet.add(r.lead_number);
         bumpBooking(b.total);
         if(inPaid) bumpBooking(b.paid);
