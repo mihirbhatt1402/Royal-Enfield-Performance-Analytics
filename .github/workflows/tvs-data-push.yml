@@ -1,0 +1,25 @@
+name: TVS Daily Data Push
+
+on:
+  schedule:
+    - cron: '30 5 * * *'   # 11:00 AM IST (UTC+5:30) every day
+  workflow_dispatch:         # allow manual runs from GitHub UI
+
+jobs:
+  push-data:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests pandas openpyxl
+
+      - name: Run data push
+        run: python push_tvs_data.py

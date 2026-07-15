@@ -1,15 +1,41 @@
 ﻿"""
-Reads TVS Leads + Retails XLSX locally, builds aggregated JSON payload,
-and POSTs it to the Apps Script web app to store in Script Properties.
+Streams TVS Leads + Retails XLSX directly from Google Drive into memory,
+builds aggregated JSON payload, and POSTs it to the Apps Script web app.
+No files are saved to disk.
 """
-import json, sys, urllib.request, urllib.parse
+import json, sys, urllib.request, io
 import pandas as pd
-from pathlib import Path
+import requests
 
-LEADS_PATH   = r"C:\Users\mihir.bhatt\Downloads\Leads Data Master_Leads_FY_26_27.xlsx"
-RETAILS_PATH = r"C:\Users\mihir.bhatt\Downloads\Retail Data Master_Retails_FY_26_27.xlsx"
+LEADS_FILE_ID   = "1jPYG0LGFFd_ljWpfPr2NPfIU0fK1i7px"
+RETAILS_FILE_ID = "167q8mrcKJeeL9DWTMLxe5Iq59RqVTamd"
 APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwzgnXPbCbunBblnMUrqdWg3eY9qsIwCrFxuYuvYSpxtH22l4Cs32vdkOkDhUn-qwM64w/exec"
 SECRET = "tvs2026push"
+
+def read_drive_xlsx(file_id, label=""):
+    import re
+    print(f"Streaming {label} from Google Drive…", flush=True)
+    session = requests.Session()
+    # First request — check if we get a virus-scan confirmation page
+    resp = session.get("https://drive.google.com/uc?export=download",
+                       params={"id": file_id}, timeout=60)
+    if "text/html" in resp.headers.get("Content-Type", ""):
+        # Extract the confirmation form fields and POST to the download endpoint
+        action = re.search(r'<form[^>]*action="([^"]+)"', resp.text)
+        inputs = dict(re.findall(r'<input[^>]*name="([^"]+)"[^>]*value="([^"]+)"', resp.text))
+        if not action or not inputs:
+            raise RuntimeError(f"Cannot parse Drive confirmation page for {label}")
+        resp = session.get(action.group(1), params=inputs, stream=True, timeout=120)
+    resp.raise_for_status()
+    buf = io.BytesIO()
+    for chunk in resp.iter_content(chunk_size=1024 * 1024):
+        buf.write(chunk)
+    buf.seek(0)
+    return buf
+
+print("=" * 60)
+leads_buf   = read_drive_xlsx(LEADS_FILE_ID,   "Leads")
+retails_buf = read_drive_xlsx(RETAILS_FILE_ID, "Retails")
 
 def to_id(v):
     if pd.isna(v):
@@ -19,9 +45,9 @@ def to_id(v):
     except Exception:
         return str(v).strip()
 
-def build_payload():
+def build_payload(leads_buf, retails_buf):
     print("Reading Retails…", flush=True)
-    ret = pd.read_excel(RETAILS_PATH, dtype=str)
+    ret = pd.read_excel(retails_buf, dtype=str, engine='openpyxl')
     ret.columns = [c.strip() for c in ret.columns]
 
     ret_id_col  = next((c for c in ret.columns if c.lower().replace(' ','') in ('sorceleadid','sourceleadid')), None)
@@ -42,7 +68,7 @@ def build_payload():
     print(f"Retail records: {len(retail_map):,}", flush=True)
 
     print("Reading Leads…", flush=True)
-    leads = pd.read_excel(LEADS_PATH, dtype=str)
+    leads = pd.read_excel(leads_buf, dtype=str, engine='openpyxl')
     leads.columns = [c.strip() for c in leads.columns]
 
     def col(candidates):
@@ -200,8 +226,7 @@ def build_payload():
     print(f"Done — {total:,} leads · {len(retail_map):,} retails", flush=True)
     return payload
 
-print("=" * 60)
-payload = build_payload()
+payload  = build_payload(leads_buf, retails_buf)
 json_str = json.dumps(payload, separators=(',', ':'))
 print(f"Payload size: {len(json_str)/1024:.1f} KB", flush=True)
 
