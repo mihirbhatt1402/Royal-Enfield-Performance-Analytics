@@ -520,7 +520,7 @@ const MultiSelect = React.memo(function MultiSelect({ label, options, selected, 
    ════════════════════════════════════════════════════════════════════ */
 const DimGrid = React.memo(function DimGrid({
   agg, srcGroups, dimLabel, expandedGrps, onToggleGrp,
-  expandedRows, onToggleRow, subRowsFn, grandForContrib, noSort, viewerMode
+  expandedRows, onToggleRow, subRowsFn, grandForContrib, noSort, viewerMode, noGroupHeaders
 }) {
   if (!agg) return null;
   const { grand, grandSrc, dimAggs } = agg;
@@ -614,6 +614,7 @@ const DimGrid = React.memo(function DimGrid({
 
   // Header row 2 — always LEADS / RETAIL / CONTRIB% / L2R% per visible col
   const hdr2 = [
+    ...(noGroupHeaders ? [ce('th', { key:'dim', className:'left', style:{minWidth:160,zIndex:3,background:'#E8EAF6',color:'#1A237E'} }, dimLabel)] : []),
     ce('th', { key:'tl', className:'sub' }, 'Leads'),
     ce('th', { key:'tr', className:'sub' }, 'Retail'),
     ce('th', { key:'tc', className:'sub' }, 'Contrib%'),
@@ -643,7 +644,7 @@ const DimGrid = React.memo(function DimGrid({
   return ce('div', { className:'scroll-x' },
     ce('table', null,
       ce('thead', null,
-        ce('tr', null, ...hdr1),
+        ...(noGroupHeaders ? [] : [ce('tr', null, ...hdr1)]),
         ce('tr', null, ...hdr2),
       ),
       ce('tbody', null, ...rows)
@@ -655,14 +656,14 @@ const DimGrid = React.memo(function DimGrid({
    MONTHLY GRIDS WRAPPER
    Renders one DimGrid per selected month.
    ════════════════════════════════════════════════════════════════════ */
-function MonthlyGrids({ title, months, renderAgg, srcGroups, dimLabel, expandedGrps, onToggleGrp, expandedRows, onToggleRow, subRowsFn, noPrefix, viewerMode }) {
+function MonthlyGrids({ title, months, renderAgg, srcGroups, dimLabel, expandedGrps, onToggleGrp, expandedRows, onToggleRow, subRowsFn, noPrefix, viewerMode, noGroupHeaders }) {
   return ce('div', { className:'fade-up' },
     months.map(M => {
       const agg = renderAgg(M);
       if (!agg || agg.grand.l === 0) return null;
       return ce('div', { key: M, className:'card', style:{ padding:'16px 18px', marginBottom:14 } },
         ce('div', { className:'section-title', style:{marginBottom:10} }, noPrefix ? M : (title || dimLabel) + ' — ' + M),
-        ce(DimGrid, { agg, srcGroups, dimLabel, expandedGrps, onToggleGrp, expandedRows, onToggleRow, subRowsFn, viewerMode })
+        ce(DimGrid, { agg, srcGroups, dimLabel, expandedGrps, onToggleGrp, expandedRows, onToggleRow, subRowsFn, viewerMode, noGroupHeaders })
       );
     })
   );
@@ -874,7 +875,7 @@ const SourceTab = React.memo(function SourceTab({ data, filters, months, RT }) {
     return { grand, grandSrc, dimAggs };
   }, [sm, maps, filters, getLR]);
 
-  return ce(MonthlyGrids, { months, renderAgg, srcGroups, dimLabel:'Source', expandedGrps, onToggleGrp, noPrefix: true });
+  return ce(MonthlyGrids, { months, renderAgg, srcGroups, dimLabel:'Source', expandedGrps, onToggleGrp, noPrefix: true, noGroupHeaders: true });
 });
 
 /* ════════════════════════════════════════════════════════════════════
@@ -1512,15 +1513,22 @@ function PendingScreen({ email, onRefresh, onBack }) {
     try { const res = await apiFetchRole(email); onRefresh(res.role); }
     catch(e) {} finally { setLoading(false); }
   }
+  useEffect(() => {
+    const id = setInterval(async () => {
+      try { const res = await apiFetchRole(email); if (res.role !== 'pending') onRefresh(res.role); }
+      catch(e) {}
+    }, 30000);
+    return () => clearInterval(id);
+  }, [email]);
   return ce('div', { className:'auth-overlay' },
     ce('div', { className:'auth-card' },
       ce(AuthLogo),
       ce('div', { className:'auth-title' }, 'Access Pending'),
       ce('div', { className:'auth-subtitle' }, "Your access request is awaiting admin approval."),
       ce('div', { style:{background:'#FEF3C7',border:'1px solid #FDE68A',borderRadius:8,padding:'10px 14px',fontSize:12,color:'#92400E',marginBottom:20} },
-        '⏳ Request pending review'),
+        '⏳ Request pending review — auto-checking every 30s'),
       ce('button', { className:'auth-btn', onClick:handleRefresh, disabled:loading },
-        loading ? 'Checking…' : '↻ Check Again'),
+        loading ? 'Checking…' : '↻ Check Now'),
       ce('button', { className:'auth-back', onClick:onBack }, '← Use a different email')
     )
   );
