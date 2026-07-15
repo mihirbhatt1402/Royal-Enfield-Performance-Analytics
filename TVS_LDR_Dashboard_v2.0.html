@@ -809,12 +809,8 @@ const LTSourceTab = React.memo(function LTSourceTab({ data, filters, months, RT 
   const allSrcs = useMemo(() => [...new Set(maps.src)], [maps]);
   const srcGroups = useMemo(() => buildSrcGroups(allSrcs), [allSrcs]);
   const [expandedGrps, setExpandedGrps] = useState(new Set());
-  const [expandedRows, setExpandedRows] = useState(new Set());
   const onToggleGrp = useCallback(id => setExpandedGrps(prev => {
     const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n;
-  }), []);
-  const onToggleRow = useCallback(lt => setExpandedRows(prev => {
-    const n = new Set(prev); n.has(lt) ? n.delete(lt) : n.add(lt); return n;
   }), []);
 
   const renderAgg = useCallback((M) => {
@@ -828,21 +824,9 @@ const LTSourceTab = React.memo(function LTSourceTab({ data, filters, months, RT 
     );
   }, [ltm, maps, filters, getLR]);
 
-  // Sub-rows: for a given LT, show source breakdown
-  const subRowsFn = useCallback((ltKey, da) => {
-    return Object.entries(da.src)
-      .filter(([,a]) => a.l > 0)
-      .sort((a,b) => b[1].l - a[1].l)
-      .map(([src, a]) => ({
-        label: src,
-        tot: a,
-        srcMap: { [src]: a }
-      }));
-  }, []);
-
   return ce('div', { className:'fade-up' },
     ce(MonthlyGrids, { title:'Lead Type × Source', months, renderAgg, srcGroups, dimLabel:'Lead Type',
-      expandedGrps, onToggleGrp, expandedRows, onToggleRow, subRowsFn })
+      expandedGrps, onToggleGrp })
   );
 });
 
