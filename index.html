@@ -197,6 +197,18 @@ async function apiReview(adminEmail, targetEmail, decision, role) {
   });
   return r.json();
 }
+async function apiGetUsers(adminEmail) {
+  const r = await fetch(APPS_SCRIPT_URL + '?action=getUsers&email=' + encodeURIComponent(adminEmail));
+  return r.json();
+}
+async function apiUpdateRole(adminEmail, targetEmail, newRole) {
+  const r = await fetch(APPS_SCRIPT_URL + '?action=updateRole', {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain' },
+    body: JSON.stringify({ adminEmail, targetEmail, role: newRole }),
+  });
+  return r.json();
+}
 
 /* ════════════════════════════════════════════════════════════════════
    INDIA ZONE → STATE MAP  (used for State × Source zone grouping)
@@ -1554,13 +1566,24 @@ function AdminPanel({ auth, onLogout, onViewDashboard }) {
   const [roleSelections, setRS]   = useState({});
   const [processing, setProc]     = useState({});
   const [msg, setMsg]             = useState('');
+  const [users, setUsers]         = useState(null);
+  const [usersLoading, setUL]     = useState(true);
+  const [userRS, setUserRS]       = useState({});
+  const [userProc, setUserProc]   = useState({});
+  const [userMsg, setUserMsg]     = useState('');
 
-  useEffect(() => { loadPending(); }, []);
+  useEffect(() => { loadPending(); loadUsers(); }, []);
 
   async function loadPending() {
     setLoading(true);
     try { const res = await apiGetPending(auth.email); setPending(res.pending || {}); }
     catch(e) { setPending({}); } finally { setLoading(false); }
+  }
+
+  async function loadUsers() {
+    setUL(true);
+    try { const res = await apiGetUsers(auth.email); setUsers(res.users || {}); }
+    catch(e) { setUsers({}); } finally { setUL(false); }
   }
 
   async function handleReview(targetEmail, decision) {
@@ -1571,34 +1594,67 @@ function AdminPanel({ auth, onLogout, onViewDashboard }) {
       setPending(p => { const n={...p}; delete n[targetEmail]; return n; });
       setMsg(decision === 'approve' ? `✓ Approved ${targetEmail} as ${role}` : `✓ Rejected ${targetEmail}`);
       setTimeout(() => setMsg(''), 5000);
+      loadUsers();
     } catch(e) { alert('Error: ' + e.message); }
     finally { setProc(p => ({...p, [targetEmail]:false})); }
   }
 
-  const entries = pending ? Object.entries(pending) : [];
+  async function handleUpdateRole(targetEmail, newRole) {
+    setUserProc(p => ({...p, [targetEmail]:true}));
+    try {
+      await apiUpdateRole(auth.email, targetEmail, newRole);
+      setUsers(u => {
+        const n = {...u};
+        if (newRole === 'remove') delete n[targetEmail];
+        else n[targetEmail] = {...(n[targetEmail]||{}), role: newRole};
+        return n;
+      });
+      setUserMsg('✓ Updated ' + targetEmail);
+      setTimeout(() => setUserMsg(''), 4000);
+    } catch(e) { alert('Error: ' + e.message); }
+    finally { setUserProc(p => ({...p, [targetEmail]:false})); }
+  }
 
-  return ce('div', { style:{minHeight:'100vh',background:'#f8fafc'} },
-    ce('div', { style:{background:'#fff',borderBottom:'1px solid #E2E8F0',padding:'12px 24px',display:'flex',alignItems:'center',justifyContent:'space-between',boxShadow:'0 1px 4px rgba(0,0,0,.06)'} },
-      ce('div', { style:{display:'flex',alignItems:'center',gap:12} },
-        ce('div', { style:{width:36,height:36,borderRadius:10,background:'linear-gradient(135deg,#B01229,#E31837)',display:'flex',alignItems:'center',justifyContent:'center'} },
-          ce('span', { style:{fontSize:14,fontWeight:900,color:'#fff',fontFamily:'DM Mono,monospace',letterSpacing:'-.04em'} }, 'TVS')
-        ),
-        ce('div', null,
-          ce('div', { style:{fontSize:13,fontWeight:800,color:'#0f172a'} }, 'TVS Motor Company'),
-          ce('div', { style:{fontSize:10,color:'#7C3AED',fontWeight:600} }, 'Admin Panel — Lead Disposition Dashboard'),
-        )
+  const ROLE_BADGE = {
+    admin:  { bg:'#EDE9FE', color:'#6D28D9', label:'admin' },
+    full:   { bg:'#D1FAE5', color:'#065F46', label:'full'  },
+    viewer: { bg:'#DBEAFE', color:'#1E40AF', label:'viewer'},
+  };
+
+  const entries = pending ? Object.entries(pending) : [];
+  const userEntries = users
+    ? Object.entries(users).sort((a,b) => {
+        const order = {admin:0, full:1, viewer:2};
+        return (order[a[1].role]||3) - (order[b[1].role]||3);
+      })
+    : [];
+
+  const navbar = ce('div', { style:{background:'#fff',borderBottom:'1px solid #E2E8F0',padding:'12px 24px',display:'flex',alignItems:'center',justifyContent:'space-between',boxShadow:'0 1px 4px rgba(0,0,0,.06)'} },
+    ce('div', { style:{display:'flex',alignItems:'center',gap:12} },
+      ce('div', { style:{width:36,height:36,borderRadius:10,background:'linear-gradient(135deg,#B01229,#E31837)',display:'flex',alignItems:'center',justifyContent:'center'} },
+        ce('span', { style:{fontSize:14,fontWeight:900,color:'#fff',fontFamily:'DM Mono,monospace',letterSpacing:'-.04em'} }, 'TVS')
       ),
-      ce('div', { style:{display:'flex',alignItems:'center',gap:10} },
-        ce('div', { className:'user-chip' },
-          ce('div', { className:'user-avatar' }, auth.email[0].toUpperCase()),
-          ce('span', { className:'user-name' }, auth.email),
-          ce('span', { className:'user-role-badge role-admin' }, 'Admin'),
-        ),
-        onViewDashboard && ce('button', { className:'btn btn-secondary', style:{fontSize:11}, onClick:onViewDashboard }, '📊 View Dashboard'),
-        ce('button', { className:'btn btn-secondary', style:{fontSize:11}, onClick:onLogout }, 'Sign Out'),
+      ce('div', null,
+        ce('div', { style:{fontSize:13,fontWeight:800,color:'#0f172a'} }, 'TVS Motor Company'),
+        ce('div', { style:{fontSize:10,color:'#7C3AED',fontWeight:600} }, 'Admin Panel — Lead Disposition Dashboard'),
       )
     ),
-    ce('div', { style:{maxWidth:800,margin:'48px auto',padding:'0 20px'} },
+    ce('div', { style:{display:'flex',alignItems:'center',gap:10} },
+      ce('div', { className:'user-chip' },
+        ce('div', { className:'user-avatar' }, auth.email[0].toUpperCase()),
+        ce('span', { className:'user-name' }, auth.email),
+        ce('span', { className:'user-role-badge role-admin' }, 'Admin'),
+      ),
+      onViewDashboard && ce('button', { className:'btn btn-secondary', style:{fontSize:11}, onClick:onViewDashboard }, '📊 View Dashboard'),
+      ce('button', { className:'btn btn-secondary', style:{fontSize:11}, onClick:onLogout }, 'Sign Out'),
+    )
+  );
+
+  return ce('div', { style:{minHeight:'100vh',background:'#f8fafc'} },
+    navbar,
+    ce('div', { style:{maxWidth:860,margin:'40px auto',padding:'0 20px',display:'flex',flexDirection:'column',gap:20} },
+
+      // ── Access Requests card ──
       ce('div', { className:'card', style:{padding:'28px 32px'} },
         ce('div', { style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4} },
           ce('div', { className:'modal-title' }, 'Access Requests'),
@@ -1633,6 +1689,69 @@ function AdminPanel({ auth, onLogout, onViewDashboard }) {
                   )
                 );
               })
+      ),
+
+      // ── User Access Management card ──
+      ce('div', { className:'card', style:{padding:'28px 32px'} },
+        ce('div', { style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4} },
+          ce('div', { className:'modal-title' }, '👥 User Access Management'),
+          ce('button', { className:'btn btn-secondary', style:{fontSize:11}, onClick:loadUsers, disabled:usersLoading }, usersLoading ? 'Loading…' : '⟳ Refresh')
+        ),
+        ce('div', { className:'modal-sub', style:{marginBottom:12} },
+          ce('span', { style:{marginRight:12} }, ce('b',null,'pending'), ' — awaiting access'),
+          ce('span', { style:{marginRight:12} }, ce('b',null,'viewer'), ' — totals only (no source breakdown)'),
+          ce('span', { style:{marginRight:12} }, ce('b',null,'full'), ' — all columns'),
+          ce('span', null, ce('b',null,'admin'), ' — full + manage users'),
+        ),
+        userMsg && ce('div', { className:'auth-ok', style:{marginBottom:12} }, userMsg),
+        usersLoading
+          ? ce('div', { style:{textAlign:'center',padding:40} }, ce('div', { className:'spinner', style:{margin:'0 auto'} }))
+          : ce('div', { style:{overflowX:'auto'} },
+              ce('table', { style:{width:'100%',borderCollapse:'collapse',fontSize:12} },
+                ce('thead', null,
+                  ce('tr', { style:{background:'#1A237E',color:'#fff',textAlign:'left'} },
+                    ce('th', { style:{padding:'9px 12px',fontWeight:700,letterSpacing:'.06em',fontSize:11} }, 'EMAIL'),
+                    ce('th', { style:{padding:'9px 12px',fontWeight:700,letterSpacing:'.06em',fontSize:11} }, 'NAME'),
+                    ce('th', { style:{padding:'9px 12px',fontWeight:700,letterSpacing:'.06em',fontSize:11} }, 'ROLE'),
+                    ce('th', { style:{padding:'9px 12px',fontWeight:700,letterSpacing:'.06em',fontSize:11} }, 'CHANGE TO'),
+                  )
+                ),
+                ce('tbody', null,
+                  userEntries.map(([email, info], idx) => {
+                    const isAdm = info.role === 'admin';
+                    const badge = ROLE_BADGE[info.role] || ROLE_BADGE.viewer;
+                    const busy  = userProc[email];
+                    const sel   = userRS[email] || info.role;
+                    return ce('tr', { key:email, style:{background: idx%2===0?'#fff':'#F8FAFC', borderBottom:'1px solid #E2E8F0'} },
+                      ce('td', { style:{padding:'9px 12px',color:'#374151'} }, email),
+                      ce('td', { style:{padding:'9px 12px',color:'#374151'} }, info.name || '—'),
+                      ce('td', { style:{padding:'9px 12px'} },
+                        ce('span', { style:{background:badge.bg,color:badge.color,padding:'2px 10px',borderRadius:12,fontWeight:700,fontSize:11} }, badge.label)
+                      ),
+                      ce('td', { style:{padding:'9px 12px'} },
+                        isAdm
+                          ? ce('span', { style:{color:'#94A3B8'} }, '—')
+                          : ce('div', { style:{display:'flex',gap:6,alignItems:'center'} },
+                              ce('select', {
+                                className:'role-sel', value:sel,
+                                onChange: ev => setUserRS(r=>({...r,[email]:ev.target.value}))
+                              },
+                                ce('option',{value:'viewer'},'Viewer'),
+                                ce('option',{value:'full'},'Full'),
+                                ce('option',{value:'remove'},'Remove Access'),
+                              ),
+                              ce('button', {
+                                className:'btn-approve', disabled:busy || sel===info.role,
+                                style:{padding:'4px 12px',fontSize:11},
+                                onClick:()=>handleUpdateRole(email, sel)
+                              }, busy?'…':'Save'),
+                            )
+                      ),
+                    );
+                  })
+                )
+              )
+            )
       )
     )
   );
