@@ -941,7 +941,7 @@ const LTSourceTab = React.memo(function LTSourceTab({ data, filters, months, RT 
 
   return ce('div', { className:'fade-up' },
     ce(MonthlyGrids, { title:'Lead Type × Source', months, renderAgg, srcGroups, dimLabel:'Lead Type',
-      expandedGrps, onToggleGrp, noGroupHeaders: true })
+      expandedGrps, onToggleGrp })
   );
 });
 
@@ -966,7 +966,7 @@ const ModelSourceTab = React.memo(function ModelSourceTab({ data, filters, month
     null, getLR
   ), [mm, maps, filters, getLR]);
 
-  return ce(MonthlyGrids, { title:'Model × Source', months, renderAgg, srcGroups, dimLabel:'Model', expandedGrps, onToggleGrp, viewerMode, noGroupHeaders: true });
+  return ce(MonthlyGrids, { title:'Model × Source', months, renderAgg, srcGroups, dimLabel:'Model', expandedGrps, onToggleGrp, viewerMode });
 });
 
 /* ════════════════════════════════════════════════════════════════════
