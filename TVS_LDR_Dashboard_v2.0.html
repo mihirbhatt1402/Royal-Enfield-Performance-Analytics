@@ -436,32 +436,36 @@ const DimGrid = React.memo(function DimGrid({
 
   function contrib(l) { return gL > 0 ? l / gL * 100 : 0; }
 
-  // Compute which cols are visible for each group
-  function groupCols(grp) {
-    if (!expandedGrps || !expandedGrps.has(grp.id)) return 4; // collapsed: L R C% L2R%
-    return grp.subGroups.reduce((s, sg) => s + (sg.srcs.length > 0 ? 4 : 0), 0) || 4;
+  // Flatten expanded groups → visible column list (sub-groups become top-level headers)
+  const visibleCols = [];
+  for (const grp of srcGroups) {
+    if (expandedGrps && expandedGrps.has(grp.id)) {
+      const sgs = grp.subGroups.filter(sg => sg.srcs.length > 0);
+      if (sgs.length > 0) {
+        sgs.forEach((sg, i) => visibleCols.push({
+          ...sg,
+          borderLeft: i === 0 ? '2px solid ' + grp.color : null,
+          parentId: grp.id,
+          isChild: true
+        }));
+      } else {
+        visibleCols.push({ ...grp, isChild: false });
+      }
+    } else {
+      visibleCols.push({ ...grp, isChild: false });
+    }
   }
 
-  // Render cells for a group (collapsed = group total, expanded = sub-group cells)
-  function grpCells(srcMap, grp, isTotal) {
-    if (!expandedGrps || !expandedGrps.has(grp.id)) {
-      const a = grpSum(srcMap, grp.srcs);
-      return [
-        ce('td', { key: grp.id+'l', style:{ borderLeft:'2px solid '+grp.color+'44' } }, Nf(a.l)),
-        ce('td', { key: grp.id+'r', style:{ color: grp.color, fontWeight:700 } }, Nf(a.r)),
-        ce('td', { key: grp.id+'c' }, a.l > 0 ? Pf(contrib(a.l)) : '—'),
-        ce('td', { key: grp.id+'l2r', style:{ color:'#D97706', fontWeight:600 } }, Pf(a.l2r)),
-      ];
-    }
-    return grp.subGroups.filter(sg => sg.srcs.length > 0).flatMap((sg, si) => {
-      const a = grpSum(srcMap, sg.srcs);
-      return [
-        ce('td', { key:sg.id+'l', style: si===0 ? {borderLeft:'2px solid '+grp.color+'44'} : {} }, Nf(a.l)),
-        ce('td', { key:sg.id+'r', style:{ color: sg.color, fontWeight:700 } }, Nf(a.r)),
-        ce('td', { key:sg.id+'c' }, a.l > 0 ? Pf(contrib(a.l)) : '—'),
-        ce('td', { key:sg.id+'l2r', style:{ color:'#D97706', fontWeight:600 } }, Pf(a.l2r)),
-      ];
-    });
+  // 4 data cells for one visible column
+  function colCells(srcMap, col) {
+    const a = grpSum(srcMap, col.srcs);
+    const bl = col.borderLeft ? { borderLeft: col.borderLeft } : {};
+    return [
+      ce('td', { key: col.id+'l', style: bl }, Nf(a.l)),
+      ce('td', { key: col.id+'r', style:{ color: col.color, fontWeight:700 } }, Nf(a.r)),
+      ce('td', { key: col.id+'c' }, a.l > 0 ? Pf(contrib(a.l)) : '—'),
+      ce('td', { key: col.id+'l2r', style:{ color:'#D97706', fontWeight:600 } }, Pf(a.l2r)),
+    ];
   }
 
   function renderRow(label, tot, srcMap, isTotal, isSection, dimKey, isSub) {
@@ -481,13 +485,11 @@ const DimGrid = React.memo(function DimGrid({
       style: canExpand ? { cursor:'pointer' } : {}
     },
       ce('td', { className: tdClass, style: isTotal ? { color:'#1A237E' } : {} }, labelContent),
-      // TOTAL
       ce('td', { key:'tl' }, Nf(tot.l)),
       ce('td', { key:'tr', style:{ color:'#E31837', fontWeight:700 } }, Nf(tot.r)),
       ce('td', { key:'tc' }, tot.l > 0 ? Pf(contrib(tot.l)) : '—'),
       ce('td', { key:'tl2r', style:{ color:'#D97706', fontWeight:700 } }, tot.l2r > 0 ? Pf(tot.l2r) : '—'),
-      // Groups
-      ...srcGroups.flatMap(grp => grpCells(srcMap, grp, isTotal))
+      ...visibleCols.flatMap(col => colCells(srcMap, col))
     );
   }
 
@@ -495,44 +497,41 @@ const DimGrid = React.memo(function DimGrid({
     ? Object.entries(dimAggs)
     : Object.entries(dimAggs).sort((a,b) => b[1].total.l - a[1].total.l);
 
-  // Header row 1
+  // Header row 1 — top-level group names (sub-groups shown as peers when parent expanded)
   const hdr1 = [
     ce('th', { key:'dim', className:'left', rowSpan:2, style:{minWidth:160,zIndex:3,background:'#E8EAF6',color:'#1A237E'} }, dimLabel),
     ce('th', { key:'tot', colSpan:4, style:{background:'#E8EAF6',color:'#1A237E'} }, 'TOTAL'),
-    ...srcGroups.map(grp => {
-      const exp = expandedGrps && expandedGrps.has(grp.id);
-      const sgs = grp.subGroups.filter(sg => sg.srcs.length > 0);
-      const cs = exp ? sgs.length * 4 : 4;
+    ...visibleCols.map(col => {
+      const hasChildren = !col.isChild && col.subGroups && col.subGroups.filter(sg=>sg.srcs.length>0).length > 1;
+      const canToggle = onToggleGrp && (hasChildren || col.isChild);
+      const toggleId = col.isChild ? col.parentId : col.id;
+      const arrow = hasChildren ? '▾ ' : col.isChild ? '▴ ' : '';
       return ce('th', {
-        key: grp.id, colSpan: cs,
-        className: 'grp-toggle',
-        style: { background: grp.lightColor || '#F3F4F6', color: grp.color, borderTop: '2px solid ' + grp.color },
-        onClick: onToggleGrp ? () => onToggleGrp(grp.id) : undefined
-      }, (exp ? '▴ ' : '▾ ') + grp.label);
+        key: col.id, colSpan: 4,
+        className: canToggle ? 'grp-toggle' : '',
+        style: {
+          background: col.lightColor || '#F3F4F6',
+          color: col.color,
+          borderTop: '2px solid ' + col.color,
+          ...(col.borderLeft ? { borderLeft: col.borderLeft } : {})
+        },
+        onClick: canToggle ? () => onToggleGrp(toggleId) : undefined
+      }, arrow + col.label);
     })
   ];
 
-  // Header row 2 (sub)
+  // Header row 2 — always LEADS / RETAIL / CONTRIB% / L2R% per visible col
   const hdr2 = [
     ce('th', { key:'tl', className:'sub' }, 'Leads'),
     ce('th', { key:'tr', className:'sub' }, 'Retail'),
     ce('th', { key:'tc', className:'sub' }, 'Contrib%'),
     ce('th', { key:'tl2r', className:'sub' }, 'L2R%'),
-    ...srcGroups.flatMap(grp => {
-      const exp = expandedGrps && expandedGrps.has(grp.id);
-      if (!exp) return [
-        ce('th', { key:grp.id+'l', className:'sub', style:{borderLeft:'2px solid '+grp.color+'44'} }, 'Leads'),
-        ce('th', { key:grp.id+'r', className:'sub' }, 'Retail'),
-        ce('th', { key:grp.id+'c', className:'sub' }, 'Contrib%'),
-        ce('th', { key:grp.id+'l2r', className:'sub' }, 'L2R%'),
-      ];
-      return grp.subGroups.filter(sg => sg.srcs.length > 0).flatMap((sg, si) => [
-        ce('th', { key:sg.id+'l', className:'sub', style: si===0 ? {borderLeft:'2px solid '+grp.color+'44'} : {}, title:sg.label }, sg.label+' L'),
-        ce('th', { key:sg.id+'r', className:'sub', title:sg.label }, sg.label+' R'),
-        ce('th', { key:sg.id+'c', className:'sub', title:sg.label }, 'Contrib%'),
-        ce('th', { key:sg.id+'l2r', className:'sub', title:sg.label }, 'L2R%'),
-      ]);
-    })
+    ...visibleCols.flatMap(col => [
+      ce('th', { key:col.id+'l', className:'sub', style: col.borderLeft ? {borderLeft:col.borderLeft} : {} }, 'Leads'),
+      ce('th', { key:col.id+'r', className:'sub' }, 'Retail'),
+      ce('th', { key:col.id+'c', className:'sub' }, 'Contrib%'),
+      ce('th', { key:col.id+'l2r', className:'sub' }, 'L2R%'),
+    ])
   ];
 
   const rows = [];
