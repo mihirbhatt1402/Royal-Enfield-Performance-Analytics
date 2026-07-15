@@ -108,6 +108,51 @@ tr.dealer-row:hover td{background:#FEF3C7}
 .cell-nil{background:#F1F5F9!important;color:#94A3B8!important}
 .prog-track{flex:1;height:6px;background:#F1F5F9;border-radius:3px;overflow:hidden;min-width:50px}
 .prog-fill{height:100%;background:var(--red);border-radius:3px}
+
+/* ── Auth screens ── */
+.auth-overlay{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#001F5B 0%,#B01229 100%);z-index:1000}
+.auth-card{background:#fff;border-radius:20px;padding:40px 44px;max-width:440px;width:90%;box-shadow:0 24px 60px rgba(0,0,0,.25)}
+.auth-logo{display:flex;align-items:center;gap:12px;margin-bottom:28px}
+.auth-logo-icon{width:48px;height:48px;border-radius:14px;background:linear-gradient(135deg,#B01229,#E31837);display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:900;color:#fff;font-family:'DM Mono',monospace;letter-spacing:-.04em;flex-shrink:0}
+.auth-title{font-size:22px;font-weight:800;color:#0f172a;margin-bottom:4px;letter-spacing:-.03em}
+.auth-subtitle{font-size:12px;color:#64748B;margin-bottom:24px;line-height:1.5}
+.auth-label{display:block;font-size:11px;font-weight:600;color:#475569;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px}
+.auth-input{width:100%;padding:10px 14px;border:1.5px solid #E2E8F0;border-radius:10px;font-size:13px;font-family:inherit;color:#0f172a;outline:none;transition:border-color 160ms}
+.auth-input:focus{border-color:var(--red)}
+.auth-input-wrap{margin-bottom:14px}
+.auth-btn{width:100%;padding:12px;background:var(--red);color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;transition:background 160ms;margin-top:4px}
+.auth-btn:hover{background:var(--red-d)}
+.auth-btn:disabled{background:#CBD5E1;cursor:not-allowed}
+.auth-note{font-size:10px;color:#94A3B8;text-align:center;margin-top:16px;line-height:1.5}
+.auth-err{background:#FEE2E2;border:1px solid #FECACA;border-radius:8px;padding:8px 12px;font-size:11px;color:#B91C1C;margin-bottom:12px}
+.auth-ok{background:#DCFCE7;border:1px solid #BBF7D0;border-radius:8px;padding:8px 12px;font-size:11px;color:#166534;margin-bottom:12px}
+.auth-back{background:none;border:none;color:#94A3B8;font-size:11px;cursor:pointer;font-family:inherit;margin-top:12px;text-decoration:underline;display:block;text-align:center}
+.auth-back:hover{color:#475569}
+/* ── Admin modal ── */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:900}
+.modal-box{background:#fff;border-radius:16px;padding:28px 32px;max-width:660px;width:94%;max-height:82vh;overflow-y:auto;box-shadow:0 24px 60px rgba(0,0,0,.25)}
+.modal-title{font-size:16px;font-weight:800;color:#0f172a;margin-bottom:4px}
+.modal-sub{font-size:11px;color:#64748B;margin-bottom:18px}
+.req-card{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border:1px solid #E2E8F0;border-radius:10px;margin-bottom:8px;gap:12px;flex-wrap:wrap}
+.req-card-info{flex:1;min-width:0}
+.req-card-name{font-size:13px;font-weight:700;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.req-card-email{font-size:11px;color:#64748B;font-family:'DM Mono',monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.req-card-time{font-size:10px;color:#94A3B8;margin-top:2px}
+.req-card-actions{display:flex;gap:8px;align-items:center;flex-shrink:0}
+.role-sel{border:1px solid #E2E8F0;border-radius:8px;padding:5px 8px;font-size:11px;font-family:inherit;cursor:pointer;background:#fff}
+.btn-approve{background:#DCFCE7;color:#166534;border:1px solid #BBF7D0;border-radius:8px;padding:5px 14px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap}
+.btn-approve:hover{background:#BBF7D0}
+.btn-reject{background:#FEE2E2;color:#B91C1C;border:1px solid #FECACA;border-radius:8px;padding:5px 14px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap}
+.btn-reject:hover{background:#FECACA}
+.no-pending{text-align:center;padding:32px;color:#94A3B8;font-size:13px}
+/* ── User avatar chip ── */
+.user-chip{display:flex;align-items:center;gap:8px;padding:4px 10px 4px 6px;background:#F1F5F9;border:1px solid #E2E8F0;border-radius:20px;cursor:default}
+.user-avatar{width:26px;height:26px;border-radius:50%;background:linear-gradient(135deg,#B01229,#E31837);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:#fff;flex-shrink:0}
+.user-name{font-size:11px;font-weight:600;color:#0f172a;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.user-role-badge{font-size:9px;font-weight:700;padding:1px 7px;border-radius:10px;text-transform:uppercase;letter-spacing:.05em}
+.role-full{background:#DBEAFE;color:#1D4ED8}
+.role-viewer{background:#FEF3C7;color:#92400E}
+.role-admin{background:#EDE9FE;color:#6D28D9}
 </style>
 </head>
 <body>
@@ -120,6 +165,38 @@ tr.dealer-row:hover td{background:#FEF3C7}
    ════════════════════════════════════════════════════════════════════ */
 const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwzgnXPbCbunBblnMUrqdWg3eY9qsIwCrFxuYuvYSpxtH22l4Cs32vdkOkDhUn-qwM64w/exec';
 const CACHE_KEY = 'tvs_ldr_v2_cache';
+
+/* ════════════════════════════════════════════════════════════════════
+   ACCESS CONTROL
+   ════════════════════════════════════════════════════════════════════ */
+const ADMIN_EMAILS     = ['mihir.bhatt@girnarsoft.com', 'aditya.kumar@girnarsoft.com'];
+const ALLOWED_DOMAINS  = ['girnarsoft.com', 'girnarcare.com'];
+const AUTH_SESSION_KEY = 'tvs_ldr_auth';
+
+async function apiFetchRole(email) {
+  const r = await fetch(APPS_SCRIPT_URL + '?action=checkRole&email=' + encodeURIComponent(email));
+  return r.json();
+}
+async function apiRequestAccess(email, name) {
+  const r = await fetch(APPS_SCRIPT_URL + '?action=requestAccess', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, name }),
+  });
+  return r.json();
+}
+async function apiGetPending(adminEmail) {
+  const r = await fetch(APPS_SCRIPT_URL + '?action=getPending&email=' + encodeURIComponent(adminEmail));
+  return r.json();
+}
+async function apiReview(adminEmail, targetEmail, decision, role) {
+  const r = await fetch(APPS_SCRIPT_URL + '?action=reviewRequest', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ adminEmail, targetEmail, decision, role }),
+  });
+  return r.json();
+}
 
 /* ════════════════════════════════════════════════════════════════════
    INDIA ZONE → STATE MAP  (used for State × Source zone grouping)
@@ -443,7 +520,7 @@ const MultiSelect = React.memo(function MultiSelect({ label, options, selected, 
    ════════════════════════════════════════════════════════════════════ */
 const DimGrid = React.memo(function DimGrid({
   agg, srcGroups, dimLabel, expandedGrps, onToggleGrp,
-  expandedRows, onToggleRow, subRowsFn, grandForContrib, noSort
+  expandedRows, onToggleRow, subRowsFn, grandForContrib, noSort, viewerMode
 }) {
   if (!agg) return null;
   const { grand, grandSrc, dimAggs } = agg;
@@ -504,7 +581,7 @@ const DimGrid = React.memo(function DimGrid({
       ce('td', { key:'tr', style:{ color:'#E31837', fontWeight:700 } }, Nf(tot.r)),
       ce('td', { key:'tc' }, tot.l > 0 ? Pf(contrib(tot.l)) : '—'),
       ce('td', { key:'tl2r', style:{ color:'#D97706', fontWeight:700 } }, tot.l2r > 0 ? Pf(tot.l2r) : '—'),
-      ...visibleCols.flatMap(col => colCells(srcMap, col))
+      ...(viewerMode ? [] : visibleCols.flatMap(col => colCells(srcMap, col)))
     );
   }
 
@@ -516,7 +593,7 @@ const DimGrid = React.memo(function DimGrid({
   const hdr1 = [
     ce('th', { key:'dim', className:'left', rowSpan:2, style:{minWidth:160,zIndex:3,background:'#E8EAF6',color:'#1A237E'} }, dimLabel),
     ce('th', { key:'tot', colSpan:4, style:{background:'#E8EAF6',color:'#1A237E'} }, 'TOTAL'),
-    ...visibleCols.map(col => {
+    ...(viewerMode ? [] : visibleCols.map(col => {
       const hasChildren = !col.isChild && col.subGroups && col.subGroups.filter(sg=>sg.srcs.length>0).length > 1;
       const canToggle = onToggleGrp && (hasChildren || col.isChild);
       const toggleId = col.isChild ? col.parentId : col.id;
@@ -532,7 +609,7 @@ const DimGrid = React.memo(function DimGrid({
         },
         onClick: canToggle ? () => onToggleGrp(toggleId) : undefined
       }, arrow + col.label);
-    })
+    }))
   ];
 
   // Header row 2 — always LEADS / RETAIL / CONTRIB% / L2R% per visible col
@@ -541,12 +618,12 @@ const DimGrid = React.memo(function DimGrid({
     ce('th', { key:'tr', className:'sub' }, 'Retail'),
     ce('th', { key:'tc', className:'sub' }, 'Contrib%'),
     ce('th', { key:'tl2r', className:'sub' }, 'L2R%'),
-    ...visibleCols.flatMap(col => [
+    ...(viewerMode ? [] : visibleCols.flatMap(col => [
       ce('th', { key:col.id+'l', className:'sub', style: col.borderLeft ? {borderLeft:col.borderLeft} : {} }, 'Leads'),
       ce('th', { key:col.id+'r', className:'sub' }, 'Retail'),
       ce('th', { key:col.id+'c', className:'sub' }, 'Contrib%'),
       ce('th', { key:col.id+'l2r', className:'sub' }, 'L2R%'),
-    ])
+    ]))
   ];
 
   const rows = [];
@@ -578,14 +655,14 @@ const DimGrid = React.memo(function DimGrid({
    MONTHLY GRIDS WRAPPER
    Renders one DimGrid per selected month.
    ════════════════════════════════════════════════════════════════════ */
-function MonthlyGrids({ title, months, renderAgg, srcGroups, dimLabel, expandedGrps, onToggleGrp, expandedRows, onToggleRow, subRowsFn, noPrefix }) {
+function MonthlyGrids({ title, months, renderAgg, srcGroups, dimLabel, expandedGrps, onToggleGrp, expandedRows, onToggleRow, subRowsFn, noPrefix, viewerMode }) {
   return ce('div', { className:'fade-up' },
     months.map(M => {
       const agg = renderAgg(M);
       if (!agg || agg.grand.l === 0) return null;
       return ce('div', { key: M, className:'card', style:{ padding:'16px 18px', marginBottom:14 } },
         ce('div', { className:'section-title', style:{marginBottom:10} }, noPrefix ? M : (title || dimLabel) + ' — ' + M),
-        ce(DimGrid, { agg, srcGroups, dimLabel, expandedGrps, onToggleGrp, expandedRows, onToggleRow, subRowsFn })
+        ce(DimGrid, { agg, srcGroups, dimLabel, expandedGrps, onToggleGrp, expandedRows, onToggleRow, subRowsFn, viewerMode })
       );
     })
   );
@@ -833,7 +910,7 @@ const LTSourceTab = React.memo(function LTSourceTab({ data, filters, months, RT 
 /* ════════════════════════════════════════════════════════════════════
    MODEL × SOURCE TAB
    ════════════════════════════════════════════════════════════════════ */
-const ModelSourceTab = React.memo(function ModelSourceTab({ data, filters, months, RT }) {
+const ModelSourceTab = React.memo(function ModelSourceTab({ data, filters, months, RT, viewerMode }) {
   const { maps, mm } = data;
   const getLR = useMemo(() => makeLR(data.rt_cols, RT), [data.rt_cols, RT]);
   const allSrcs = useMemo(() => [...new Set(maps.src)], [maps]);
@@ -851,13 +928,13 @@ const ModelSourceTab = React.memo(function ModelSourceTab({ data, filters, month
     null, getLR
   ), [mm, maps, filters, getLR]);
 
-  return ce(MonthlyGrids, { title:'Model × Source', months, renderAgg, srcGroups, dimLabel:'Model', expandedGrps, onToggleGrp });
+  return ce(MonthlyGrids, { title:'Model × Source', months, renderAgg, srcGroups, dimLabel:'Model', expandedGrps, onToggleGrp, viewerMode });
 });
 
 /* ════════════════════════════════════════════════════════════════════
    STATE × SOURCE TAB  (Zone → State → City → Dealer drill-down)
    ════════════════════════════════════════════════════════════════════ */
-const StateSourceTab = React.memo(function StateSourceTab({ data, filters, months, RT }) {
+const StateSourceTab = React.memo(function StateSourceTab({ data, filters, months, RT, viewerMode }) {
   const { maps, stm } = data;
   const cm        = data.cm   || [];
   const cdm       = data.cdm  || [];
@@ -1043,19 +1120,19 @@ const StateSourceTab = React.memo(function StateSourceTab({ data, filters, month
     const hdr1 = [
       ce('th',{key:'dim',className:'left',rowSpan:2,style:{minWidth:220,zIndex:3,background:'#E8EAF6',color:'#1A237E'}},'Zone / State / City / Dealer'),
       ce('th',{key:'tot',colSpan:4,style:{background:'#E8EAF6',color:'#1A237E'}},'TOTAL'),
-      ...srcGroups.map(grp => {
+      ...(viewerMode ? [] : srcGroups.map(grp => {
         const exp = expandedGrps.has(grp.id);
         const sgs = grp.subGroups.filter(sg=>sg.srcs.length>0);
         return ce('th',{key:grp.id,colSpan:exp?sgs.length*4:4,
           className:'grp-toggle',style:{background:grp.lightColor||'#F3F4F6',color:grp.color,borderTop:'2px solid '+grp.color},
           onClick:()=>onToggleGrp(grp.id)
         },(exp?'▴ ':'▾ ')+grp.label);
-      })
+      }))
     ];
     const hdr2 = [
       ce('th',{key:'tl',className:'sub'},'Leads'),ce('th',{key:'tr',className:'sub'},'Retail'),
       ce('th',{key:'tc',className:'sub'},'Contrib%'),ce('th',{key:'tl2r',className:'sub'},'L2R%'),
-      ...srcGroups.flatMap(grp => {
+      ...(viewerMode ? [] : srcGroups.flatMap(grp => {
         const exp = expandedGrps.has(grp.id);
         if (!exp) return [
           ce('th',{key:grp.id+'l',className:'sub',style:{borderLeft:'2px solid '+grp.color+'44'}},'Leads'),
@@ -1069,7 +1146,7 @@ const StateSourceTab = React.memo(function StateSourceTab({ data, filters, month
           ce('th',{key:sg.id+'c',className:'sub',title:sg.label},'Contrib%'),
           ce('th',{key:sg.id+'l2r',className:'sub',title:sg.label},'L2R%'),
         ]);
-      })
+      }))
     ];
 
     const bodyRows = [];
@@ -1079,7 +1156,7 @@ const StateSourceTab = React.memo(function StateSourceTab({ data, filters, month
       ce('td',{className:'label',style:{color:'#1A237E'}},'∑ Grand Total'),
       ce('td',null,Nf(gL)),ce('td',{style:{color:'#E31837',fontWeight:700}},Nf(gR)),
       ce('td',null,'100.0%'),ce('td',{style:{color:'#D97706',fontWeight:700}},grand.l2r>0?Pf(grand.l2r):'—'),
-      ...srcGroups.flatMap(grp=>grpCells(grandSrc,grp))
+      ...(viewerMode ? [] : srcGroups.flatMap(grp=>grpCells(grandSrc,grp)))
     ));
 
     for (const zone of ZONE_ORDER) {
@@ -1099,7 +1176,7 @@ const StateSourceTab = React.memo(function StateSourceTab({ data, filters, month
         ),
         ce('td',null,Nf(zTot.l)),ce('td',{style:{color:'#1565C0',fontWeight:700}},Nf(zTot.r)),
         ce('td',null,gL>0?Pf(zTot.l/gL*100):'—'),ce('td',{style:{color:'#D97706',fontWeight:700}},zTot.l2r>0?Pf(zTot.l2r):'—'),
-        ...srcGroups.flatMap(grp=>grpCells(zSrcMap,grp))
+        ...(viewerMode ? [] : srcGroups.flatMap(grp=>grpCells(zSrcMap,grp)))
       ));
       if (!isZOpen) continue;
 
@@ -1123,7 +1200,7 @@ const StateSourceTab = React.memo(function StateSourceTab({ data, filters, month
           ),
           ce('td',null,Nf(sTot.l)),ce('td',{style:{color:'#E31837',fontWeight:700}},Nf(sTot.r)),
           ce('td',null,gL>0?Pf(sTot.l/gL*100):'—'),ce('td',{style:{color:'#D97706',fontWeight:600}},sTot.l2r>0?Pf(sTot.l2r):'—'),
-          ...srcGroups.flatMap(grp=>grpCells(sSrcMap,grp))
+          ...(viewerMode ? [] : srcGroups.flatMap(grp=>grpCells(sSrcMap,grp)))
         ));
         if (!isSOpen) continue;
 
@@ -1148,7 +1225,7 @@ const StateSourceTab = React.memo(function StateSourceTab({ data, filters, month
             ce('td',{style:{background:'#F0FDF4',color:'#16A34A',fontWeight:700}},Nf(cTot.r)),
             ce('td',{style:{background:'#F0FDF4'}},gL>0?Pf(cTot.l/gL*100):'—'),
             ce('td',{style:{background:'#F0FDF4',color:'#D97706',fontWeight:600}},cTot.l2r>0?Pf(cTot.l2r):'—'),
-            ...(hasCitySrc
+            ...(viewerMode ? [] : hasCitySrc
               ? srcGroups.flatMap(grp => grpCells(buildSrcMap(citySourceByS.get(city) || new Map()), grp))
               : blankSrcCells('#F0FDF4'))
           ));
@@ -1165,7 +1242,7 @@ const StateSourceTab = React.memo(function StateSourceTab({ data, filters, month
               ce('td',{style:{background:'#FAFAFA',color:'#0D9488',fontWeight:700}},Nf(dTot.r)),
               ce('td',{style:{background:'#FAFAFA'}},gL>0?Pf(dTot.l/gL*100):'—'),
               ce('td',{style:{background:'#FAFAFA',color:'#D97706',fontWeight:600}},dTot.l2r>0?Pf(dTot.l2r):'—'),
-              ...(hasDealerSrc
+              ...(viewerMode ? [] : hasDealerSrc
                 ? srcGroups.flatMap(grp => grpCells(buildSrcMap(dealerSourceByS.get(dl) || new Map()), grp))
                 : blankSrcCells('#FAFAFA'))
             ));
@@ -1175,7 +1252,7 @@ const StateSourceTab = React.memo(function StateSourceTab({ data, filters, month
     }
 
     return { grand, hdr1, hdr2, bodyRows };
-  }, [stm, cm, cdm, csm_data, cdsm_data, maps, filters, expandedGrps, openZone, openState, openCity, srcGroups, hasCities, hasDealers, hasCitySrc, hasDealerSrc, cityIndexMap, getLR]);
+  }, [stm, cm, cdm, csm_data, cdsm_data, maps, filters, expandedGrps, openZone, openState, openCity, srcGroups, hasCities, hasDealers, hasCitySrc, hasDealerSrc, cityIndexMap, getLR, viewerMode]);
 
   return ce('div', { className:'fade-up' },
     months.map(M => {
@@ -1277,7 +1354,7 @@ const BuyingIntentTab = React.memo(function BuyingIntentTab({ data, filters, mon
 /* ════════════════════════════════════════════════════════════════════
    FILTER BAR
    ════════════════════════════════════════════════════════════════════ */
-const FilterBar = React.memo(function FilterBar({ data, filters, onFiltersChange, RT, setRT }) {
+const FilterBar = React.memo(function FilterBar({ data, filters, onFiltersChange, RT, setRT, viewerMode }) {
   const { maps } = data;
   const months    = useMemo(() => [...new Set(maps.lm)].sort((a,b) => monthOrder(b)-monthOrder(a)), [maps]);
   const leadTypes = useMemo(() => [...new Set(maps.lt)].sort(), [maps]);
@@ -1305,8 +1382,8 @@ const FilterBar = React.memo(function FilterBar({ data, filters, onFiltersChange
 
   return ce('div', { className:'filter-bar' },
     ce(MultiSelect, { label:'Month',     options:months,    selected:filters.months,    onChange: v => set('months', v) }),
-    ce(MultiSelect, { label:'Lead Type', options:leadTypes, selected:filters.leadTypes, onChange: v => set('leadTypes', v) }),
-    ce(MultiSelect, { label:'Source',    options:sources,   selected:filters.sources,   onChange: v => set('sources', v) }),
+    !viewerMode && ce(MultiSelect, { label:'Lead Type', options:leadTypes, selected:filters.leadTypes, onChange: v => set('leadTypes', v) }),
+    !viewerMode && ce(MultiSelect, { label:'Source',    options:sources,   selected:filters.sources,   onChange: v => set('sources', v) }),
     ce(MultiSelect, { label:'Model',     options:models,    selected:filters.models,    onChange: v => set('models', v) }),
     ce(MultiSelect, { label:'State',     options:states,    selected:filters.states,    onChange: v => set('states', v) }),
     cities.length > 0 && ce(MultiSelect, { label:'City', options:cities, selected:filters.cities, onChange: v => set('cities', v) }),
@@ -1321,6 +1398,238 @@ const FilterBar = React.memo(function FilterBar({ data, filters, onFiltersChange
 });
 
 /* ════════════════════════════════════════════════════════════════════
+   AUTH SCREEN COMPONENTS
+   ════════════════════════════════════════════════════════════════════ */
+function AuthLogo() {
+  return ce('div', { className:'auth-logo' },
+    ce('div', { className:'auth-logo-icon' }, 'TVS'),
+    ce('div', null,
+      ce('div', { style:{fontSize:15,fontWeight:800,color:'#0f172a',letterSpacing:'-.03em'} }, 'TVS Motor Company'),
+      ce('div', { style:{fontSize:11,color:'#E31837',fontWeight:600} }, 'Lead Disposition Dashboard v2.0'),
+    )
+  );
+}
+
+function LoginScreen({ onLogin }) {
+  const [email, setEmail]     = useState('');
+  const [loading, setLoading] = useState(false);
+  const [err, setErr]         = useState('');
+
+  async function handleSubmit(ev) {
+    ev.preventDefault();
+    const e = email.trim().toLowerCase();
+    if (!e) return;
+    setLoading(true); setErr('');
+    try {
+      const res = await apiFetchRole(e);
+      if (res.error) throw new Error(res.error);
+      onLogin(e, '', res.role);
+    } catch(ex) { setErr('Could not verify access: ' + ex.message); }
+    finally { setLoading(false); }
+  }
+
+  return ce('div', { className:'auth-overlay' },
+    ce('div', { className:'auth-card' },
+      ce(AuthLogo),
+      ce('div', { className:'auth-title' }, 'Sign In'),
+      ce('div', { className:'auth-subtitle' }, 'Enter your work email to access the dashboard.'),
+      err && ce('div', { className:'auth-err' }, err),
+      ce('form', { onSubmit: handleSubmit },
+        ce('div', { className:'auth-input-wrap' },
+          ce('label', { className:'auth-label' }, 'Work Email'),
+          ce('input', {
+            className:'auth-input', type:'email', required:true,
+            placeholder:'you@girnarsoft.com',
+            value:email, onChange:ev=>setEmail(ev.target.value), autoFocus:true,
+          })
+        ),
+        ce('button', { className:'auth-btn', type:'submit', disabled:loading },
+          loading ? 'Checking…' : 'Continue →')
+      ),
+      ce('div', { className:'auth-note' },
+        'Access is limited to @girnarsoft.com and @girnarcare.com email addresses.')
+    )
+  );
+}
+
+function RequestAccessScreen({ email, onLogin, onBack }) {
+  const [name, setName]       = useState('');
+  const [loading, setLoading] = useState(false);
+  const [sent, setSent]       = useState(false);
+  const [err, setErr]         = useState('');
+
+  async function handleSubmit(ev) {
+    ev.preventDefault();
+    if (!name.trim()) return;
+    setLoading(true); setErr('');
+    try {
+      const res = await apiRequestAccess(email, name.trim());
+      if (res.error) throw new Error(res.error);
+      if (res.role) { onLogin(email, name.trim(), res.role); return; }
+      setSent(true);
+    } catch(ex) { setErr('Request failed: ' + ex.message); }
+    finally { setLoading(false); }
+  }
+
+  if (sent) return ce('div', { className:'auth-overlay' },
+    ce('div', { className:'auth-card' },
+      ce(AuthLogo),
+      ce('div', { className:'auth-ok' }, '✓ Access request submitted.'),
+      ce('div', { style:{fontSize:13,color:'#475569',lineHeight:1.6} },
+        "Your request has been sent to an admin. You'll be able to sign in once approved."),
+      ce('button', { className:'auth-back', onClick:onBack }, '← Back to sign in')
+    )
+  );
+
+  return ce('div', { className:'auth-overlay' },
+    ce('div', { className:'auth-card' },
+      ce(AuthLogo),
+      ce('div', { className:'auth-title' }, 'Request Access'),
+      ce('div', { className:'auth-subtitle' }, "You don't have access yet. Submit a request and an admin will review it."),
+      err && ce('div', { className:'auth-err' }, err),
+      ce('div', { style:{background:'#F0F4FF',borderRadius:8,padding:'8px 12px',fontSize:11,color:'#475569',marginBottom:16,fontFamily:'DM Mono,monospace'} }, email),
+      ce('form', { onSubmit: handleSubmit },
+        ce('div', { className:'auth-input-wrap' },
+          ce('label', { className:'auth-label' }, 'Your Name'),
+          ce('input', {
+            className:'auth-input', type:'text', required:true,
+            placeholder:'Full name',
+            value:name, onChange:ev=>setName(ev.target.value), autoFocus:true,
+          })
+        ),
+        ce('button', { className:'auth-btn', type:'submit', disabled:loading||!name.trim() },
+          loading ? 'Submitting…' : 'Request Access')
+      ),
+      ce('button', { className:'auth-back', onClick:onBack }, '← Use a different email')
+    )
+  );
+}
+
+function PendingScreen({ email, onRefresh, onBack }) {
+  const [loading, setLoading] = useState(false);
+  async function handleRefresh() {
+    setLoading(true);
+    try { const res = await apiFetchRole(email); onRefresh(res.role); }
+    catch(e) {} finally { setLoading(false); }
+  }
+  return ce('div', { className:'auth-overlay' },
+    ce('div', { className:'auth-card' },
+      ce(AuthLogo),
+      ce('div', { className:'auth-title' }, 'Access Pending'),
+      ce('div', { className:'auth-subtitle' }, "Your access request is awaiting admin approval."),
+      ce('div', { style:{background:'#FEF3C7',border:'1px solid #FDE68A',borderRadius:8,padding:'10px 14px',fontSize:12,color:'#92400E',marginBottom:20} },
+        '⏳ Request pending review'),
+      ce('button', { className:'auth-btn', onClick:handleRefresh, disabled:loading },
+        loading ? 'Checking…' : '↻ Check Again'),
+      ce('button', { className:'auth-back', onClick:onBack }, '← Use a different email')
+    )
+  );
+}
+
+function RestrictedScreen({ onBack }) {
+  return ce('div', { className:'auth-overlay' },
+    ce('div', { className:'auth-card' },
+      ce(AuthLogo),
+      ce('div', { className:'auth-title' }, 'Access Denied'),
+      ce('div', { className:'auth-subtitle' },
+        'This dashboard is only accessible to @girnarsoft.com and @girnarcare.com email addresses.'),
+      ce('div', { style:{background:'#FEE2E2',border:'1px solid #FECACA',borderRadius:8,padding:'10px 14px',fontSize:12,color:'#B91C1C',marginBottom:20} },
+        '⛔ Your email domain is not authorised'),
+      ce('button', { className:'auth-back', onClick:onBack }, '← Try a different email')
+    )
+  );
+}
+
+function AdminPanel({ auth, onLogout }) {
+  const [pending, setPending]     = useState(null);
+  const [loading, setLoading]     = useState(true);
+  const [roleSelections, setRS]   = useState({});
+  const [processing, setProc]     = useState({});
+  const [msg, setMsg]             = useState('');
+
+  useEffect(() => { loadPending(); }, []);
+
+  async function loadPending() {
+    setLoading(true);
+    try { const res = await apiGetPending(auth.email); setPending(res.pending || {}); }
+    catch(e) { setPending({}); } finally { setLoading(false); }
+  }
+
+  async function handleReview(targetEmail, decision) {
+    const role = roleSelections[targetEmail] || 'viewer';
+    setProc(p => ({...p, [targetEmail]:true}));
+    try {
+      await apiReview(auth.email, targetEmail, decision, role);
+      setPending(p => { const n={...p}; delete n[targetEmail]; return n; });
+      setMsg(decision === 'approve' ? `✓ Approved ${targetEmail} as ${role}` : `✓ Rejected ${targetEmail}`);
+      setTimeout(() => setMsg(''), 5000);
+    } catch(e) { alert('Error: ' + e.message); }
+    finally { setProc(p => ({...p, [targetEmail]:false})); }
+  }
+
+  const entries = pending ? Object.entries(pending) : [];
+
+  return ce('div', { style:{minHeight:'100vh',background:'#f8fafc'} },
+    ce('div', { style:{background:'#fff',borderBottom:'1px solid #E2E8F0',padding:'12px 24px',display:'flex',alignItems:'center',justifyContent:'space-between',boxShadow:'0 1px 4px rgba(0,0,0,.06)'} },
+      ce('div', { style:{display:'flex',alignItems:'center',gap:12} },
+        ce('div', { style:{width:36,height:36,borderRadius:10,background:'linear-gradient(135deg,#B01229,#E31837)',display:'flex',alignItems:'center',justifyContent:'center'} },
+          ce('span', { style:{fontSize:14,fontWeight:900,color:'#fff',fontFamily:'DM Mono,monospace',letterSpacing:'-.04em'} }, 'TVS')
+        ),
+        ce('div', null,
+          ce('div', { style:{fontSize:13,fontWeight:800,color:'#0f172a'} }, 'TVS Motor Company'),
+          ce('div', { style:{fontSize:10,color:'#7C3AED',fontWeight:600} }, 'Admin Panel — Lead Disposition Dashboard'),
+        )
+      ),
+      ce('div', { style:{display:'flex',alignItems:'center',gap:10} },
+        ce('div', { className:'user-chip' },
+          ce('div', { className:'user-avatar' }, auth.email[0].toUpperCase()),
+          ce('span', { className:'user-name' }, auth.email),
+          ce('span', { className:'user-role-badge role-admin' }, 'Admin'),
+        ),
+        ce('button', { className:'btn btn-secondary', style:{fontSize:11}, onClick:onLogout }, 'Sign Out'),
+      )
+    ),
+    ce('div', { style:{maxWidth:800,margin:'48px auto',padding:'0 20px'} },
+      ce('div', { className:'card', style:{padding:'28px 32px'} },
+        ce('div', { style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4} },
+          ce('div', { className:'modal-title' }, 'Access Requests'),
+          ce('button', { className:'btn btn-secondary', style:{fontSize:11}, onClick:loadPending, disabled:loading }, loading ? 'Loading…' : '⟳ Refresh')
+        ),
+        ce('div', { className:'modal-sub' }, 'Approve or reject pending access requests.'),
+        msg && ce('div', { className:'auth-ok', style:{marginBottom:12} }, msg),
+        loading
+          ? ce('div', { style:{textAlign:'center',padding:40} }, ce('div', { className:'spinner', style:{margin:'0 auto'} }))
+          : entries.length === 0
+            ? ce('div', { className:'no-pending' }, '🎉 No pending requests')
+            : entries.map(([email, info]) => {
+                const busy = processing[email];
+                const sel  = roleSelections[email] || 'viewer';
+                return ce('div', { key:email, className:'req-card' },
+                  ce('div', { className:'req-card-info' },
+                    ce('div', { className:'req-card-name' }, info.name || '(no name)'),
+                    ce('div', { className:'req-card-email' }, email),
+                    ce('div', { className:'req-card-time' },
+                      'Requested: ' + new Date(info.requestedAt).toLocaleString('en-IN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})),
+                  ),
+                  ce('div', { className:'req-card-actions' },
+                    ce('select', {
+                      className:'role-sel', value:sel,
+                      onChange: ev => setRS(r=>({...r,[email]:ev.target.value}))
+                    },
+                      ce('option',{value:'viewer'},'Viewer'),
+                      ce('option',{value:'full'},'Full Access'),
+                    ),
+                    ce('button', { className:'btn-approve', disabled:busy, onClick:()=>handleReview(email,'approve') }, busy?'…':'Approve'),
+                    ce('button', { className:'btn-reject',  disabled:busy, onClick:()=>handleReview(email,'reject')  }, busy?'…':'Reject'),
+                  )
+                );
+              })
+      )
+    )
+  );
+}
+
+/* ════════════════════════════════════════════════════════════════════
    APP ROOT
    ════════════════════════════════════════════════════════════════════ */
 const TABS = [
@@ -1333,47 +1642,77 @@ const TABS = [
 ];
 
 function App() {
-  const [tab, setTab]             = useState('overview');
+  // ── Auth state (must be before any early returns) ──────────────────
+  const [auth, setAuth]           = useState(() => {
+    try { const s = sessionStorage.getItem(AUTH_SESSION_KEY); return s ? JSON.parse(s) : null; }
+    catch(e) { return null; }
+  });
+  const [authChecking, setAuthChecking] = useState(!!auth); // verify cached session
+
+  // ── Dashboard state ────────────────────────────────────────────────
+  const [tab, setTab]             = useState(() => auth && auth.role === 'viewer' ? 'modelxsrc' : 'overview');
   const [data, setData]           = useState(null);
   const [loading, setLoading]     = useState(false);
   const [err, setErr]             = useState(null);
-  const [lastSync, setLastSync]   = useState(null);
   const [isPending, startT]       = useTransition();
-  const [leadsMode, setLeadsMode] = useState('create'); // 'create' | 'update'
-  const [RT, setRT]               = useState('all');    // 'all' | 'dms' | 'co'
-  const [filters, setFilters]     = useState({ months: new Set(), leadTypes: new Set(), sources: new Set(), models: new Set(), states: new Set(), cities: new Set() });
+  const [leadsMode, setLeadsMode] = useState('create');
+  const [RT, setRT]               = useState('all');
+  const [filters, setFilters]     = useState({ months:new Set(), leadTypes:new Set(), sources:new Set(), models:new Set(), states:new Set(), cities:new Set() });
 
+  // ── Auth helpers ───────────────────────────────────────────────────
+  const handleLogin = useCallback((email, name, role) => {
+    const a = { email, name, role };
+    setAuth(a);
+    try { sessionStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(a)); } catch(e) {}
+    setTab(role === 'viewer' ? 'modelxsrc' : 'overview');
+  }, []);
+
+  const handleLogout = useCallback(() => {
+    try { sessionStorage.removeItem(AUTH_SESSION_KEY); } catch(e) {}
+    setAuth(null);
+  }, []);
+
+  // Verify cached session is still valid
+  useEffect(() => {
+    if (!auth) return;
+    apiFetchRole(auth.email)
+      .then(res => {
+        if (res.role !== auth.role) {
+          const updated = { ...auth, role: res.role };
+          setAuth(updated);
+          try { sessionStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(updated)); } catch(e) {}
+          if (res.role === 'viewer') setTab('modelxsrc');
+        }
+      })
+      .catch(() => {})
+      .finally(() => setAuthChecking(false));
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Data fetching ──────────────────────────────────────────────────
   const doFetch = useCallback(async () => {
     setLoading(true); setErr(null);
     try {
       const parsed = await fetchData();
       setData(parsed);
-      setLastSync(new Date());
       try { localStorage.setItem(CACHE_KEY+'_t', parsed.t); } catch(e) {}
     } catch(e) { setErr(e.message); }
     finally { setLoading(false); }
   }, []);
 
-  useEffect(() => { doFetch(); }, []);
+  useEffect(() => { if (auth && (auth.role === 'full' || auth.role === 'viewer')) doFetch(); }, [auth && auth.role]);
 
-  // Swap in u_* tables when On Update mode is active
+  // ── Derived data ───────────────────────────────────────────────────
   const effectiveData = useMemo(() => {
     if (!data) return null;
     if (leadsMode === 'create' || !data.u_monthly) return data;
     return {
       ...data,
-      monthly: data.u_monthly,
-      sm:      data.u_sm,
-      ltm:     data.u_ltm,
-      mm:      data.u_mm,
-      stm:     data.u_stm,
-      zm:      data.u_zm,
-      bdm:     data.u_bdm,
-      maps:    { ...data.maps, lm: data.maps.u_lm },
+      monthly: data.u_monthly, sm: data.u_sm, ltm: data.u_ltm,
+      mm: data.u_mm, stm: data.u_stm, zm: data.u_zm, bdm: data.u_bdm,
+      maps: { ...data.maps, lm: data.maps.u_lm },
     };
   }, [data, leadsMode]);
 
-  // Compute filtered month list for tabs
   const months = useMemo(() => {
     if (!effectiveData) return [];
     const allM = [...new Set(effectiveData.maps.lm)].sort((a,b) => monthOrder(b)-monthOrder(a));
@@ -1381,36 +1720,57 @@ function App() {
     return allM.filter(m => filters.months.has(m));
   }, [effectiveData, filters.months]);
 
-  // State filter also needs to propagate to StateSourceTab stm filtering
-  // (handled inside StateSourceTab via filters.states)
+  const role       = auth ? auth.role : null;
+  const viewerMode = role === 'viewer';
+  const visibleTabs = viewerMode
+    ? TABS.filter(t => t.id === 'modelxsrc' || t.id === 'statexsrc')
+    : TABS;
 
+  const tabContent = useMemo(() => {
+    if (!effectiveData) return null;
+    const props = { data: effectiveData, filters, months, RT, viewerMode };
+    switch (tab) {
+      case 'overview':  return ce(OverviewTab,    props);
+      case 'source':    return ce(SourceTab,       props);
+      case 'ltxsrc':   return ce(LTSourceTab,      props);
+      case 'modelxsrc':return ce(ModelSourceTab,   props);
+      case 'statexsrc':return ce(StateSourceTab,   props);
+      case 'buying':   return ce(BuyingIntentTab,  props);
+      default: return null;
+    }
+  }, [effectiveData, tab, filters, months, RT, viewerMode]);
+
+  // ── Auth gate — early returns after all hooks ──────────────────────
+  if (authChecking) return ce('div', {
+    style:{display:'flex',alignItems:'center',justifyContent:'center',minHeight:'100vh',
+      background:'linear-gradient(135deg,#001F5B,#B01229)'}
+  }, ce('div', { className:'spinner', style:{width:36,height:36,borderWidth:3,borderColor:'rgba(255,255,255,.3)',borderTopColor:'#fff'} }));
+
+  if (!auth)                    return ce(LoginScreen,         { onLogin: handleLogin });
+  if (role === 'pending')       return ce(PendingScreen,       { email:auth.email, onRefresh: r => handleLogin(auth.email, auth.name||'', r), onBack: handleLogout });
+  if (role === 'restricted')    return ce(RestrictedScreen,    { onBack: handleLogout });
+  if (role === 'none')          return ce(RequestAccessScreen, { email:auth.email, onLogin:(e,n,r)=>handleLogin(e,n,r), onBack: handleLogout });
+  if (role === 'admin')         return ce(AdminPanel,          { auth, onLogout: handleLogout });
+
+  // ── Dashboard (full / viewer) ──────────────────────────────────────
   const syncChip = data && ce('div', {
     style:{fontSize:10,color:'#64748B',background:'#F0F4FF',padding:'2px 10px',borderRadius:20,fontFamily:'DM Mono'}
   }, 'Synced: ' + (data.t ? new Date(data.t).toLocaleString('en-IN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}) : '—'));
 
-  const tabContent = useMemo(() => {
-    if (!effectiveData) return null;
-    const props = { data: effectiveData, filters, months, RT };
-    switch (tab) {
-      case 'overview':  return ce(OverviewTab,     { ...props });
-      case 'source':    return ce(SourceTab,        { ...props });
-      case 'ltxsrc':   return ce(LTSourceTab,       { ...props });
-      case 'modelxsrc':return ce(ModelSourceTab,    { ...props });
-      case 'statexsrc':return ce(StateSourceTab,    { ...props });
-      case 'buying':   return ce(BuyingIntentTab,   { ...props });
-      default: return null;
-    }
-  }, [effectiveData, tab, filters, months, RT]);
+  const userChip = ce('div', { className:'user-chip' },
+    ce('div', { className:'user-avatar' }, auth.email[0].toUpperCase()),
+    ce('span', { className:'user-name' }, auth.name || auth.email),
+    ce('span', { className:'user-role-badge ' + (viewerMode ? 'role-viewer' : 'role-full') },
+      viewerMode ? 'Viewer' : 'Full'),
+  );
 
   return ce('div', { style:{minHeight:'100vh',background:'#f8fafc'} },
 
     // ── Header ──
     ce('div', { style:{background:'#fff',borderBottom:'1px solid #E2E8F0',position:'sticky',top:0,zIndex:100,boxShadow:'0 1px 4px rgba(0,0,0,.06)'} },
       ce('div', { style:{maxWidth:1440,margin:'0 auto',padding:'0 20px'} },
-        // Top bar
         ce('div', { style:{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 0',borderBottom:'1px solid #F1F5F9'} },
           ce('div', { style:{display:'flex',alignItems:'center',gap:12} },
-            // TVS Logo area
             ce('div', { style:{display:'flex',alignItems:'center',gap:8} },
               ce('div', { style:{width:36,height:36,borderRadius:10,background:'linear-gradient(135deg,#B01229,#E31837)',display:'flex',alignItems:'center',justifyContent:'center'} },
                 ce('span', { style:{fontSize:14,fontWeight:900,color:'#fff',fontFamily:'DM Mono,monospace',letterSpacing:'-.04em'} }, 'TVS')
@@ -1424,34 +1784,26 @@ function App() {
             syncChip,
           ),
           ce('div', { style:{display:'flex',gap:8,alignItems:'center'} },
-            // On Create / On Update toggle
             ce('div', { style:{display:'flex',alignItems:'center',background:'#F1F5F9',borderRadius:20,padding:'2px',border:'1px solid #E2E8F0',gap:2} },
               ce('button', {
-                onClick: () => setLeadsMode('create'),
-                style:{
-                  padding:'4px 12px', fontSize:10, fontWeight:700, fontFamily:'inherit',
-                  border:'none', borderRadius:18, cursor:'pointer', transition:'all 120ms',
-                  background: leadsMode==='create' ? '#003087' : 'transparent',
-                  color: leadsMode==='create' ? '#fff' : '#64748B',
-                }
+                onClick:()=>setLeadsMode('create'),
+                style:{padding:'4px 12px',fontSize:10,fontWeight:700,fontFamily:'inherit',border:'none',borderRadius:18,cursor:'pointer',transition:'all 120ms',
+                  background:leadsMode==='create'?'#003087':'transparent',color:leadsMode==='create'?'#fff':'#64748B'}
               }, 'On Create'),
               ce('button', {
-                onClick: () => setLeadsMode('update'),
-                style:{
-                  padding:'4px 12px', fontSize:10, fontWeight:700, fontFamily:'inherit',
-                  border:'none', borderRadius:18, cursor:'pointer', transition:'all 120ms',
-                  background: leadsMode==='update' ? '#003087' : 'transparent',
-                  color: leadsMode==='update' ? '#fff' : '#64748B',
-                }
+                onClick:()=>setLeadsMode('update'),
+                style:{padding:'4px 12px',fontSize:10,fontWeight:700,fontFamily:'inherit',border:'none',borderRadius:18,cursor:'pointer',transition:'all 120ms',
+                  background:leadsMode==='update'?'#003087':'transparent',color:leadsMode==='update'?'#fff':'#64748B'}
               }, 'On Update'),
             ),
             loading && ce('div', { className:'spinner' }),
             ce('button', { className:'btn btn-secondary', style:{fontSize:11}, onClick:doFetch }, '⟳ Refresh'),
+            userChip,
+            ce('button', { className:'btn-ghost', style:{fontSize:11,color:'#64748B'}, onClick:handleLogout }, 'Sign Out'),
           )
         ),
-        // Tab nav
         ce('div', { style:{display:'flex',overflowX:'auto',gap:0} },
-          TABS.map(t => ce('button', {
+          visibleTabs.map(t => ce('button', {
             key: t.id,
             className: 'tab-pill' + (tab === t.id ? ' active' : ''),
             onClick: () => startT(() => setTab(t.id))
@@ -1463,24 +1815,20 @@ function App() {
     // ── Main ──
     ce('div', { style:{maxWidth:1440,margin:'0 auto',padding:'20px'} },
       err && ce('div', { className:'err-box', style:{marginBottom:14} }, '⚠ ' + err),
-
       !effectiveData && !loading && ce('div', { style:{textAlign:'center',padding:60,color:'#94A3B8',fontSize:14} },
         ce('div', { style:{fontSize:32,marginBottom:12} }, '📂'),
         'No data loaded. ',
         ce('button', { onClick:doFetch, style:{color:'#E31837',textDecoration:'underline',background:'none',border:'none',cursor:'pointer',fontSize:'inherit'} }, 'Click to fetch'),
       ),
-
       loading && !effectiveData && ce('div', { style:{textAlign:'center',padding:60} },
         ce('div', { className:'spinner', style:{width:36,height:36,borderWidth:3,margin:'0 auto 16px'} }),
         ce('div', { style:{color:'#64748B',fontSize:13} }, 'Fetching data from Apps Script…')
       ),
-
       effectiveData && ce('div', null,
-        ce(FilterBar, { data: effectiveData, filters, onFiltersChange: f => startT(() => setFilters(f)), RT, setRT }),
+        ce(FilterBar, { data:effectiveData, filters, onFiltersChange:f=>startT(()=>setFilters(f)), RT, setRT, viewerMode }),
         filters.cities && filters.cities.size > 0 && tab !== 'overview' && ce('div', {
-          style:{fontSize:10,color:'#92400E',background:'#FFF3CD',border:'1px solid #F5A623',
-            borderRadius:8,padding:'5px 12px',marginBottom:8}
-        }, '⚠ City filter is active — KPIs and trend chart (Overview tab) reflect selected cities. Source/Model/State/LT grids show all-city totals (city filter requires a schema migration to propagate to all tables).'),
+          style:{fontSize:10,color:'#92400E',background:'#FFF3CD',border:'1px solid #F5A623',borderRadius:8,padding:'5px 12px',marginBottom:8}
+        }, '⚠ City filter is active — KPIs and trend chart reflect selected cities only.'),
         isPending && ce('div', { style:{textAlign:'center',padding:8,color:'#94A3B8',fontSize:11} }, 'Filtering…'),
         tabContent
       )
