@@ -887,7 +887,7 @@ const SourceTab = React.memo(function SourceTab({ data, filters, months, RT }) {
     return { grand, grandSrc, dimAggs };
   }, [sm, maps, filters, getLR]);
 
-  return ce(MonthlyGrids, { months, renderAgg, srcGroups, dimLabel:'Source', expandedGrps, onToggleGrp, noPrefix: true, noGroupHeaders: true });
+  return ce(MonthlyGrids, { months, renderAgg, srcGroups, dimLabel:'Source', expandedGrps, onToggleGrp, noPrefix: true, noGroupHeaders: true, viewerMode: true });
 });
 
 /* ════════════════════════════════════════════════════════════════════
