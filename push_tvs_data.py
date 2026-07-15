@@ -187,7 +187,11 @@ def build_retail_map_from_curr(curr_df):
 def fetch_current_retails():
     """Fetch current-month retails from the separate retails sheet via Apps Script."""
     print("Fetching current-month retails from Apps Script…", flush=True)
-    data = proxy_get("getCurrentRetails")
+    try:
+        data = proxy_get("getCurrentRetails")
+    except Exception as e:
+        print(f"  WARNING: getCurrentRetails failed ({e}); skipping retails sheet.", flush=True)
+        return {}
     if "error" in data:
         print(f"  WARNING: getCurrentRetails error: {data['error']}", flush=True)
         return {}
