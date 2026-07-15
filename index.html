@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -43,22 +43,22 @@ body{font-family:'Inter',system-ui,sans-serif;background:#f8fafc;color:#0f172a;m
 
 /* ── Tables ── */
 table{width:100%;border-collapse:collapse;font-size:11.5px}
-th{padding:9px 12px;font-weight:700;font-size:9.5px;text-transform:uppercase;letter-spacing:.08em;color:#fff;background:linear-gradient(135deg,#0B1629 0%,#001F5B 100%);text-align:center;border:1px solid rgba(255,255,255,.15);white-space:nowrap;position:sticky;top:0;z-index:2}
+th{padding:9px 12px;font-weight:700;font-size:9.5px;text-transform:uppercase;letter-spacing:.08em;color:#1A237E;background:#E8EAF6;text-align:center;border:1px solid #C5CAE9;white-space:nowrap;position:sticky;top:0;z-index:2}
 th.left{text-align:left}
-th.sub{background:linear-gradient(90deg,#0B1E4A,#001F5B);font-size:8.5px;color:#DBEAFE;position:sticky;top:33px;z-index:1;font-weight:600;letter-spacing:.06em}
+th.sub{background:#C5CAE9;font-size:8.5px;color:#283593;position:sticky;top:33px;z-index:1;font-weight:600;letter-spacing:.06em;border:1px solid #9FA8DA}
 th.grp-toggle{cursor:pointer;user-select:none}
-th.grp-toggle:hover{filter:brightness(1.15)}
+th.grp-toggle:hover{filter:brightness(.94)}
 td{padding:7px 12px;border:1px solid #E2E8F0;font-size:11.5px;text-align:center;font-family:'DM Mono',monospace;background:#fff;vertical-align:middle}
 td.label{text-align:left;font-family:'Inter',system-ui,sans-serif;font-weight:600;font-size:12px;color:#0f172a;background:#fff;position:sticky;left:0;z-index:1;border-right:2px solid #E2E8F0;white-space:nowrap}
-td.sub-label{text-align:left;font-family:'Inter',system-ui,sans-serif;font-weight:500;font-size:11px;color:#475569;background:#F8FAFC;position:sticky;left:0;z-index:1;border-right:2px solid #E2E8F0;padding-left:28px;white-space:nowrap}
+td.sub-label{text-align:left;font-family:'Inter',system-ui,sans-serif;font-weight:500;font-size:11px;color:#475569;background:#FAFAFA;position:sticky;left:0;z-index:1;border-right:2px solid #E2E8F0;padding-left:28px;white-space:nowrap}
 tr:hover td{background:#FFF0F2}
 tr:hover td.label{background:#FFF0F2}
 tr:hover td.sub-label{background:#FFF0F2}
-tr.total-row td{background:linear-gradient(90deg,#0B1629,#001F5B);color:#DBEAFE;font-weight:700;border-color:rgba(255,255,255,.15)}
-tr.total-row td.label{background:linear-gradient(90deg,#0B1629,#0B1E4A);color:#93C5FD;font-family:'Inter',system-ui,sans-serif}
-tr.section-row td{background:#F0F4FF;font-weight:700;color:#001F5B;border-top:2px solid #93C5FD;cursor:pointer}
-tr.section-row:hover td{background:#DBEAFE}
-tr.sub-row td{background:#FAFBFC}
+tr.total-row td{background:#F5F5F5;color:#1A1A2E;font-weight:700;border-color:#CFD8DC}
+tr.total-row td.label{background:#ECEFF1;color:#1A237E;font-family:'Inter',system-ui,sans-serif}
+tr.section-row td{background:#E3F2FD;font-weight:700;color:#0D47A1;border-top:2px solid #90CAF9;cursor:pointer}
+tr.section-row:hover td{background:#BBDEFB}
+tr.sub-row td{background:#FAFAFA}
 tr.sub-row:hover td{background:#FFF0F2}
 
 /* ── Badges ── */
@@ -168,15 +168,15 @@ function buildSrcGroups(srcList) {
   if (paidSrcs.length) groups.push({
     id:'paid', label:'PAID', color:'#7C3AED', lightColor:'#EDE9FE', srcs: paidSrcs,
     subGroups: [
-      ...(adw.length ? [{ id:'adwords', label:'ADWORDS', color:'#7C3AED', srcs: adw }] : []),
-      ...(fb.length  ? [{ id:'msfb',    label:'MS FB',   color:'#2563EB', srcs: fb  }] : []),
+      ...(adw.length ? [{ id:'adwords', label:'ADWORDS', color:'#7C3AED', lightColor:'#F3F0FF', srcs: adw }] : []),
+      ...(fb.length  ? [{ id:'msfb',    label:'MS FB',   color:'#2563EB', lightColor:'#EFF6FF', srcs: fb  }] : []),
     ]
   });
   if (orgSrcs.length) groups.push({
     id:'organic', label:'ORG+NON MS', color:'#059669', lightColor:'#D1FAE5', srcs: orgSrcs,
     subGroups: [
-      ...(org.length ? [{ id:'organic', label:'ORGANIC', color:'#059669', srcs: org }] : []),
-      ...(nms.length ? [{ id:'nonms',   label:'NON MS',  color:'#0D9488', srcs: nms }] : []),
+      ...(org.length ? [{ id:'organic', label:'ORGANIC', color:'#059669', lightColor:'#F0FDF4', srcs: org }] : []),
+      ...(nms.length ? [{ id:'nonms',   label:'NON MS',  color:'#0D9488', lightColor:'#CCFBF1', srcs: nms }] : []),
     ]
   });
   return groups;
@@ -448,18 +448,18 @@ const DimGrid = React.memo(function DimGrid({
       const a = grpSum(srcMap, grp.srcs);
       return [
         ce('td', { key: grp.id+'l', style:{ borderLeft:'2px solid '+grp.color+'44' } }, Nf(a.l)),
-        ce('td', { key: grp.id+'r', style:{ color: isTotal ? '#ddd6fe' : grp.color, fontWeight:700 } }, Nf(a.r)),
+        ce('td', { key: grp.id+'r', style:{ color: grp.color, fontWeight:700 } }, Nf(a.r)),
         ce('td', { key: grp.id+'c' }, a.l > 0 ? Pf(contrib(a.l)) : '—'),
-        ce('td', { key: grp.id+'l2r', className: cellClass(a.l2r) }, Pf(a.l2r)),
+        ce('td', { key: grp.id+'l2r', style:{ color:'#D97706', fontWeight:600 } }, Pf(a.l2r)),
       ];
     }
     return grp.subGroups.filter(sg => sg.srcs.length > 0).flatMap((sg, si) => {
       const a = grpSum(srcMap, sg.srcs);
       return [
         ce('td', { key:sg.id+'l', style: si===0 ? {borderLeft:'2px solid '+grp.color+'44'} : {} }, Nf(a.l)),
-        ce('td', { key:sg.id+'r', style:{ color: isTotal ? '#c4b5fd' : sg.color, fontWeight:700 } }, Nf(a.r)),
+        ce('td', { key:sg.id+'r', style:{ color: sg.color, fontWeight:700 } }, Nf(a.r)),
         ce('td', { key:sg.id+'c' }, a.l > 0 ? Pf(contrib(a.l)) : '—'),
-        ce('td', { key:sg.id+'l2r', className: cellClass(a.l2r) }, Pf(a.l2r)),
+        ce('td', { key:sg.id+'l2r', style:{ color:'#D97706', fontWeight:600 } }, Pf(a.l2r)),
       ];
     });
   }
@@ -480,12 +480,12 @@ const DimGrid = React.memo(function DimGrid({
       onClick: canExpand ? () => onToggleRow(dimKey) : undefined,
       style: canExpand ? { cursor:'pointer' } : {}
     },
-      ce('td', { className: tdClass, style: isTotal ? { color:'#93C5FD' } : {} }, labelContent),
+      ce('td', { className: tdClass, style: isTotal ? { color:'#1A237E' } : {} }, labelContent),
       // TOTAL
       ce('td', { key:'tl' }, Nf(tot.l)),
-      ce('td', { key:'tr', style:{ color: isTotal ? '#fca5a5' : '#E31837', fontWeight:700 } }, Nf(tot.r)),
+      ce('td', { key:'tr', style:{ color:'#E31837', fontWeight:700 } }, Nf(tot.r)),
       ce('td', { key:'tc' }, tot.l > 0 ? Pf(contrib(tot.l)) : '—'),
-      ce('td', { key:'tl2r', className: cellClass(tot.l2r) }, l2rBadge(tot.l2r)),
+      ce('td', { key:'tl2r', style:{ color:'#D97706', fontWeight:700 } }, tot.l2r > 0 ? Pf(tot.l2r) : '—'),
       // Groups
       ...srcGroups.flatMap(grp => grpCells(srcMap, grp, isTotal))
     );
@@ -497,8 +497,8 @@ const DimGrid = React.memo(function DimGrid({
 
   // Header row 1
   const hdr1 = [
-    ce('th', { key:'dim', className:'left', rowSpan:2, style:{minWidth:160,zIndex:3} }, dimLabel),
-    ce('th', { key:'tot', colSpan:4, style:{background:'#0B1629'} }, 'TOTAL'),
+    ce('th', { key:'dim', className:'left', rowSpan:2, style:{minWidth:160,zIndex:3,background:'#E8EAF6',color:'#1A237E'} }, dimLabel),
+    ce('th', { key:'tot', colSpan:4, style:{background:'#E8EAF6',color:'#1A237E'} }, 'TOTAL'),
     ...srcGroups.map(grp => {
       const exp = expandedGrps && expandedGrps.has(grp.id);
       const sgs = grp.subGroups.filter(sg => sg.srcs.length > 0);
@@ -506,7 +506,7 @@ const DimGrid = React.memo(function DimGrid({
       return ce('th', {
         key: grp.id, colSpan: cs,
         className: 'grp-toggle',
-        style: { background: grp.color },
+        style: { background: grp.lightColor || '#F3F4F6', color: grp.color, borderTop: '2px solid ' + grp.color },
         onClick: onToggleGrp ? () => onToggleGrp(grp.id) : undefined
       }, (exp ? '▴ ' : '▾ ') + grp.label);
     })
@@ -581,45 +581,67 @@ function MonthlyGrids({ title, months, renderAgg, srcGroups, dimLabel, expandedG
    OVERVIEW TAB
    ════════════════════════════════════════════════════════════════════ */
 const OverviewTab = React.memo(function OverviewTab({ data, filters }) {
-  const { maps, monthly, sm } = data;
+  const { maps, monthly, sm, cm } = data;
   const chartRef = useRef(); const chartInst = useRef();
 
   const allSrcs = useMemo(() => [...new Set(maps.src)], [maps]);
   const srcGroups = useMemo(() => buildSrcGroups(allSrcs), [allSrcs]);
   const paidGrp = srcGroups.find(g => g.id === 'paid');
   const orgGrp  = srcGroups.find(g => g.id === 'organic');
+  const hasCityFilter = filters.cities && filters.cities.size > 0 && cm && maps.city;
 
-  // KPI totals across selected months
+  // KPI totals across selected months — uses cm when city filter active
   const totals = useMemo(() => {
     const allM = !filters.months || filters.months.size === 0;
     const allS = !filters.sources || filters.sources.size === 0;
     let gL=0,gR=0,pL=0,pR=0,oL=0,oR=0;
-    for (const row of sm) {
-      const m = maps.lm[row[1]];
-      if (!allM && !filters.months.has(m)) continue;
-      const src = maps.src[row[0]];
-      if (!allS && !filters.sources.has(src)) continue;
-      const l=row[2],r=row[3];
-      gL+=l; gR+=r;
-      if (paidGrp && paidGrp.srcs.includes(src)) { pL+=l; pR+=r; }
-      if (orgGrp  && orgGrp.srcs.includes(src))  { oL+=l; oR+=r; }
+    if (hasCityFilter) {
+      // Use cm (city×month) — no source breakdown available
+      for (const row of cm) {
+        const city = maps.city[row[0]];
+        if (!filters.cities.has(city)) continue;
+        const m = maps.lm[row[1]];
+        if (!allM && !filters.months.has(m)) continue;
+        gL+=row[2]; gR+=row[3];
+      }
+    } else {
+      for (const row of sm) {
+        const m = maps.lm[row[1]];
+        if (!allM && !filters.months.has(m)) continue;
+        const src = maps.src[row[0]];
+        if (!allS && !filters.sources.has(src)) continue;
+        const l=row[2],r=row[3];
+        gL+=l; gR+=r;
+        if (paidGrp && paidGrp.srcs.includes(src)) { pL+=l; pR+=r; }
+        if (orgGrp  && orgGrp.srcs.includes(src))  { oL+=l; oR+=r; }
+      }
     }
     return { l:gL,r:gR,l2r:gL>0?gR/gL*100:0, pL,pR,pL2r:pL>0?pR/pL*100:0, oL,oR,oL2r:oL>0?oR/oL*100:0 };
-  }, [sm, maps, filters, paidGrp, orgGrp]);
+  }, [sm, cm, maps, filters, paidGrp, orgGrp, hasCityFilter]);
 
-  // Monthly trend data (all months, ignore month filter for trend line)
+  // Monthly trend data — uses cm when city filter active
   const trendData = useMemo(() => {
     const byMonth = new Map();
-    for (const row of monthly) {
-      const m = maps.lm[row[0]];
-      byMonth.set(m, { l: row[1], r: row[2] });
+    if (hasCityFilter) {
+      for (const row of cm) {
+        const city = maps.city[row[0]];
+        if (!filters.cities.has(city)) continue;
+        const m = maps.lm[row[1]];
+        const cur = byMonth.get(m) || [0,0];
+        cur[0]+=row[2]; cur[1]+=row[3]; byMonth.set(m, cur);
+      }
+    } else {
+      for (const row of monthly) {
+        const m = maps.lm[row[0]];
+        byMonth.set(m, [row[1], row[2]]);
+      }
     }
     return [...byMonth.entries()]
       .sort((a,b) => monthOrder(a[0]) - monthOrder(b[0]))
-      .map(([m, v]) => ({ m, l: v.l, r: v.r, l2r: v.l>0 ? v.r/v.l*100 : 0 }));
-  }, [monthly, maps]);
+      .map(([m, v]) => ({ m, l: v[0], r: v[1], l2r: v[0]>0 ? v[1]/v[0]*100 : 0 }));
+  }, [monthly, cm, maps, filters, hasCityFilter]);
 
-  // Source breakdown
+  // Source breakdown (city filter note: cm has no source dim, so srcBreak ignores city filter)
   const srcBreak = useMemo(() => {
     const allM = !filters.months || filters.months.size === 0;
     const allS = !filters.sources || filters.sources.size === 0;
@@ -691,7 +713,7 @@ const OverviewTab = React.memo(function OverviewTab({ data, filters }) {
     ),
     ce('div', { className:'card', style:{padding:'16px 18px',marginBottom:14} },
       ce('div', { style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8} },
-        ce('div', { className:'section-title', style:{marginBottom:0} }, 'Source Summary'),
+        ce('div', { className:'section-title', style:{marginBottom:0} }, hasCityFilter ? 'Source Summary (all cities — city filter applies to KPIs & trend only)' : 'Source Summary'),
         ce(ExportBtn, { onClick:() => {
           const aoa=[['Source','Leads','Retails','Contrib%','L2R%']];
           for (const s of srcBreak) aoa.push([s.src,s.l,s.r,+(s.l/totals.l*100).toFixed(2),+s.l2r.toFixed(2)]);
@@ -704,9 +726,9 @@ const OverviewTab = React.memo(function OverviewTab({ data, filters }) {
           ce('thead', null, ce('tr', null,
             ce('th', { className:'left', style:{minWidth:140} }, 'Source'),
             ce('th', null, 'Leads'),
-            ce('th', { style:{background:'#E31837'} }, 'Retails'),
+            ce('th', { style:{background:'#FFEBEE',color:'#B71C1C'} }, 'Retails'),
             ce('th', null, 'Contrib%'),
-            ce('th', { style:{background:'#F5A623',color:'#111'} }, 'L2R%'),
+            ce('th', { style:{background:'#FFF8E1',color:'#E65100'} }, 'L2R%'),
           )),
           ce('tbody', null,
             ...srcBreak.map((s,i) => ce('tr', { key:i },
@@ -714,14 +736,14 @@ const OverviewTab = React.memo(function OverviewTab({ data, filters }) {
               ce('td', null, Nf(s.l)),
               ce('td', { style:{color:'#E31837',fontWeight:700} }, Nf(s.r)),
               ce('td', null, totals.l > 0 ? Pf(s.l/totals.l*100) : '—'),
-              ce('td', null, l2rBadge(s.l2r)),
+              ce('td', { style:{color:'#D97706',fontWeight:600} }, Pf(s.l2r)),
             )),
             ce('tr', { className:'total-row' },
               ce('td', { className:'label' }, '∑ Grand Total'),
               ce('td', null, Nf(totals.l)),
-              ce('td', { style:{color:'#fca5a5',fontWeight:700} }, Nf(totals.r)),
+              ce('td', { style:{color:'#E31837',fontWeight:700} }, Nf(totals.r)),
               ce('td', null, '100.0%'),
-              ce('td', null, ce('span', { style:{color:'#fde68a',fontWeight:700} }, totals.l2r.toFixed(1)+'%')),
+              ce('td', null, ce('span', { style:{color:'#D97706',fontWeight:700} }, totals.l2r.toFixed(1)+'%')),
             )
           )
         )
@@ -776,10 +798,8 @@ const LTSourceTab = React.memo(function LTSourceTab({ data, filters, months }) {
   const { maps, ltm } = data;
   const allSrcs = useMemo(() => [...new Set(maps.src)], [maps]);
   const srcGroups = useMemo(() => buildSrcGroups(allSrcs), [allSrcs]);
-  const allLTs = useMemo(() => [...new Set(maps.lt)].sort(), [maps]);
   const [expandedGrps, setExpandedGrps] = useState(new Set());
   const [expandedRows, setExpandedRows] = useState(new Set());
-  const [ltFilter, setLtFilter] = useState('All');
   const onToggleGrp = useCallback(id => setExpandedGrps(prev => {
     const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n;
   }), []);
@@ -788,14 +808,14 @@ const LTSourceTab = React.memo(function LTSourceTab({ data, filters, months }) {
   }), []);
 
   const renderAgg = useCallback((M) => {
-    const allS = !filters.sources || filters.sources.size === 0;
+    const allLT = !filters.leadTypes || filters.leadTypes.size === 0;
     return aggMonth(
       ltm, maps, M, filters.sources,
-      (row,maps) => { const lt=maps.lt[row[0]]; return ltFilter==='All'||lt===ltFilter ? lt : null; },
+      (row,maps) => { const lt=maps.lt[row[0]]; return allLT||filters.leadTypes.has(lt) ? lt : null; },
       (row,maps) => maps.src[row[1]],
       (row,maps) => maps.lm[row[2]]
     );
-  }, [ltm, maps, filters, ltFilter]);
+  }, [ltm, maps, filters]);
 
   // Sub-rows: for a given LT, show source breakdown
   const subRowsFn = useCallback((ltKey, da) => {
@@ -810,14 +830,6 @@ const LTSourceTab = React.memo(function LTSourceTab({ data, filters, months }) {
   }, []);
 
   return ce('div', { className:'fade-up' },
-    ce('div', { className:'filter-bar', style:{marginBottom:10} },
-      ce('label', null, 'Lead Type'),
-      ce('select', { value: ltFilter, onChange: e => setLtFilter(e.target.value),
-        style:{border:'1px solid #CBD5E1',borderRadius:20,padding:'4px 14px',fontSize:11,fontFamily:'inherit',outline:'none',background:'#fff',cursor:'pointer'} },
-        ce('option', { value:'All' }, 'All Lead Types'),
-        allLTs.map(lt => ce('option', { key:lt, value:lt }, lt))
-      )
-    ),
     ce(MonthlyGrids, { title:'Lead Type × Source', months, renderAgg, srcGroups, dimLabel:'Lead Type',
       expandedGrps, onToggleGrp, expandedRows, onToggleRow, subRowsFn })
   );
@@ -929,9 +941,9 @@ const StateSourceTab = React.memo(function StateSourceTab({ data, filters, month
         const a = grpSum(srcMap, grp.srcs);
         return [
           ce('td', { key:grp.id+'l', style:{borderLeft:'2px solid '+grp.color+'44'} }, Nf(a.l)),
-          ce('td', { key:grp.id+'r', style:{color: isZone ? '#ddd6fe' : grp.color, fontWeight:700} }, Nf(a.r)),
+          ce('td', { key:grp.id+'r', style:{color:grp.color, fontWeight:700} }, Nf(a.r)),
           ce('td', { key:grp.id+'c' }, gL>0 ? Pf(a.l/gL*100) : '—'),
-          ce('td', { key:grp.id+'l2r', className:cellClass(a.l2r) }, Pf(a.l2r)),
+          ce('td', { key:grp.id+'l2r', style:{color:'#D97706',fontWeight:600} }, Pf(a.l2r)),
         ];
       }
       return grp.subGroups.filter(sg => sg.srcs.length > 0).flatMap((sg,si) => {
@@ -940,7 +952,7 @@ const StateSourceTab = React.memo(function StateSourceTab({ data, filters, month
           ce('td', { key:sg.id+'l', style: si===0?{borderLeft:'2px solid '+grp.color+'44'}:{} }, Nf(a.l)),
           ce('td', { key:sg.id+'r', style:{color:sg.color,fontWeight:700} }, Nf(a.r)),
           ce('td', { key:sg.id+'c' }, gL>0 ? Pf(a.l/gL*100) : '—'),
-          ce('td', { key:sg.id+'l2r', className:cellClass(a.l2r) }, Pf(a.l2r)),
+          ce('td', { key:sg.id+'l2r', style:{color:'#D97706',fontWeight:600} }, Pf(a.l2r)),
         ];
       });
     }
@@ -955,13 +967,13 @@ const StateSourceTab = React.memo(function StateSourceTab({ data, filters, month
     }
 
     const hdr1 = [
-      ce('th', { key:'dim', className:'left', rowSpan:2, style:{minWidth:150,zIndex:3} }, 'Zone / State'),
-      ce('th', { key:'tot', colSpan:4, style:{background:'#0B1629'} }, 'TOTAL'),
+      ce('th', { key:'dim', className:'left', rowSpan:2, style:{minWidth:150,zIndex:3,background:'#E8EAF6',color:'#1A237E'} }, 'Zone / State'),
+      ce('th', { key:'tot', colSpan:4, style:{background:'#E8EAF6',color:'#1A237E'} }, 'TOTAL'),
       ...srcGroups.map(grp => {
         const exp = expandedGrps.has(grp.id);
         const sgs = grp.subGroups.filter(sg=>sg.srcs.length>0);
         return ce('th', { key:grp.id, colSpan: exp ? sgs.length*4 : 4,
-          className:'grp-toggle', style:{background:grp.color},
+          className:'grp-toggle', style:{background:grp.lightColor||'#F3F4F6',color:grp.color,borderTop:'2px solid '+grp.color},
           onClick:() => onToggleGrp(grp.id)
         }, (exp?'▴ ':'▾ ')+grp.label);
       })
@@ -990,9 +1002,9 @@ const StateSourceTab = React.memo(function StateSourceTab({ data, filters, month
 
     // Grand Total row
     bodyRows.push(ce('tr', { key:'gtotal', className:'total-row' },
-      ce('td', { className:'label', style:{color:'#93C5FD'} }, '∑ Grand Total'),
-      ce('td', null, Nf(gL)), ce('td', { style:{color:'#fca5a5',fontWeight:700} }, Nf(gR)),
-      ce('td', null, '100.0%'), ce('td', null, l2rBadge(grand.l2r)),
+      ce('td', { className:'label', style:{color:'#1A237E'} }, '∑ Grand Total'),
+      ce('td', null, Nf(gL)), ce('td', { style:{color:'#E31837',fontWeight:700} }, Nf(gR)),
+      ce('td', null, '100.0%'), ce('td', { style:{color:'#D97706',fontWeight:700} }, grand.l2r>0 ? Pf(grand.l2r) : '—'),
       ...srcGroups.flatMap(grp => grpCells(grandSrc, grp, true))
     ));
 
@@ -1005,14 +1017,14 @@ const StateSourceTab = React.memo(function StateSourceTab({ data, filters, month
 
       bodyRows.push(ce('tr', { key:'zone_'+zone, className:'section-row',
         onClick:() => onToggleZone(zone), style:{cursor:'pointer'} },
-        ce('td', { className:'label', style:{color:'#001F5B'} },
+        ce('td', { className:'label', style:{color:'#0D47A1'} },
           ce('span', { style:{display:'flex',alignItems:'center',gap:6} },
             ce('span', { style:{fontSize:11} }, isExpZ ? '▾' : '▸'),
             zone + ' Zone'
           )
         ),
-        ce('td', null, Nf(zTot.l)), ce('td', { style:{color:'#003087',fontWeight:700} }, Nf(zTot.r)),
-        ce('td', null, gL>0 ? Pf(zTot.l/gL*100) : '—'), ce('td', null, l2rBadge(zTot.l2r)),
+        ce('td', null, Nf(zTot.l)), ce('td', { style:{color:'#1565C0',fontWeight:700} }, Nf(zTot.r)),
+        ce('td', null, gL>0 ? Pf(zTot.l/gL*100) : '—'), ce('td', { style:{color:'#D97706',fontWeight:700} }, zTot.l2r>0 ? Pf(zTot.l2r) : '—'),
         ...srcGroups.flatMap(grp => grpCells(zSrcMap, grp, false))
       ));
 
@@ -1025,7 +1037,7 @@ const StateSourceTab = React.memo(function StateSourceTab({ data, filters, month
           bodyRows.push(ce('tr', { key:'state_'+state, className:'sub-row' },
             ce('td', { className:'sub-label' }, state),
             ce('td', null, Nf(sTot.l)), ce('td', { style:{color:'#E31837',fontWeight:700} }, Nf(sTot.r)),
-            ce('td', null, gL>0 ? Pf(sTot.l/gL*100) : '—'), ce('td', null, l2rBadge(sTot.l2r)),
+            ce('td', null, gL>0 ? Pf(sTot.l/gL*100) : '—'), ce('td', { style:{color:'#D97706',fontWeight:600} }, sTot.l2r>0 ? Pf(sTot.l2r) : '—'),
             ...srcGroups.flatMap(grp => grpCells(sSrcMap, grp, false))
           ));
         }
@@ -1136,22 +1148,26 @@ const BuyingIntentTab = React.memo(function BuyingIntentTab({ data, filters, mon
    ════════════════════════════════════════════════════════════════════ */
 const FilterBar = React.memo(function FilterBar({ data, filters, onFiltersChange }) {
   const { maps } = data;
-  const months  = useMemo(() => [...new Set(maps.lm)].sort((a,b) => monthOrder(a)-monthOrder(b)), [maps]);
-  const sources  = useMemo(() => [...new Set(maps.src)].sort(), [maps]);
-  const models   = useMemo(() => [...new Set(maps.mdl)].sort(), [maps]);
-  const states   = useMemo(() => [...new Set(maps.st)].sort(), [maps]);
+  const months    = useMemo(() => [...new Set(maps.lm)].sort((a,b) => monthOrder(a)-monthOrder(b)), [maps]);
+  const leadTypes = useMemo(() => [...new Set(maps.lt)].sort(), [maps]);
+  const sources   = useMemo(() => [...new Set(maps.src)].sort(), [maps]);
+  const models    = useMemo(() => [...new Set(maps.mdl)].sort(), [maps]);
+  const states    = useMemo(() => [...new Set(maps.st)].sort(), [maps]);
+  const cities    = useMemo(() => maps.city ? [...new Set(maps.city)].sort() : [], [maps]);
 
   function set(key, val) { onFiltersChange({ ...filters, [key]: val }); }
-  function reset() { onFiltersChange({ months: new Set(), sources: new Set(), models: new Set(), states: new Set() }); }
+  function reset() { onFiltersChange({ months: new Set(), leadTypes: new Set(), sources: new Set(), models: new Set(), states: new Set(), cities: new Set() }); }
 
-  const hasAnyFilter = [filters.months, filters.sources, filters.models, filters.states]
+  const hasAnyFilter = [filters.months, filters.leadTypes, filters.sources, filters.models, filters.states, filters.cities]
     .some(s => s && s.size > 0);
 
   return ce('div', { className:'filter-bar' },
-    ce(MultiSelect, { label:'Month',  options:months,  selected:filters.months,  onChange: v => set('months', v) }),
-    ce(MultiSelect, { label:'Source', options:sources,  selected:filters.sources, onChange: v => set('sources', v) }),
-    ce(MultiSelect, { label:'Model',  options:models,  selected:filters.models,  onChange: v => set('models', v) }),
-    ce(MultiSelect, { label:'State',  options:states,  selected:filters.states,  onChange: v => set('states', v) }),
+    ce(MultiSelect, { label:'Month',     options:months,    selected:filters.months,    onChange: v => set('months', v) }),
+    ce(MultiSelect, { label:'Lead Type', options:leadTypes, selected:filters.leadTypes, onChange: v => set('leadTypes', v) }),
+    ce(MultiSelect, { label:'Source',    options:sources,   selected:filters.sources,   onChange: v => set('sources', v) }),
+    ce(MultiSelect, { label:'Model',     options:models,    selected:filters.models,    onChange: v => set('models', v) }),
+    ce(MultiSelect, { label:'State',     options:states,    selected:filters.states,    onChange: v => set('states', v) }),
+    cities.length > 0 && ce(MultiSelect, { label:'City', options:cities, selected:filters.cities, onChange: v => set('cities', v) }),
     hasAnyFilter && ce('button', { className:'btn-ghost', onClick:reset }, '✕ Reset All'),
     !hasAnyFilter && ce('span', { style:{fontSize:10,color:'#94A3B8',fontFamily:'DM Mono'} }, 'Showing all data'),
   );
@@ -1176,7 +1192,8 @@ function App() {
   const [err, setErr]             = useState(null);
   const [lastSync, setLastSync]   = useState(null);
   const [isPending, startT]       = useTransition();
-  const [filters, setFilters]     = useState({ months: new Set(), sources: new Set(), models: new Set(), states: new Set() });
+  const [leadsMode, setLeadsMode] = useState('create'); // 'create' | 'update'
+  const [filters, setFilters]     = useState({ months: new Set(), leadTypes: new Set(), sources: new Set(), models: new Set(), states: new Set(), cities: new Set() });
 
   const doFetch = useCallback(async () => {
     setLoading(true); setErr(null);
@@ -1242,6 +1259,27 @@ function App() {
             syncChip,
           ),
           ce('div', { style:{display:'flex',gap:8,alignItems:'center'} },
+            // On Create / On Update toggle
+            ce('div', { style:{display:'flex',alignItems:'center',background:'#F1F5F9',borderRadius:20,padding:'2px',border:'1px solid #E2E8F0',gap:2} },
+              ce('button', {
+                onClick: () => setLeadsMode('create'),
+                style:{
+                  padding:'4px 12px', fontSize:10, fontWeight:700, fontFamily:'inherit',
+                  border:'none', borderRadius:18, cursor:'pointer', transition:'all 120ms',
+                  background: leadsMode==='create' ? '#003087' : 'transparent',
+                  color: leadsMode==='create' ? '#fff' : '#64748B',
+                }
+              }, 'On Create'),
+              ce('button', {
+                onClick: () => setLeadsMode('update'),
+                style:{
+                  padding:'4px 12px', fontSize:10, fontWeight:700, fontFamily:'inherit',
+                  border:'none', borderRadius:18, cursor:'pointer', transition:'all 120ms',
+                  background: leadsMode==='update' ? '#003087' : 'transparent',
+                  color: leadsMode==='update' ? '#fff' : '#64748B',
+                }
+              }, 'On Update'),
+            ),
             loading && ce('div', { className:'spinner' }),
             ce('button', { className:'btn btn-secondary', style:{fontSize:11}, onClick:doFetch }, '⟳ Refresh'),
           )
@@ -1273,7 +1311,24 @@ function App() {
       ),
 
       data && ce('div', null,
+        leadsMode === 'update' && ce('div', {
+          style:{
+            background:'#FFF3CD', border:'1px solid #F5A623', borderRadius:10,
+            padding:'10px 16px', marginBottom:12, fontSize:12, color:'#92400E',
+            display:'flex', alignItems:'center', gap:10
+          }
+        },
+          ce('span', { style:{fontSize:16} }, '⚠'),
+          ce('span', null,
+            ce('strong', null, 'On Update mode: '),
+            'Update month data is not available in the current dataset — no "Update Month" or "Modified Month" column was found in the leads file. Showing On Create data. To enable On Update mode, add an update month column to the source XLSX and re-push.'
+          )
+        ),
         ce(FilterBar, { data, filters, onFiltersChange: f => startT(() => setFilters(f)) }),
+        filters.cities && filters.cities.size > 0 && tab !== 'overview' && ce('div', {
+          style:{fontSize:10,color:'#92400E',background:'#FFF3CD',border:'1px solid #F5A623',
+            borderRadius:8,padding:'5px 12px',marginBottom:8}
+        }, '⚠ City filter is active — KPIs and trend chart (Overview tab) reflect selected cities. Source/Model/State/LT grids show all-city totals (city filter requires a schema migration to propagate to all tables).'),
         isPending && ce('div', { style:{textAlign:'center',padding:8,color:'#94A3B8',fontSize:11} }, 'Filtering…'),
         tabContent
       )
