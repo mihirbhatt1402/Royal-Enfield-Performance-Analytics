@@ -60,6 +60,10 @@ tr.section-row td{background:#E3F2FD;font-weight:700;color:#0D47A1;border-top:2p
 tr.section-row:hover td{background:#BBDEFB}
 tr.sub-row td{background:#FAFAFA}
 tr.sub-row:hover td{background:#FFF0F2}
+tr.city-row td{background:#F0FDF4}
+tr.city-row:hover td{background:#DCFCE7}
+tr.dealer-row td{background:#FAFAFA;border-top:none}
+tr.dealer-row:hover td{background:#FEF3C7}
 
 /* ── Badges ── */
 .badge{display:inline-block;padding:2px 9px;border-radius:20px;font-size:10px;font-weight:700;font-family:'DM Mono',monospace;white-space:nowrap}
@@ -869,50 +873,95 @@ const ModelSourceTab = React.memo(function ModelSourceTab({ data, filters, month
 });
 
 /* ════════════════════════════════════════════════════════════════════
-   STATE × SOURCE TAB  (with Zone group rows)
+   STATE × SOURCE TAB  (Zone → State → City → Dealer drill-down)
    ════════════════════════════════════════════════════════════════════ */
 const StateSourceTab = React.memo(function StateSourceTab({ data, filters, months }) {
-  const { maps, stm, zm } = data;
-  const allSrcs = useMemo(() => [...new Set(maps.src)], [maps]);
+  const { maps, stm } = data;
+  const cm  = data.cm  || [];
+  const cdm = data.cdm || [];
+  const hasCities  = !!(maps.city && maps.city_state && cm.length > 0);
+  const hasDealers = !!(maps.dl && cdm.length > 0);
+
+  const allSrcs   = useMemo(() => [...new Set(maps.src)], [maps]);
   const srcGroups = useMemo(() => buildSrcGroups(allSrcs), [allSrcs]);
   const [expandedGrps, setExpandedGrps] = useState(new Set());
-  const [expandedZones, setExpandedZones] = useState(new Set(['North','West','South','East','Central','Northeast']));
   const onToggleGrp = useCallback(id => setExpandedGrps(prev => {
     const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n;
   }), []);
-  const onToggleZone = useCallback(z => setExpandedZones(prev => {
-    const n = new Set(prev); n.has(z) ? n.delete(z) : n.add(z); return n;
-  }), []);
+
+  // Exclusive accordion — only one node open per level
+  const [openZone,  setOpenZone]  = useState(null);
+  const [openState, setOpenState] = useState(null);
+  const [openCity,  setOpenCity]  = useState(null);
+
+  const onClickZone  = useCallback(z => { setOpenZone(p => p===z?null:z); setOpenState(null); setOpenCity(null); }, []);
+  const onClickState = useCallback(s => { setOpenState(p => p===s?null:s); setOpenCity(null); }, []);
+  const onClickCity  = useCallback(c => { setOpenCity(p => p===c?null:c); }, []);
+
+  // Precompute city → index reverse map (O(1) lookup vs indexOf)
+  const cityIndexMap = useMemo(() => {
+    if (!maps.city) return new Map();
+    return new Map(maps.city.map((c,i) => [c,i]));
+  }, [maps.city]);
 
   const renderMonthGrid = useCallback((M) => {
-    const allS = !filters.sources || filters.sources.size === 0;
-    const allSt = !filters.states || filters.states.size === 0;
+    const allSrcF  = !filters.sources || filters.sources.size === 0;
+    const allStateF = !filters.states  || filters.states.size  === 0;
 
-    // Build state × src data for this month
-    const stateData = new Map(); // state → { src → [l,r], total:[l,r] }
+    // ── State × Source totals ──
+    const stateData = new Map(); // state → { total:[l,r], byS: Map<src,[l,r]> }
     let gL=0, gR=0;
     const grandSrcMap = new Map();
 
     for (const row of stm) {
       if (maps.lm[row[2]] !== M) continue;
       const state = maps.st[row[0]];
-      if (!allSt && !filters.states.has(state)) continue;
+      if (!allStateF && !filters.states.has(state)) continue;
       const src = maps.src[row[1]];
-      if (!allS && !filters.sources.has(src)) continue;
-      const l=row[3],r=row[4];
+      if (!allSrcF && !filters.sources.has(src)) continue;
+      const l=row[3], r=row[4];
       gL+=l; gR+=r;
-      if (!stateData.has(state)) stateData.set(state, { total:[0,0], byS: new Map() });
+      if (!stateData.has(state)) stateData.set(state, { total:[0,0], byS:new Map() });
       const sd = stateData.get(state);
       sd.total[0]+=l; sd.total[1]+=r;
       const c = sd.byS.get(src)||[0,0]; c[0]+=l; c[1]+=r; sd.byS.set(src,c);
       const gc = grandSrcMap.get(src)||[0,0]; gc[0]+=l; gc[1]+=r; grandSrcMap.set(src,gc);
     }
 
-    // Group states into zones
-    const zoneData = new Map(); // zone → { states: [state,...], total:[l,r], bySrc: Map }
+    // ── City totals for the open state (from cm + city_state map) ──
+    const cityData = new Map(); // city → [l,r]
+    if (openState && hasCities) {
+      for (const row of cm) {
+        if (maps.lm[row[1]] !== M) continue;
+        const cti = row[0];
+        const sti = maps.city_state[cti];
+        if (sti == null || maps.st[sti] !== openState) continue;
+        const city = maps.city[cti];
+        const cur = cityData.get(city)||[0,0];
+        cur[0]+=row[2]; cur[1]+=row[3]; cityData.set(city, cur);
+      }
+    }
+
+    // ── Dealer totals for the open city (from cdm) ──
+    const dealerData = new Map(); // dealer → [l,r]
+    if (openCity && hasDealers) {
+      const oci = cityIndexMap.get(openCity) ?? -1;
+      if (oci >= 0) {
+        for (const row of cdm) {
+          if (row[0] !== oci) continue;
+          if (maps.lm[row[2]] !== M) continue;
+          const dl = maps.dl[row[1]];
+          const cur = dealerData.get(dl)||[0,0];
+          cur[0]+=row[3]; cur[1]+=row[4]; dealerData.set(dl, cur);
+        }
+      }
+    }
+
+    // ── Group states into zones ──
+    const zoneData = new Map();
     for (const [state, sd] of stateData) {
       const zone = getZone(state);
-      if (!zoneData.has(zone)) zoneData.set(zone, { states:[], total:[0,0], bySrc: new Map() });
+      if (!zoneData.has(zone)) zoneData.set(zone, { states:[], total:[0,0], bySrc:new Map() });
       const zd = zoneData.get(zone);
       zd.states.push(state);
       zd.total[0]+=sd.total[0]; zd.total[1]+=sd.total[1];
@@ -924,8 +973,6 @@ const StateSourceTab = React.memo(function StateSourceTab({ data, filters, month
     const grandSrc = {};
     for (const [s,v] of grandSrcMap) grandSrc[s] = fin(v[0],v[1]);
     const grand = fin(gL,gR);
-
-    // Render
     const ZONE_ORDER = ['North','West','South','East','Central','Northeast','Other'];
 
     function buildSrcMap(bySrc) {
@@ -934,47 +981,53 @@ const StateSourceTab = React.memo(function StateSourceTab({ data, filters, month
       return sm;
     }
 
-    function grpCells(srcMap, grp, isZone) {
+    function grpCells(srcMap, grp) {
       const exp = expandedGrps.has(grp.id);
       if (!exp) {
         const a = grpSum(srcMap, grp.srcs);
         return [
-          ce('td', { key:grp.id+'l', style:{borderLeft:'2px solid '+grp.color+'44'} }, Nf(a.l)),
-          ce('td', { key:grp.id+'r', style:{color:grp.color, fontWeight:700} }, Nf(a.r)),
-          ce('td', { key:grp.id+'c' }, gL>0 ? Pf(a.l/gL*100) : '—'),
-          ce('td', { key:grp.id+'l2r', style:{color:'#D97706',fontWeight:600} }, Pf(a.l2r)),
+          ce('td',{key:grp.id+'l',style:{borderLeft:'2px solid '+grp.color+'44'}},Nf(a.l)),
+          ce('td',{key:grp.id+'r',style:{color:grp.color,fontWeight:700}},Nf(a.r)),
+          ce('td',{key:grp.id+'c'},gL>0?Pf(a.l/gL*100):'—'),
+          ce('td',{key:grp.id+'l2r',style:{color:'#D97706',fontWeight:600}},Pf(a.l2r)),
         ];
       }
-      return grp.subGroups.filter(sg => sg.srcs.length > 0).flatMap((sg,si) => {
-        const a = grpSum(srcMap, sg.srcs);
+      return grp.subGroups.filter(sg=>sg.srcs.length>0).flatMap((sg,si) => {
+        const a = grpSum(srcMap,sg.srcs);
         return [
-          ce('td', { key:sg.id+'l', style: si===0?{borderLeft:'2px solid '+grp.color+'44'}:{} }, Nf(a.l)),
-          ce('td', { key:sg.id+'r', style:{color:sg.color,fontWeight:700} }, Nf(a.r)),
-          ce('td', { key:sg.id+'c' }, gL>0 ? Pf(a.l/gL*100) : '—'),
-          ce('td', { key:sg.id+'l2r', style:{color:'#D97706',fontWeight:600} }, Pf(a.l2r)),
+          ce('td',{key:sg.id+'l',style:si===0?{borderLeft:'2px solid '+grp.color+'44'}:{}},Nf(a.l)),
+          ce('td',{key:sg.id+'r',style:{color:sg.color,fontWeight:700}},Nf(a.r)),
+          ce('td',{key:sg.id+'c'},gL>0?Pf(a.l/gL*100):'—'),
+          ce('td',{key:sg.id+'l2r',style:{color:'#D97706',fontWeight:600}},Pf(a.l2r)),
         ];
       });
     }
 
-    // Total col count
-    function totalCols() {
-      return 5 + srcGroups.reduce((s,grp) => {
+    // Blank source cells for city/dealer rows (no source breakdown at those levels)
+    function blankSrcCells(bgColor) {
+      return srcGroups.flatMap((grp,gi) => {
         const exp = expandedGrps.has(grp.id);
-        if (!exp) return s+4;
-        return s + grp.subGroups.filter(sg=>sg.srcs.length>0).length*4;
-      }, 0);
+        const slots = exp ? grp.subGroups.filter(sg=>sg.srcs.length>0).length : 1;
+        return Array.from({length:slots},(_,i) => [
+          ce('td',{key:grp.id+i+'l',style:{color:'#CBD5E1',background:bgColor,borderLeft:i===0?'2px solid '+grp.color+'22':undefined}},''),
+          ce('td',{key:grp.id+i+'r',style:{color:'#CBD5E1',background:bgColor}},''),
+          ce('td',{key:grp.id+i+'c',style:{color:'#CBD5E1',background:bgColor}},''),
+          ce('td',{key:grp.id+i+'q',style:{color:'#CBD5E1',background:bgColor}},''),
+        ]).flat();
+      });
     }
 
+    // ── Headers ──
     const hdr1 = [
-      ce('th', { key:'dim', className:'left', rowSpan:2, style:{minWidth:150,zIndex:3,background:'#E8EAF6',color:'#1A237E'} }, 'Zone / State'),
-      ce('th', { key:'tot', colSpan:4, style:{background:'#E8EAF6',color:'#1A237E'} }, 'TOTAL'),
+      ce('th',{key:'dim',className:'left',rowSpan:2,style:{minWidth:220,zIndex:3,background:'#E8EAF6',color:'#1A237E'}},'Zone / State / City / Dealer'),
+      ce('th',{key:'tot',colSpan:4,style:{background:'#E8EAF6',color:'#1A237E'}},'TOTAL'),
       ...srcGroups.map(grp => {
         const exp = expandedGrps.has(grp.id);
         const sgs = grp.subGroups.filter(sg=>sg.srcs.length>0);
-        return ce('th', { key:grp.id, colSpan: exp ? sgs.length*4 : 4,
-          className:'grp-toggle', style:{background:grp.lightColor||'#F3F4F6',color:grp.color,borderTop:'2px solid '+grp.color},
-          onClick:() => onToggleGrp(grp.id)
-        }, (exp?'▴ ':'▾ ')+grp.label);
+        return ce('th',{key:grp.id,colSpan:exp?sgs.length*4:4,
+          className:'grp-toggle',style:{background:grp.lightColor||'#F3F4F6',color:grp.color,borderTop:'2px solid '+grp.color},
+          onClick:()=>onToggleGrp(grp.id)
+        },(exp?'▴ ':'▾ ')+grp.label);
       })
     ];
     const hdr2 = [
@@ -999,52 +1052,104 @@ const StateSourceTab = React.memo(function StateSourceTab({ data, filters, month
 
     const bodyRows = [];
 
-    // Grand Total row
-    bodyRows.push(ce('tr', { key:'gtotal', className:'total-row' },
-      ce('td', { className:'label', style:{color:'#1A237E'} }, '∑ Grand Total'),
-      ce('td', null, Nf(gL)), ce('td', { style:{color:'#E31837',fontWeight:700} }, Nf(gR)),
-      ce('td', null, '100.0%'), ce('td', { style:{color:'#D97706',fontWeight:700} }, grand.l2r>0 ? Pf(grand.l2r) : '—'),
-      ...srcGroups.flatMap(grp => grpCells(grandSrc, grp, true))
+    // Grand Total
+    bodyRows.push(ce('tr',{key:'gtotal',className:'total-row'},
+      ce('td',{className:'label',style:{color:'#1A237E'}},'∑ Grand Total'),
+      ce('td',null,Nf(gL)),ce('td',{style:{color:'#E31837',fontWeight:700}},Nf(gR)),
+      ce('td',null,'100.0%'),ce('td',{style:{color:'#D97706',fontWeight:700}},grand.l2r>0?Pf(grand.l2r):'—'),
+      ...srcGroups.flatMap(grp=>grpCells(grandSrc,grp))
     ));
 
     for (const zone of ZONE_ORDER) {
       const zd = zoneData.get(zone);
       if (!zd || zd.total[0] === 0) continue;
-      const zTot = fin(zd.total[0], zd.total[1]);
+      const zTot = fin(zd.total[0],zd.total[1]);
       const zSrcMap = buildSrcMap(zd.bySrc);
-      const isExpZ = expandedZones.has(zone);
+      const isZOpen = openZone === zone;
 
-      bodyRows.push(ce('tr', { key:'zone_'+zone, className:'section-row',
-        onClick:() => onToggleZone(zone), style:{cursor:'pointer'} },
-        ce('td', { className:'label', style:{color:'#0D47A1'} },
-          ce('span', { style:{display:'flex',alignItems:'center',gap:6} },
-            ce('span', { style:{fontSize:11} }, isExpZ ? '▾' : '▸'),
-            zone + ' Zone'
+      // ── Zone row ──
+      bodyRows.push(ce('tr',{key:'z_'+zone,className:'section-row',onClick:()=>onClickZone(zone),style:{cursor:'pointer'}},
+        ce('td',{className:'label',style:{color:'#0D47A1'}},
+          ce('span',{style:{display:'flex',alignItems:'center',gap:6}},
+            ce('span',{style:{fontSize:11}},isZOpen?'▾':'▸'),
+            zone+' Zone'
           )
         ),
-        ce('td', null, Nf(zTot.l)), ce('td', { style:{color:'#1565C0',fontWeight:700} }, Nf(zTot.r)),
-        ce('td', null, gL>0 ? Pf(zTot.l/gL*100) : '—'), ce('td', { style:{color:'#D97706',fontWeight:700} }, zTot.l2r>0 ? Pf(zTot.l2r) : '—'),
-        ...srcGroups.flatMap(grp => grpCells(zSrcMap, grp, false))
+        ce('td',null,Nf(zTot.l)),ce('td',{style:{color:'#1565C0',fontWeight:700}},Nf(zTot.r)),
+        ce('td',null,gL>0?Pf(zTot.l/gL*100):'—'),ce('td',{style:{color:'#D97706',fontWeight:700}},zTot.l2r>0?Pf(zTot.l2r):'—'),
+        ...srcGroups.flatMap(grp=>grpCells(zSrcMap,grp))
       ));
+      if (!isZOpen) continue;
 
-      if (isExpZ) {
-        for (const state of zd.states.sort()) {
-          const sd = stateData.get(state);
-          if (!sd) continue;
-          const sTot = fin(sd.total[0], sd.total[1]);
-          const sSrcMap = buildSrcMap(sd.byS);
-          bodyRows.push(ce('tr', { key:'state_'+state, className:'sub-row' },
-            ce('td', { className:'sub-label' }, state),
-            ce('td', null, Nf(sTot.l)), ce('td', { style:{color:'#E31837',fontWeight:700} }, Nf(sTot.r)),
-            ce('td', null, gL>0 ? Pf(sTot.l/gL*100) : '—'), ce('td', { style:{color:'#D97706',fontWeight:600} }, sTot.l2r>0 ? Pf(sTot.l2r) : '—'),
-            ...srcGroups.flatMap(grp => grpCells(sSrcMap, grp, false))
+      for (const state of zd.states.sort()) {
+        const sd = stateData.get(state);
+        if (!sd) continue;
+        const sTot = fin(sd.total[0],sd.total[1]);
+        const sSrcMap = buildSrcMap(sd.byS);
+        const isSOpen = openState === state;
+
+        // ── State row ──
+        bodyRows.push(ce('tr',{key:'s_'+state,className:'sub-row',
+          onClick:hasCities?()=>onClickState(state):undefined,
+          style:{cursor:hasCities?'pointer':'default'}
+        },
+          ce('td',{className:'sub-label',style:{paddingLeft:28}},
+            ce('span',{style:{display:'flex',alignItems:'center',gap:5}},
+              hasCities&&ce('span',{style:{fontSize:10,color:'#94A3B8',flexShrink:0}},isSOpen?'▾':'▸'),
+              state
+            )
+          ),
+          ce('td',null,Nf(sTot.l)),ce('td',{style:{color:'#E31837',fontWeight:700}},Nf(sTot.r)),
+          ce('td',null,gL>0?Pf(sTot.l/gL*100):'—'),ce('td',{style:{color:'#D97706',fontWeight:600}},sTot.l2r>0?Pf(sTot.l2r):'—'),
+          ...srcGroups.flatMap(grp=>grpCells(sSrcMap,grp))
+        ));
+        if (!isSOpen) continue;
+
+        const sortedCities = [...cityData.keys()].sort();
+        for (const city of sortedCities) {
+          const cv = cityData.get(city);
+          const cTot = fin(cv[0],cv[1]);
+          const isCOpen = openCity === city;
+
+          // ── City row ──
+          bodyRows.push(ce('tr',{key:'c_'+city,className:'city-row',
+            onClick:hasDealers?()=>onClickCity(city):undefined,
+            style:{cursor:hasDealers?'pointer':'default'}
+          },
+            ce('td',{className:'label',style:{paddingLeft:48,fontWeight:500,fontSize:11.5,color:'#166534',background:'#F0FDF4',borderRight:'2px solid #BBF7D0'}},
+              ce('span',{style:{display:'flex',alignItems:'center',gap:5}},
+                hasDealers&&ce('span',{style:{fontSize:10,color:'#86EFAC',flexShrink:0}},isCOpen?'▾':'▸'),
+                city
+              )
+            ),
+            ce('td',{style:{background:'#F0FDF4'}},Nf(cTot.l)),
+            ce('td',{style:{background:'#F0FDF4',color:'#16A34A',fontWeight:700}},Nf(cTot.r)),
+            ce('td',{style:{background:'#F0FDF4'}},gL>0?Pf(cTot.l/gL*100):'—'),
+            ce('td',{style:{background:'#F0FDF4',color:'#D97706',fontWeight:600}},cTot.l2r>0?Pf(cTot.l2r):'—'),
+            ...blankSrcCells('#F0FDF4')
           ));
+          if (!isCOpen) continue;
+
+          // ── Dealer rows (sorted by leads desc) ──
+          const sortedDealers = [...dealerData.keys()].sort((a,b)=>(dealerData.get(b)[0]||0)-(dealerData.get(a)[0]||0));
+          for (const dl of sortedDealers) {
+            const dv = dealerData.get(dl);
+            const dTot = fin(dv[0],dv[1]);
+            bodyRows.push(ce('tr',{key:'d_'+dl,className:'dealer-row'},
+              ce('td',{className:'label',style:{paddingLeft:68,fontWeight:400,fontSize:11,color:'#64748B',background:'#FAFAFA',borderRight:'2px solid #F1F5F9'}},dl),
+              ce('td',{style:{background:'#FAFAFA'}},Nf(dTot.l)),
+              ce('td',{style:{background:'#FAFAFA',color:'#0D9488',fontWeight:700}},Nf(dTot.r)),
+              ce('td',{style:{background:'#FAFAFA'}},gL>0?Pf(dTot.l/gL*100):'—'),
+              ce('td',{style:{background:'#FAFAFA',color:'#D97706',fontWeight:600}},dTot.l2r>0?Pf(dTot.l2r):'—'),
+              ...blankSrcCells('#FAFAFA')
+            ));
+          }
         }
       }
     }
 
-    return { grand, grandSrc, hdr1, hdr2, bodyRows };
-  }, [stm, zm, maps, filters, expandedGrps, expandedZones, srcGroups]);
+    return { grand, hdr1, hdr2, bodyRows };
+  }, [stm, cm, cdm, maps, filters, expandedGrps, openZone, openState, openCity, srcGroups, hasCities, hasDealers, cityIndexMap]);
 
   return ce('div', { className:'fade-up' },
     months.map(M => {

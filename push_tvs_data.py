@@ -56,14 +56,16 @@ def build_payload():
     zone_col = col(['Zone'])
     bd_col   = col(['BuyingDays', 'Buying Days'])
     city_col = col(['CityName', 'City Name', 'City'])
+    dl_col   = col(['DealerName', 'Dealer Name', 'OutletName', 'Outlet Name', 'Outlet', 'Showroom', 'DealerCode', 'Dealer'])
 
     if not id_col:
         raise ValueError(f"Cannot find SorceLeadId in Leads. Columns: {list(leads.columns)}")
 
     lm_idx,  src_idx, lt_idx, mdl_idx, st_idx, zone_idx, city_idx = {},{},{},{},{},{},{}
     lm_arr,  src_arr, lt_arr, mdl_arr, st_arr, zone_arr, city_arr = [],[],[],[],[],[],[]
-    u_lm_idx = {}   # update-month (retail date) index
+    u_lm_idx = {}
     u_lm_arr = []
+    dl_idx, dl_arr = {}, []          # dealer name index
 
     def ix(d, arr, v):
         if v not in d:
@@ -73,6 +75,8 @@ def build_payload():
 
     monthly, sm, ltm, mm, stm, zm, bdm, cm = {},{},{},{},{},{},{},{}
     u_monthly, u_sm, u_ltm, u_mm, u_stm, u_zm, u_bdm = {},{},{},{},{},{},{}
+    cdm = {}              # city × dealer × month
+    city_to_state = {}    # city_idx → state_idx
 
     def bump(d, k, is_ret):
         if k not in d:
@@ -108,6 +112,8 @@ def build_payload():
         zi   = ix(zone_idx, zone_arr, zone)
         cti  = ix(city_idx, city_arr, city)
 
+        city_to_state[cti] = sti        # track which state each city belongs to
+
         bump(monthly, li,                  is_ret)
         bump(sm,      f"{si}|{li}",        is_ret)
         bump(ltm,     f"{tti}|{si}|{li}", is_ret)
@@ -116,6 +122,11 @@ def build_payload():
         bump(zm,      f"{zi}|{li}",        is_ret)
         bump(bdm,     f"{bd}|{si}|{li}",  is_ret)
         bump(cm,      f"{cti}|{li}",       is_ret)
+
+        if dl_col:
+            dl  = str(row.get(dl_col, '') or '').strip() or 'Unknown'
+            dli = ix(dl_idx, dl_arr, dl)
+            bump(cdm, f"{cti}|{dli}|{li}", is_ret)
 
         # On Update: use retail month for retailed leads, else lead month
         rm = retail_map[lid].get('rm', '') if is_ret else ''
@@ -132,13 +143,24 @@ def build_payload():
     def to_rows(d, key_fn):
         return [[*key_fn(k), v[0], v[1]] for k, v in d.items()]
 
+    # city_state_arr[i] = state_idx for city i (None if unseen)
+    city_state_arr = [city_to_state.get(i) for i in range(len(city_arr))]
+
+    maps_payload = {
+        "lm":         lm_arr,  "src": src_arr,  "lt": lt_arr,  "mdl": mdl_arr,
+        "st":         st_arr,  "zone": zone_arr, "city": city_arr,
+        "city_state": city_state_arr,
+        "u_lm":       u_lm_arr,
+    }
+    if dl_col and dl_arr:
+        maps_payload["dl"] = dl_arr
+        print(f"Dealers: {len(dl_arr):,}  City×Dealer×Month rows: {len(cdm):,}", flush=True)
+    else:
+        print("No dealer column found — skipping cdm table", flush=True)
+
     payload = {
         "t": pd.Timestamp.now().isoformat(),
-        "maps": {
-            "lm":   lm_arr,  "src": src_arr, "lt": lt_arr, "mdl": mdl_arr,
-            "st":   st_arr,  "zone": zone_arr, "city": city_arr,
-            "u_lm": u_lm_arr,
-        },
+        "maps": maps_payload,
         "monthly":   to_rows(monthly, lambda k: [int(k)]),
         "sm":        to_rows(sm,  lambda k: list(map(int, k.split("|")))),
         "ltm":       to_rows(ltm, lambda k: list(map(int, k.split("|")))),
@@ -147,6 +169,7 @@ def build_payload():
         "zm":        to_rows(zm,  lambda k: list(map(int, k.split("|")))),
         "bdm":       to_rows(bdm, lambda k: [int(k.split("|")[0])] + list(map(int, k.split("|")[1:]))),
         "cm":        to_rows(cm,  lambda k: list(map(int, k.split("|")))),
+        **({"cdm": to_rows(cdm, lambda k: list(map(int, k.split("|"))))} if dl_col and dl_arr else {}),
         "u_monthly": to_rows(u_monthly, lambda k: [int(k)]),
         "u_sm":      to_rows(u_sm,  lambda k: list(map(int, k.split("|")))),
         "u_ltm":     to_rows(u_ltm, lambda k: list(map(int, k.split("|")))),
