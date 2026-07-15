@@ -1540,7 +1540,7 @@ function RestrictedScreen({ onBack }) {
   );
 }
 
-function AdminPanel({ auth, onLogout }) {
+function AdminPanel({ auth, onLogout, onViewDashboard }) {
   const [pending, setPending]     = useState(null);
   const [loading, setLoading]     = useState(true);
   const [roleSelections, setRS]   = useState({});
@@ -1586,6 +1586,7 @@ function AdminPanel({ auth, onLogout }) {
           ce('span', { className:'user-name' }, auth.email),
           ce('span', { className:'user-role-badge role-admin' }, 'Admin'),
         ),
+        onViewDashboard && ce('button', { className:'btn btn-secondary', style:{fontSize:11}, onClick:onViewDashboard }, '📊 View Dashboard'),
         ce('button', { className:'btn btn-secondary', style:{fontSize:11}, onClick:onLogout }, 'Sign Out'),
       )
     ),
@@ -1650,6 +1651,7 @@ function App() {
   const [authChecking, setAuthChecking] = useState(!!auth); // verify cached session
 
   // ── Dashboard state ────────────────────────────────────────────────
+  const [adminView, setAdminView] = useState(true); // admin starts on admin panel
   const [tab, setTab]             = useState(() => auth && auth.role === 'viewer' ? 'modelxsrc' : 'overview');
   const [data, setData]           = useState(null);
   const [loading, setLoading]     = useState(false);
@@ -1703,7 +1705,7 @@ function App() {
     finally { setLoading(false); }
   }, []);
 
-  useEffect(() => { if (auth && (auth.role === 'full' || auth.role === 'viewer')) doFetch(); }, [auth && auth.role]);
+  useEffect(() => { if (auth && (auth.role === 'full' || auth.role === 'viewer' || auth.role === 'admin')) doFetch(); }, [auth && auth.role]);
 
   // ── Derived data ───────────────────────────────────────────────────
   const effectiveData = useMemo(() => {
@@ -1754,7 +1756,7 @@ function App() {
   if (role === 'pending')       return ce(PendingScreen,       { email:auth.email, onRefresh: r => handleLogin(auth.email, auth.name||'', r), onBack: handleLogout });
   if (role === 'restricted')    return ce(RestrictedScreen,    { onBack: handleLogout });
   if (role === 'none')          return ce(RequestAccessScreen, { email:auth.email, onLogin:(e,n,r)=>handleLogin(e,n,r), onBack: handleLogout });
-  if (role === 'admin')         return ce(AdminPanel,          { auth, onLogout: handleLogout });
+  if (role === 'admin' && adminView) return ce(AdminPanel, { auth, onLogout: handleLogout, onViewDashboard: () => setAdminView(false) });
 
   // ── Dashboard (full / viewer) ──────────────────────────────────────
   const syncChip = data && ce('div', {
@@ -1802,6 +1804,7 @@ function App() {
             ),
             loading && ce('div', { className:'spinner' }),
             ce('button', { className:'btn btn-secondary', style:{fontSize:11}, onClick:doFetch }, '⟳ Refresh'),
+            role === 'admin' && ce('button', { className:'btn btn-secondary', style:{fontSize:11}, onClick:() => setAdminView(true) }, '⚙ Admin Panel'),
             userChip,
             ce('button', { className:'btn-ghost', style:{fontSize:11,color:'#64748B'}, onClick:handleLogout }, 'Sign Out'),
           )
