@@ -80,7 +80,9 @@ def build_payload():
 
     monthly, sm, ltm, mm, stm, zm, bdm, cm = {},{},{},{},{},{},{},{}
     u_monthly, u_sm, u_ltm, u_mm, u_stm, u_zm, u_bdm = {},{},{},{},{},{},{}
-    cdm = {}              # city × dealer × month
+    cdm  = {}             # city × dealer × month
+    csm  = {}             # city × source × month
+    cdsm = {}             # city × dealer × source × month
     city_to_state = {}    # city_idx → state_idx
 
     def bump(d, k, is_ret, rtype=''):
@@ -132,12 +134,14 @@ def build_payload():
         bump(stm,     f"{sti}|{si}|{li}", is_ret, rtype)
         bump(zm,      f"{zi}|{li}",        is_ret, rtype)
         bump(bdm,     f"{bd}|{si}|{li}",  is_ret, rtype)
-        bump(cm,      f"{cti}|{li}",       is_ret, rtype)
+        bump(cm,      f"{cti}|{li}",        is_ret, rtype)
+        bump(csm,     f"{cti}|{si}|{li}",  is_ret, rtype)
 
         if dl_col:
             dl  = str(row.get(dl_col, '') or '').strip() or 'Unknown'
             dli = ix(dl_idx, dl_arr, dl)
-            bump(cdm, f"{cti}|{dli}|{li}", is_ret, rtype)
+            bump(cdm,  f"{cti}|{dli}|{li}",      is_ret, rtype)
+            bump(cdsm, f"{cti}|{dli}|{si}|{li}", is_ret, rtype)
 
         # On Update: use retail month for retailed leads, else lead month
         rm = retail_map[lid].get('rm', '') if is_ret else ''
@@ -180,8 +184,10 @@ def build_payload():
         "stm":       to_rows(stm, lambda k: list(map(int, k.split("|")))),
         "zm":        to_rows(zm,  lambda k: list(map(int, k.split("|")))),
         "bdm":       to_rows(bdm, lambda k: [int(k.split("|")[0])] + list(map(int, k.split("|")[1:]))),
-        "cm":        to_rows(cm,  lambda k: list(map(int, k.split("|")))),
-        **({"cdm": to_rows(cdm, lambda k: list(map(int, k.split("|"))))} if dl_col and dl_arr else {}),
+        "cm":        to_rows(cm,   lambda k: list(map(int, k.split("|")))),
+        "csm":       to_rows(csm,  lambda k: list(map(int, k.split("|")))),
+        **({"cdm":  to_rows(cdm,  lambda k: list(map(int, k.split("|")))),
+            "cdsm": to_rows(cdsm, lambda k: list(map(int, k.split("|"))))} if dl_col and dl_arr else {}),
         "u_monthly": to_rows(u_monthly, lambda k: [int(k)]),
         "u_sm":      to_rows(u_sm,  lambda k: list(map(int, k.split("|")))),
         "u_ltm":     to_rows(u_ltm, lambda k: list(map(int, k.split("|")))),

@@ -859,11 +859,15 @@ const ModelSourceTab = React.memo(function ModelSourceTab({ data, filters, month
    ════════════════════════════════════════════════════════════════════ */
 const StateSourceTab = React.memo(function StateSourceTab({ data, filters, months, RT }) {
   const { maps, stm } = data;
-  const cm  = data.cm  || [];
-  const cdm = data.cdm || [];
+  const cm        = data.cm   || [];
+  const cdm       = data.cdm  || [];
+  const csm_data  = data.csm  || [];
+  const cdsm_data = data.cdsm || [];
   const getLR = useMemo(() => makeLR(data.rt_cols, RT), [data.rt_cols, RT]);
-  const hasCities  = !!(maps.city && maps.city_state && cm.length > 0);
-  const hasDealers = !!(maps.dl && cdm.length > 0);
+  const hasCities    = !!(maps.city && maps.city_state && cm.length > 0);
+  const hasDealers   = !!(maps.dl && cdm.length > 0);
+  const hasCitySrc   = csm_data.length > 0;
+  const hasDealerSrc = cdsm_data.length > 0;
 
   const allSrcs   = useMemo(() => [...new Set(maps.src)], [maps]);
   const srcGroups = useMemo(() => buildSrcGroups(allSrcs), [allSrcs]);
@@ -925,6 +929,23 @@ const StateSourceTab = React.memo(function StateSourceTab({ data, filters, month
       }
     }
 
+    // ── City × Source breakdown ──
+    const citySourceByS = new Map(); // city → Map<src,[l,r]>
+    if (openState && hasCitySrc) {
+      for (const row of csm_data) {
+        if (maps.lm[row[2]] !== M) continue;
+        const cti = row[0];
+        const sti = maps.city_state[cti];
+        if (sti == null || maps.st[sti] !== openState) continue;
+        const city = maps.city[cti];
+        const src  = maps.src[row[1]];
+        if (!citySourceByS.has(city)) citySourceByS.set(city, new Map());
+        const bySrc = citySourceByS.get(city);
+        const cur = bySrc.get(src)||[0,0];
+        const [cl,cr]=getLR(row); cur[0]+=cl; cur[1]+=cr; bySrc.set(src,cur);
+      }
+    }
+
     // ── Dealer totals for the open city (from cdm) ──
     const dealerData = new Map(); // dealer → [l,r]
     if (openCity && hasDealers) {
@@ -936,6 +957,24 @@ const StateSourceTab = React.memo(function StateSourceTab({ data, filters, month
           const dl = maps.dl[row[1]];
           const cur = dealerData.get(dl)||[0,0];
           const [dll,dlr]=getLR(row); cur[0]+=dll; cur[1]+=dlr; dealerData.set(dl, cur);
+        }
+      }
+    }
+
+    // ── Dealer × Source breakdown ──
+    const dealerSourceByS = new Map(); // dealer → Map<src,[l,r]>
+    if (openCity && hasDealerSrc) {
+      const oci = cityIndexMap.get(openCity) ?? -1;
+      if (oci >= 0) {
+        for (const row of cdsm_data) {
+          if (row[0] !== oci) continue;
+          if (maps.lm[row[3]] !== M) continue;
+          const dl  = maps.dl[row[1]];
+          const src = maps.src[row[2]];
+          if (!dealerSourceByS.has(dl)) dealerSourceByS.set(dl, new Map());
+          const bySrc = dealerSourceByS.get(dl);
+          const cur = bySrc.get(src)||[0,0];
+          const [dll,dlr]=getLR(row); cur[0]+=dll; cur[1]+=dlr; bySrc.set(src,cur);
         }
       }
     }
@@ -1109,7 +1148,9 @@ const StateSourceTab = React.memo(function StateSourceTab({ data, filters, month
             ce('td',{style:{background:'#F0FDF4',color:'#16A34A',fontWeight:700}},Nf(cTot.r)),
             ce('td',{style:{background:'#F0FDF4'}},gL>0?Pf(cTot.l/gL*100):'—'),
             ce('td',{style:{background:'#F0FDF4',color:'#D97706',fontWeight:600}},cTot.l2r>0?Pf(cTot.l2r):'—'),
-            ...blankSrcCells('#F0FDF4')
+            ...(hasCitySrc
+              ? srcGroups.flatMap(grp => grpCells(buildSrcMap(citySourceByS.get(city) || new Map()), grp))
+              : blankSrcCells('#F0FDF4'))
           ));
           if (!isCOpen) continue;
 
@@ -1124,7 +1165,9 @@ const StateSourceTab = React.memo(function StateSourceTab({ data, filters, month
               ce('td',{style:{background:'#FAFAFA',color:'#0D9488',fontWeight:700}},Nf(dTot.r)),
               ce('td',{style:{background:'#FAFAFA'}},gL>0?Pf(dTot.l/gL*100):'—'),
               ce('td',{style:{background:'#FAFAFA',color:'#D97706',fontWeight:600}},dTot.l2r>0?Pf(dTot.l2r):'—'),
-              ...blankSrcCells('#FAFAFA')
+              ...(hasDealerSrc
+                ? srcGroups.flatMap(grp => grpCells(buildSrcMap(dealerSourceByS.get(dl) || new Map()), grp))
+                : blankSrcCells('#FAFAFA'))
             ));
           }
         }
@@ -1132,7 +1175,7 @@ const StateSourceTab = React.memo(function StateSourceTab({ data, filters, month
     }
 
     return { grand, hdr1, hdr2, bodyRows };
-  }, [stm, cm, cdm, maps, filters, expandedGrps, openZone, openState, openCity, srcGroups, hasCities, hasDealers, cityIndexMap, getLR]);
+  }, [stm, cm, cdm, csm_data, cdsm_data, maps, filters, expandedGrps, openZone, openState, openCity, srcGroups, hasCities, hasDealers, hasCitySrc, hasDealerSrc, cityIndexMap, getLR]);
 
   return ce('div', { className:'fade-up' },
     months.map(M => {
