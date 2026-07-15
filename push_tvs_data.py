@@ -11,6 +11,24 @@ import json, sys, io, re, urllib.request
 import pandas as pd
 import requests
 
+MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+
+def norm_month(s):
+    """Normalize any month string to Mon'YY format (e.g. Jul'26)."""
+    s = str(s or "").strip()
+    if not s:
+        return s
+    m = re.search(r'([A-Za-z]{3})', s)
+    yr4 = re.search(r'(\d{4})', s)
+    yr2 = re.search(r"['\-\s](\d{2})\b", s)
+    if m:
+        mn = m.group(1)[0].upper() + m.group(1)[1:].lower()
+        if yr4:
+            return f"{mn}'{yr4.group(1)[2:]}"
+        if yr2:
+            return f"{mn}'{yr2.group(1)}"
+    return s
+
 APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwzgnXPbCbunBblnMUrqdWg3eY9qsIwCrFxuYuvYSpxtH22l4Cs32vdkOkDhUn-qwM64w/exec"
 SECRET = "tvs2026push"
 
@@ -95,7 +113,7 @@ def build_retail_map_from_hist(ret_df):
         rid = to_id(row.get(id_col, ""))
         if rid:
             retail_map[rid] = {
-                "rm":    str(row.get(mth_col, "") or ""),
+                "rm":    norm_month(str(row.get(mth_col, "") or "")),
                 "rtype": str(row.get(rt_col,  "") or "").strip() if rt_col else "",
             }
     return retail_map
@@ -124,6 +142,9 @@ def standardize_hist_leads(df):
     }
     mapping = {k: v for k, v in mapping.items() if k}
     out = df.rename(columns=mapping)
+    # Normalize month format to Mon'YY
+    if "LeadMonth" in out.columns:
+        out["LeadMonth"] = out["LeadMonth"].apply(norm_month)
     # Keep only the canonical columns that exist
     keep = [c for c in ["SorceLeadId","LeadMonth","Source","LeadType","ModelName",
                          "State","Zone","BuyingDays","CityName","DealerName"] if c in out.columns]
@@ -158,9 +179,26 @@ def build_retail_map_from_curr(curr_df):
         if not lid:
             continue
         retail_map[lid] = {
-            "rm":    str(row.get("DMS_Retail_Month", "") or "").strip(),
+            "rm":    norm_month(str(row.get("DMS_Retail_Month", "") or "").strip()),
             "rtype": str(row.get("Retail By",        "") or "").strip(),
         }
+    return retail_map
+
+def fetch_current_retails():
+    """Fetch current-month retails from the separate retails sheet via Apps Script."""
+    print("Fetching current-month retails from Apps Script…", flush=True)
+    data = proxy_get("getCurrentRetails")
+    if "error" in data:
+        print(f"  WARNING: getCurrentRetails error: {data['error']}", flush=True)
+        return {}
+    rows = data.get("rows", [])
+    print(f"  Retails sheet rows: {len(rows):,}", flush=True)
+    retail_map = {}
+    for row in rows:
+        lid = to_id(row[0]) if len(row) > 0 else ""
+        rm  = norm_month(str(row[1]).strip()) if len(row) > 1 else ""
+        if lid:
+            retail_map[lid] = {"rm": rm, "rtype": ""}
     return retail_map
 
 def standardize_curr_leads(curr_df, state_to_zone):
@@ -169,6 +207,9 @@ def standardize_curr_leads(curr_df, state_to_zone):
     # Add Zone from state lookup
     out["Zone"] = out["State"].map(state_to_zone).fillna("Unknown")
     out["BuyingDays"] = "0"
+    # Normalize month format to Mon'YY
+    if "LeadMonth" in out.columns:
+        out["LeadMonth"] = out["LeadMonth"].apply(norm_month)
     # Drop raw retail columns (already extracted into retail_map)
     for c in ["DMS_Retail_Month", "Retail Date", "Retail By"]:
         if c in out.columns:
@@ -350,18 +391,19 @@ print(f"  State→Zone mappings: {len(state_to_zone)}", flush=True)
 # 4. Fetch current month from Apps Script proxy
 print("\n[3/5] Fetching current-month data from Apps Script…", flush=True)
 curr_leads_raw = fetch_current_leads()
-print(f"  Current retails: embedded in leads sheet (Retail Date column)", flush=True)
 
 # 5. Build retail maps and merge
 print("\n[4/5] Building retail maps…", flush=True)
-hist_retail_map = build_retail_map_from_hist(hist_retails_raw)
-curr_retail_map = build_retail_map_from_curr(curr_leads_raw)
-print(f"  Historical retail map: {len(hist_retail_map):,}", flush=True)
-print(f"  Current retail map:    {len(curr_retail_map):,}", flush=True)
+hist_retail_map  = build_retail_map_from_hist(hist_retails_raw)
+curr_embed_map   = build_retail_map_from_curr(curr_leads_raw)       # from embedded Retail Date col
+curr_sheet_map   = fetch_current_retails()                           # from separate retails sheet
+print(f"  Historical retail map:     {len(hist_retail_map):,}", flush=True)
+print(f"  Current (embedded) map:    {len(curr_embed_map):,}", flush=True)
+print(f"  Current (retails sheet):   {len(curr_sheet_map):,}", flush=True)
 
-# Current month overrides historical if same lead ID appears in both
-retail_map = {**hist_retail_map, **curr_retail_map}
-print(f"  Combined retail map:   {len(retail_map):,}", flush=True)
+# Merge: historical base → retails sheet → embedded (most specific wins)
+retail_map = {**hist_retail_map, **curr_sheet_map, **curr_embed_map}
+print(f"  Combined retail map:       {len(retail_map):,}", flush=True)
 
 # 6. Standardize and concat leads
 print("\n[5/5] Processing all leads…", flush=True)

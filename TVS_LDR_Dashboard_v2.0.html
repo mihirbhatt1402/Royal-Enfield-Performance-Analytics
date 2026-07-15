@@ -640,7 +640,6 @@ const DimGrid = React.memo(function DimGrid({
   ];
 
   const rows = [];
-  rows.push(renderRow('∑ Grand Total', grand, grandSrc, true, false, null, false));
 
   for (const [dimKey, da] of dimRows) {
     rows.push(renderRow(dimKey, da.total, da.src, false, false, dimKey, false));
@@ -652,6 +651,7 @@ const DimGrid = React.memo(function DimGrid({
       }
     }
   }
+  rows.push(renderRow('∑ Grand Total', grand, grandSrc, true, false, null, false));
 
   return ce('div', { className:'scroll-x' },
     ce('table', null,
@@ -916,7 +916,7 @@ const LTSourceTab = React.memo(function LTSourceTab({ data, filters, months, RT 
 
   return ce('div', { className:'fade-up' },
     ce(MonthlyGrids, { title:'Lead Type × Source', months, renderAgg, srcGroups, dimLabel:'Lead Type',
-      expandedGrps, onToggleGrp })
+      expandedGrps, onToggleGrp, noGroupHeaders: true })
   );
 });
 
@@ -941,7 +941,7 @@ const ModelSourceTab = React.memo(function ModelSourceTab({ data, filters, month
     null, getLR
   ), [mm, maps, filters, getLR]);
 
-  return ce(MonthlyGrids, { title:'Model × Source', months, renderAgg, srcGroups, dimLabel:'Model', expandedGrps, onToggleGrp, viewerMode });
+  return ce(MonthlyGrids, { title:'Model × Source', months, renderAgg, srcGroups, dimLabel:'Model', expandedGrps, onToggleGrp, viewerMode, noGroupHeaders: true });
 });
 
 /* ════════════════════════════════════════════════════════════════════
@@ -1164,14 +1164,6 @@ const StateSourceTab = React.memo(function StateSourceTab({ data, filters, month
 
     const bodyRows = [];
 
-    // Grand Total
-    bodyRows.push(ce('tr',{key:'gtotal',className:'total-row'},
-      ce('td',{className:'label',style:{color:'#1A237E'}},'∑ Grand Total'),
-      ce('td',null,Nf(gL)),ce('td',{style:{color:'#E31837',fontWeight:700}},Nf(gR)),
-      ce('td',null,'100.0%'),ce('td',{style:{color:'#D97706',fontWeight:700}},grand.l2r>0?Pf(grand.l2r):'—'),
-      ...(viewerMode ? [] : srcGroups.flatMap(grp=>grpCells(grandSrc,grp)))
-    ));
-
     for (const zone of ZONE_ORDER) {
       const zd = zoneData.get(zone);
       if (!zd || zd.total[0] === 0) continue;
@@ -1263,6 +1255,14 @@ const StateSourceTab = React.memo(function StateSourceTab({ data, filters, month
         }
       }
     }
+
+    // Grand Total at bottom
+    bodyRows.push(ce('tr',{key:'gtotal',className:'total-row'},
+      ce('td',{className:'label',style:{color:'#1A237E'}},'∑ Grand Total'),
+      ce('td',null,Nf(gL)),ce('td',{style:{color:'#E31837',fontWeight:700}},Nf(gR)),
+      ce('td',null,'100.0%'),ce('td',{style:{color:'#D97706',fontWeight:700}},grand.l2r>0?Pf(grand.l2r):'—'),
+      ...(viewerMode ? [] : srcGroups.flatMap(grp=>grpCells(grandSrc,grp)))
+    ));
 
     return { grand, hdr1, hdr2, bodyRows };
   }, [stm, cm, cdm, csm_data, cdsm_data, maps, filters, expandedGrps, openZone, openState, openCity, srcGroups, hasCities, hasDealers, hasCitySrc, hasDealerSrc, cityIndexMap, getLR, viewerMode]);
