@@ -24,16 +24,21 @@ def build_payload():
     ret = pd.read_excel(RETAILS_PATH, dtype=str)
     ret.columns = [c.strip() for c in ret.columns]
 
-    ret_id_col = next((c for c in ret.columns if c.lower().replace(' ','') in ('sorceleadid','sourceleadid')), None)
+    ret_id_col  = next((c for c in ret.columns if c.lower().replace(' ','') in ('sorceleadid','sourceleadid')), None)
     ret_mth_col = next((c for c in ret.columns if c.lower() == 'retail month'), None)
+    rt_col      = next((c for c in ret.columns if 'dms' in c.lower() or ('call' in c.lower() and 'out' in c.lower())), None)
     if not ret_id_col:
         raise ValueError(f"Cannot find SorceLeadId in Retails. Columns: {list(ret.columns)}")
+    print(f"Retail type column: {rt_col}", flush=True)
 
     retail_map = {}
     for _, row in ret.iterrows():
         rid = to_id(row.get(ret_id_col, ''))
         if rid:
-            retail_map[rid] = {'rm': str(row.get(ret_mth_col, '') or '')}
+            retail_map[rid] = {
+                'rm':    str(row.get(ret_mth_col, '') or ''),
+                'rtype': str(row.get(rt_col, '') or '').strip() if rt_col else '',
+            }
     print(f"Retail records: {len(retail_map):,}", flush=True)
 
     print("Reading Leads…", flush=True)
@@ -78,12 +83,17 @@ def build_payload():
     cdm = {}              # city × dealer × month
     city_to_state = {}    # city_idx → state_idx
 
-    def bump(d, k, is_ret):
+    def bump(d, k, is_ret, rtype=''):
         if k not in d:
-            d[k] = [0, 0]
+            d[k] = [0, 0, 0, 0]   # leads, R_all, R_dms, R_co
         d[k][0] += 1
         if is_ret:
             d[k][1] += 1
+            rt_u = rtype.upper()
+            if 'DMS' in rt_u:
+                d[k][2] += 1
+            elif 'CALL' in rt_u:
+                d[k][3] += 1
 
     total = len(leads)
     print(f"Processing {total:,} lead rows…", flush=True)
@@ -113,35 +123,36 @@ def build_payload():
         cti  = ix(city_idx, city_arr, city)
 
         city_to_state[cti] = sti        # track which state each city belongs to
+        rtype = retail_map[lid]['rtype'] if is_ret else ''
 
-        bump(monthly, li,                  is_ret)
-        bump(sm,      f"{si}|{li}",        is_ret)
-        bump(ltm,     f"{tti}|{si}|{li}", is_ret)
-        bump(mm,      f"{mi}|{si}|{li}",  is_ret)
-        bump(stm,     f"{sti}|{si}|{li}", is_ret)
-        bump(zm,      f"{zi}|{li}",        is_ret)
-        bump(bdm,     f"{bd}|{si}|{li}",  is_ret)
-        bump(cm,      f"{cti}|{li}",       is_ret)
+        bump(monthly, li,                  is_ret, rtype)
+        bump(sm,      f"{si}|{li}",        is_ret, rtype)
+        bump(ltm,     f"{tti}|{si}|{li}", is_ret, rtype)
+        bump(mm,      f"{mi}|{si}|{li}",  is_ret, rtype)
+        bump(stm,     f"{sti}|{si}|{li}", is_ret, rtype)
+        bump(zm,      f"{zi}|{li}",        is_ret, rtype)
+        bump(bdm,     f"{bd}|{si}|{li}",  is_ret, rtype)
+        bump(cm,      f"{cti}|{li}",       is_ret, rtype)
 
         if dl_col:
             dl  = str(row.get(dl_col, '') or '').strip() or 'Unknown'
             dli = ix(dl_idx, dl_arr, dl)
-            bump(cdm, f"{cti}|{dli}|{li}", is_ret)
+            bump(cdm, f"{cti}|{dli}|{li}", is_ret, rtype)
 
         # On Update: use retail month for retailed leads, else lead month
         rm = retail_map[lid].get('rm', '') if is_ret else ''
         um = rm if rm else lm
         uli = ix(u_lm_idx, u_lm_arr, um)
-        bump(u_monthly, uli,                   is_ret)
-        bump(u_sm,      f"{si}|{uli}",         is_ret)
-        bump(u_ltm,     f"{tti}|{si}|{uli}",  is_ret)
-        bump(u_mm,      f"{mi}|{si}|{uli}",   is_ret)
-        bump(u_stm,     f"{sti}|{si}|{uli}",  is_ret)
-        bump(u_zm,      f"{zi}|{uli}",         is_ret)
-        bump(u_bdm,     f"{bd}|{si}|{uli}",   is_ret)
+        bump(u_monthly, uli,                   is_ret, rtype)
+        bump(u_sm,      f"{si}|{uli}",         is_ret, rtype)
+        bump(u_ltm,     f"{tti}|{si}|{uli}",  is_ret, rtype)
+        bump(u_mm,      f"{mi}|{si}|{uli}",   is_ret, rtype)
+        bump(u_stm,     f"{sti}|{si}|{uli}",  is_ret, rtype)
+        bump(u_zm,      f"{zi}|{uli}",         is_ret, rtype)
+        bump(u_bdm,     f"{bd}|{si}|{uli}",   is_ret, rtype)
 
     def to_rows(d, key_fn):
-        return [[*key_fn(k), v[0], v[1]] for k, v in d.items()]
+        return [[*key_fn(k), v[0], v[1], v[2], v[3]] for k, v in d.items()]
 
     # city_state_arr[i] = state_idx for city i (None if unseen)
     city_state_arr = [city_to_state.get(i) for i in range(len(city_arr))]
@@ -160,6 +171,7 @@ def build_payload():
 
     payload = {
         "t": pd.Timestamp.now().isoformat(),
+        "rt_cols": 1,        # signals 4-value row format: [L, R_all, R_dms, R_co]
         "maps": maps_payload,
         "monthly":   to_rows(monthly, lambda k: [int(k)]),
         "sm":        to_rows(sm,  lambda k: list(map(int, k.split("|")))),
