@@ -1207,13 +1207,30 @@ function App() {
 
   useEffect(() => { doFetch(); }, []);
 
+  // Swap in u_* tables when On Update mode is active
+  const effectiveData = useMemo(() => {
+    if (!data) return null;
+    if (leadsMode === 'create' || !data.u_monthly) return data;
+    return {
+      ...data,
+      monthly: data.u_monthly,
+      sm:      data.u_sm,
+      ltm:     data.u_ltm,
+      mm:      data.u_mm,
+      stm:     data.u_stm,
+      zm:      data.u_zm,
+      bdm:     data.u_bdm,
+      maps:    { ...data.maps, lm: data.maps.u_lm },
+    };
+  }, [data, leadsMode]);
+
   // Compute filtered month list for tabs
   const months = useMemo(() => {
-    if (!data) return [];
-    const allM = [...new Set(data.maps.lm)].sort((a,b) => monthOrder(a)-monthOrder(b));
+    if (!effectiveData) return [];
+    const allM = [...new Set(effectiveData.maps.lm)].sort((a,b) => monthOrder(a)-monthOrder(b));
     if (!filters.months || filters.months.size === 0) return allM;
     return allM.filter(m => filters.months.has(m));
-  }, [data, filters.months]);
+  }, [effectiveData, filters.months]);
 
   // State filter also needs to propagate to StateSourceTab stm filtering
   // (handled inside StateSourceTab via filters.states)
@@ -1223,8 +1240,8 @@ function App() {
   }, 'Synced: ' + (data.t ? new Date(data.t).toLocaleString('en-IN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}) : '—'));
 
   const tabContent = useMemo(() => {
-    if (!data) return null;
-    const props = { data, filters, months };
+    if (!effectiveData) return null;
+    const props = { data: effectiveData, filters, months };
     switch (tab) {
       case 'overview':  return ce(OverviewTab,     { ...props });
       case 'source':    return ce(SourceTab,        { ...props });
@@ -1234,7 +1251,7 @@ function App() {
       case 'buying':   return ce(BuyingIntentTab,   { ...props });
       default: return null;
     }
-  }, [data, tab, filters, months]);
+  }, [effectiveData, tab, filters, months]);
 
   return ce('div', { style:{minHeight:'100vh',background:'#f8fafc'} },
 
@@ -1298,32 +1315,19 @@ function App() {
     ce('div', { style:{maxWidth:1440,margin:'0 auto',padding:'20px'} },
       err && ce('div', { className:'err-box', style:{marginBottom:14} }, '⚠ ' + err),
 
-      !data && !loading && ce('div', { style:{textAlign:'center',padding:60,color:'#94A3B8',fontSize:14} },
+      !effectiveData && !loading && ce('div', { style:{textAlign:'center',padding:60,color:'#94A3B8',fontSize:14} },
         ce('div', { style:{fontSize:32,marginBottom:12} }, '📂'),
         'No data loaded. ',
         ce('button', { onClick:doFetch, style:{color:'#E31837',textDecoration:'underline',background:'none',border:'none',cursor:'pointer',fontSize:'inherit'} }, 'Click to fetch'),
       ),
 
-      loading && !data && ce('div', { style:{textAlign:'center',padding:60} },
+      loading && !effectiveData && ce('div', { style:{textAlign:'center',padding:60} },
         ce('div', { className:'spinner', style:{width:36,height:36,borderWidth:3,margin:'0 auto 16px'} }),
         ce('div', { style:{color:'#64748B',fontSize:13} }, 'Fetching data from Apps Script…')
       ),
 
-      data && ce('div', null,
-        leadsMode === 'update' && ce('div', {
-          style:{
-            background:'#FFF3CD', border:'1px solid #F5A623', borderRadius:10,
-            padding:'10px 16px', marginBottom:12, fontSize:12, color:'#92400E',
-            display:'flex', alignItems:'center', gap:10
-          }
-        },
-          ce('span', { style:{fontSize:16} }, '⚠'),
-          ce('span', null,
-            ce('strong', null, 'On Update mode: '),
-            'Update month data is not available in the current dataset — no "Update Month" or "Modified Month" column was found in the leads file. Showing On Create data. To enable On Update mode, add an update month column to the source XLSX and re-push.'
-          )
-        ),
-        ce(FilterBar, { data, filters, onFiltersChange: f => startT(() => setFilters(f)) }),
+      effectiveData && ce('div', null,
+        ce(FilterBar, { data: effectiveData, filters, onFiltersChange: f => startT(() => setFilters(f)) }),
         filters.cities && filters.cities.size > 0 && tab !== 'overview' && ce('div', {
           style:{fontSize:10,color:'#92400E',background:'#FFF3CD',border:'1px solid #F5A623',
             borderRadius:8,padding:'5px 12px',marginBottom:8}

@@ -1,4 +1,4 @@
-"""
+﻿"""
 Reads TVS Leads + Retails XLSX locally, builds aggregated JSON payload,
 and POSTs it to the Apps Script web app to store in Script Properties.
 """
@@ -60,8 +60,10 @@ def build_payload():
     if not id_col:
         raise ValueError(f"Cannot find SorceLeadId in Leads. Columns: {list(leads.columns)}")
 
-    lm_idx, src_idx, lt_idx, mdl_idx, st_idx, zone_idx, city_idx = {},{},{},{},{},{},{}
-    lm_arr, src_arr, lt_arr, mdl_arr, st_arr, zone_arr, city_arr = [],[],[],[],[],[],[]
+    lm_idx,  src_idx, lt_idx, mdl_idx, st_idx, zone_idx, city_idx = {},{},{},{},{},{},{}
+    lm_arr,  src_arr, lt_arr, mdl_arr, st_arr, zone_arr, city_arr = [],[],[],[],[],[],[]
+    u_lm_idx = {}   # update-month (retail date) index
+    u_lm_arr = []
 
     def ix(d, arr, v):
         if v not in d:
@@ -70,6 +72,7 @@ def build_payload():
         return d[v]
 
     monthly, sm, ltm, mm, stm, zm, bdm, cm = {},{},{},{},{},{},{},{}
+    u_monthly, u_sm, u_ltm, u_mm, u_stm, u_zm, u_bdm = {},{},{},{},{},{},{}
 
     def bump(d, k, is_ret):
         if k not in d:
@@ -112,24 +115,47 @@ def build_payload():
         bump(stm,     f"{sti}|{si}|{li}", is_ret)
         bump(zm,      f"{zi}|{li}",        is_ret)
         bump(bdm,     f"{bd}|{si}|{li}",  is_ret)
-        bump(cm,      f"{cti}|{li}",       is_ret)   # city × month
+        bump(cm,      f"{cti}|{li}",       is_ret)
+
+        # On Update: use retail month for retailed leads, else lead month
+        rm = retail_map[lid].get('rm', '') if is_ret else ''
+        um = rm if rm else lm
+        uli = ix(u_lm_idx, u_lm_arr, um)
+        bump(u_monthly, uli,                   is_ret)
+        bump(u_sm,      f"{si}|{uli}",         is_ret)
+        bump(u_ltm,     f"{tti}|{si}|{uli}",  is_ret)
+        bump(u_mm,      f"{mi}|{si}|{uli}",   is_ret)
+        bump(u_stm,     f"{sti}|{si}|{uli}",  is_ret)
+        bump(u_zm,      f"{zi}|{uli}",         is_ret)
+        bump(u_bdm,     f"{bd}|{si}|{uli}",   is_ret)
 
     def to_rows(d, key_fn):
         return [[*key_fn(k), v[0], v[1]] for k, v in d.items()]
 
     payload = {
         "t": pd.Timestamp.now().isoformat(),
-        "maps": {"lm": lm_arr, "src": src_arr, "lt": lt_arr, "mdl": mdl_arr, "st": st_arr, "zone": zone_arr, "city": city_arr},
-        "monthly": to_rows(monthly, lambda k: [int(k)]),
-        "sm":      to_rows(sm,  lambda k: list(map(int, k.split("|")))),
-        "ltm":     to_rows(ltm, lambda k: list(map(int, k.split("|")))),
-        "mm":      to_rows(mm,  lambda k: list(map(int, k.split("|")))),
-        "stm":     to_rows(stm, lambda k: list(map(int, k.split("|")))),
-        "zm":      to_rows(zm,  lambda k: list(map(int, k.split("|")))),
-        "bdm":     to_rows(bdm, lambda k: [int(k.split("|")[0])] + list(map(int, k.split("|")[1:]))),
-        "cm":      to_rows(cm,  lambda k: list(map(int, k.split("|")))),  # city × month
+        "maps": {
+            "lm":   lm_arr,  "src": src_arr, "lt": lt_arr, "mdl": mdl_arr,
+            "st":   st_arr,  "zone": zone_arr, "city": city_arr,
+            "u_lm": u_lm_arr,
+        },
+        "monthly":   to_rows(monthly, lambda k: [int(k)]),
+        "sm":        to_rows(sm,  lambda k: list(map(int, k.split("|")))),
+        "ltm":       to_rows(ltm, lambda k: list(map(int, k.split("|")))),
+        "mm":        to_rows(mm,  lambda k: list(map(int, k.split("|")))),
+        "stm":       to_rows(stm, lambda k: list(map(int, k.split("|")))),
+        "zm":        to_rows(zm,  lambda k: list(map(int, k.split("|")))),
+        "bdm":       to_rows(bdm, lambda k: [int(k.split("|")[0])] + list(map(int, k.split("|")[1:]))),
+        "cm":        to_rows(cm,  lambda k: list(map(int, k.split("|")))),
+        "u_monthly": to_rows(u_monthly, lambda k: [int(k)]),
+        "u_sm":      to_rows(u_sm,  lambda k: list(map(int, k.split("|")))),
+        "u_ltm":     to_rows(u_ltm, lambda k: list(map(int, k.split("|")))),
+        "u_mm":      to_rows(u_mm,  lambda k: list(map(int, k.split("|")))),
+        "u_stm":     to_rows(u_stm, lambda k: list(map(int, k.split("|")))),
+        "u_zm":      to_rows(u_zm,  lambda k: list(map(int, k.split("|")))),
+        "u_bdm":     to_rows(u_bdm, lambda k: [int(k.split("|")[0])] + list(map(int, k.split("|")[1:]))),
     }
-    print(f"Cities: {len(city_arr):,}  City×Month rows: {len(cm):,}", flush=True)
+    print(f"Cities: {len(city_arr):,}  City×Month rows: {len(cm):,}  UpdateMonths: {len(u_lm_arr):,}", flush=True)
     print(f"Done — {total:,} leads · {len(retail_map):,} retails", flush=True)
     return payload
 
