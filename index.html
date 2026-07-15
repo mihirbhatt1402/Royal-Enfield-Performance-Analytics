@@ -1,0 +1,1290 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>TVS Lead Disposition Dashboard v2.0</title>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Inter:wght@400;500;600;700&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --red:#E31837;--red-d:#B01229;--red-m:#FF2A47;
+  --red-50:#FFF0F2;--red-100:#FFD6DB;--red-200:#FFAAB3;
+  --navy:#001F5B;--blue:#003087;--blue-m:#0044B4;
+  --blue-50:#F0F4FF;--blue-100:#DBEAFE;--blue-200:#93C5FD;
+  --gold:#F5A623;--gold-light:#FEF3C7;
+  --teal:#0D9488;--green:#16A34A;--purple:#7C3AED;
+  --paid-clr:#7C3AED;--paid-light:#EDE9FE;
+  --org-clr:#059669;--org-light:#D1FAE5;
+  --dur-fast:120ms;--dur-base:200ms;
+  --shadow-1:0 2px 8px rgba(0,0,0,.08),0 0 0 1px rgba(227,24,55,.10);
+  --shadow-card:0 4px 16px rgba(0,0,0,.07),0 1px 3px rgba(0,0,0,.05)
+}
+body{font-family:'Inter',system-ui,sans-serif;background:#f8fafc;color:#0f172a;min-height:100vh}
+.fade-up{animation:fadeUp .25s ease both}
+@keyframes fadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+
+/* ── KPI cards ── */
+.kpi{position:relative;background:#fff;border-radius:14px;padding:16px 18px 14px;box-shadow:var(--shadow-card);overflow:hidden;border:1px solid #E2E8F0}
+.kpi-label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.09em;color:#64748B;margin-bottom:6px}
+.kpi-value{font-size:24px;font-weight:800;color:#0f172a;letter-spacing:-.03em;font-family:'DM Mono',monospace}
+.kpi-sub{font-size:10px;color:var(--red);margin-top:4px;font-family:'DM Mono',monospace;font-weight:600}
+.card{background:#fff;border-radius:14px;border:1px solid #E2E8F0;box-shadow:var(--shadow-card)}
+
+/* ── Tab nav ── */
+.tab-pill{padding:10px 22px;font-size:12px;font-weight:600;border:none;background:none;cursor:pointer;border-bottom:3px solid transparent;color:#64748B;transition:all var(--dur-fast);font-family:inherit;white-space:nowrap}
+.tab-pill.active{color:var(--red-d);border-bottom-color:var(--red)}
+.tab-pill:hover:not(.active){color:#0f172a;background:var(--red-50)}
+
+/* ── Tables ── */
+table{width:100%;border-collapse:collapse;font-size:11.5px}
+th{padding:9px 12px;font-weight:700;font-size:9.5px;text-transform:uppercase;letter-spacing:.08em;color:#fff;background:linear-gradient(135deg,#0B1629 0%,#001F5B 100%);text-align:center;border:1px solid rgba(255,255,255,.15);white-space:nowrap;position:sticky;top:0;z-index:2}
+th.left{text-align:left}
+th.sub{background:linear-gradient(90deg,#0B1E4A,#001F5B);font-size:8.5px;color:#DBEAFE;position:sticky;top:33px;z-index:1;font-weight:600;letter-spacing:.06em}
+th.grp-toggle{cursor:pointer;user-select:none}
+th.grp-toggle:hover{filter:brightness(1.15)}
+td{padding:7px 12px;border:1px solid #E2E8F0;font-size:11.5px;text-align:center;font-family:'DM Mono',monospace;background:#fff;vertical-align:middle}
+td.label{text-align:left;font-family:'Inter',system-ui,sans-serif;font-weight:600;font-size:12px;color:#0f172a;background:#fff;position:sticky;left:0;z-index:1;border-right:2px solid #E2E8F0;white-space:nowrap}
+td.sub-label{text-align:left;font-family:'Inter',system-ui,sans-serif;font-weight:500;font-size:11px;color:#475569;background:#F8FAFC;position:sticky;left:0;z-index:1;border-right:2px solid #E2E8F0;padding-left:28px;white-space:nowrap}
+tr:hover td{background:#FFF0F2}
+tr:hover td.label{background:#FFF0F2}
+tr:hover td.sub-label{background:#FFF0F2}
+tr.total-row td{background:linear-gradient(90deg,#0B1629,#001F5B);color:#DBEAFE;font-weight:700;border-color:rgba(255,255,255,.15)}
+tr.total-row td.label{background:linear-gradient(90deg,#0B1629,#0B1E4A);color:#93C5FD;font-family:'Inter',system-ui,sans-serif}
+tr.section-row td{background:#F0F4FF;font-weight:700;color:#001F5B;border-top:2px solid #93C5FD;cursor:pointer}
+tr.section-row:hover td{background:#DBEAFE}
+tr.sub-row td{background:#FAFBFC}
+tr.sub-row:hover td{background:#FFF0F2}
+
+/* ── Badges ── */
+.badge{display:inline-block;padding:2px 9px;border-radius:20px;font-size:10px;font-weight:700;font-family:'DM Mono',monospace;white-space:nowrap}
+.badge-green{background:#DCFCE7;color:#166534}
+.badge-amber{background:#FEF3C7;color:#92400E}
+.badge-red{background:#FEE2E2;color:#B91C1C}
+.badge-blue{background:#DBEAFE;color:#1D4ED8}
+.badge-gray{color:#94A3B8;font-family:'DM Mono',monospace;font-size:10px}
+.scroll-x{overflow-x:auto}
+
+/* ── Filter bar ── */
+.filter-bar{display:flex;align-items:center;gap:10px;padding:10px 16px;background:#fff;border:1px solid #E2E8F0;border-radius:12px;margin-bottom:14px;flex-wrap:wrap;box-shadow:var(--shadow-card)}
+.filter-bar label{font-size:9px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.08em;white-space:nowrap}
+.ms-btn{display:inline-flex;align-items:center;gap:5px;border:1px solid #CBD5E1;border-radius:20px;padding:4px 12px;font-size:11px;font-family:inherit;background:#fff;cursor:pointer;color:#0f172a;box-shadow:0 1px 2px rgba(0,0,0,.04);white-space:nowrap;transition:all var(--dur-fast)}
+.ms-btn:hover,.ms-btn.open{border-color:var(--red);background:var(--red-50);color:var(--red-d)}
+.ms-btn .ms-count{background:var(--red);color:#fff;border-radius:9px;padding:1px 6px;font-size:9px;font-weight:700}
+.ms-dropdown{position:absolute;top:calc(100% + 4px);left:0;min-width:200px;max-width:280px;background:#fff;border:1px solid #E2E8F0;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.12);z-index:500;overflow:hidden}
+.ms-dropdown-header{padding:8px 12px 6px;border-bottom:1px solid #F1F5F9;display:flex;align-items:center;justify-content:space-between}
+.ms-dropdown-list{max-height:220px;overflow-y:auto;padding:4px 0}
+.ms-option{display:flex;align-items:center;gap:8px;padding:6px 12px;cursor:pointer;font-size:11px;transition:background var(--dur-fast)}
+.ms-option:hover{background:var(--red-50)}
+.ms-option input[type=checkbox]{accent-color:var(--red);width:13px;height:13px;cursor:pointer}
+.ms-option.all-opt{font-weight:700;border-bottom:1px solid #F1F5F9;margin-bottom:2px}
+
+/* ── Buttons ── */
+.btn{padding:8px 20px;border-radius:8px;border:none;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:all var(--dur-fast)}
+.btn-primary{background:var(--red);color:#fff}
+.btn-primary:hover{background:var(--red-d)}
+.btn-secondary{background:#F1F5F9;color:#475569;border:1px solid #E2E8F0}
+.btn-secondary:hover{background:#E2E8F0}
+.btn-ghost{background:none;border:1px solid #E2E8F0;color:#475569;padding:5px 14px;border-radius:20px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;transition:all var(--dur-fast)}
+.btn-ghost:hover{background:var(--red-50);border-color:var(--red);color:var(--red-d)}
+
+/* ── Misc ── */
+.section-title{font-size:11px;font-weight:700;color:#334155;margin-bottom:8px;display:flex;align-items:center;gap:8px}
+.section-title::after{content:'';flex:1;height:1px;background:#E2E8F0}
+.err-box{background:#FEF2F2;border:1px solid #FECACA;border-radius:8px;padding:10px 14px;font-size:11px;color:#B91C1C;margin-top:8px}
+.spinner{width:20px;height:20px;border:2px solid #FFD6DB;border-top-color:var(--red);border-radius:50%;animation:spin .7s linear infinite;display:inline-block}
+.cell-hot{background:#BBF7D0!important}
+.cell-warm{background:#FEF08A!important}
+.cell-cold{background:#FECDD3!important}
+.cell-nil{background:#F1F5F9!important;color:#94A3B8!important}
+.prog-track{flex:1;height:6px;background:#F1F5F9;border-radius:3px;overflow:hidden;min-width:50px}
+.prog-fill{height:100%;background:var(--red);border-radius:3px}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+'use strict';
+
+/* ════════════════════════════════════════════════════════════════════
+   CONFIG
+   ════════════════════════════════════════════════════════════════════ */
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwzgnXPbCbunBblnMUrqdWg3eY9qsIwCrFxuYuvYSpxtH22l4Cs32vdkOkDhUn-qwM64w/exec';
+const CACHE_KEY = 'tvs_ldr_v2_cache';
+
+/* ════════════════════════════════════════════════════════════════════
+   INDIA ZONE → STATE MAP  (used for State × Source zone grouping)
+   ════════════════════════════════════════════════════════════════════ */
+const INDIA_ZONE_STATES = {
+  'North':     ['Delhi','Haryana','Himachal Pradesh','Jammu & Kashmir','Jammu and Kashmir','Punjab','Rajasthan','Uttarakhand','Uttar Pradesh','Chandigarh','Ladakh'],
+  'West':      ['Goa','Gujarat','Maharashtra','Dadra and Nagar Haveli','Daman and Diu'],
+  'South':     ['Andhra Pradesh','Karnataka','Kerala','Tamil Nadu','Telangana','Puducherry','Lakshadweep'],
+  'East':      ['Bihar','Jharkhand','Odisha','Orissa','West Bengal','Sikkim'],
+  'Central':   ['Chhattisgarh','Madhya Pradesh'],
+  'Northeast': ['Assam','Meghalaya','Manipur','Mizoram','Nagaland','Tripura','Arunachal Pradesh'],
+};
+const STATE_TO_ZONE = {};
+for (const [zone, states] of Object.entries(INDIA_ZONE_STATES))
+  for (const st of states) STATE_TO_ZONE[st.toLowerCase()] = zone;
+function getZone(st) { return STATE_TO_ZONE[(st||'').toLowerCase()] || 'Other'; }
+
+/* ════════════════════════════════════════════════════════════════════
+   BUYING DAYS BUCKETS
+   ════════════════════════════════════════════════════════════════════ */
+const BD_BUCKETS = ['0–7','8–14','15–30','31–60','61–90','90+'];
+function bdBucket(days) {
+  const d = parseInt(days) || 0;
+  if (d <= 7)  return '0–7';
+  if (d <= 14) return '8–14';
+  if (d <= 30) return '15–30';
+  if (d <= 60) return '31–60';
+  if (d <= 90) return '61–90';
+  return '90+';
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   SOURCE CLASSIFICATION
+   ════════════════════════════════════════════════════════════════════ */
+function classifySrc(s) {
+  const n = (s || '').toLowerCase();
+  if (['adword','google','sem','ppc'].some(p => n.includes(p))) return 'adwords';
+  if (['facebook','fb','meta','msfb'].some(p => n.includes(p))) return 'msfb';
+  if (['organic'].some(p => n.includes(p))) return 'organic';
+  return 'nonms';
+}
+function buildSrcGroups(srcList) {
+  const adw = srcList.filter(s => classifySrc(s) === 'adwords');
+  const fb  = srcList.filter(s => classifySrc(s) === 'msfb');
+  const org = srcList.filter(s => classifySrc(s) === 'organic');
+  const nms = srcList.filter(s => classifySrc(s) === 'nonms');
+  const groups = [];
+  const paidSrcs = [...adw, ...fb];
+  const orgSrcs  = [...org, ...nms];
+  if (paidSrcs.length) groups.push({
+    id:'paid', label:'PAID', color:'#7C3AED', lightColor:'#EDE9FE', srcs: paidSrcs,
+    subGroups: [
+      ...(adw.length ? [{ id:'adwords', label:'ADWORDS', color:'#7C3AED', srcs: adw }] : []),
+      ...(fb.length  ? [{ id:'msfb',    label:'MS FB',   color:'#2563EB', srcs: fb  }] : []),
+    ]
+  });
+  if (orgSrcs.length) groups.push({
+    id:'organic', label:'ORG+NON MS', color:'#059669', lightColor:'#D1FAE5', srcs: orgSrcs,
+    subGroups: [
+      ...(org.length ? [{ id:'organic', label:'ORGANIC', color:'#059669', srcs: org }] : []),
+      ...(nms.length ? [{ id:'nonms',   label:'NON MS',  color:'#0D9488', srcs: nms }] : []),
+    ]
+  });
+  return groups;
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   REACT SETUP
+   ════════════════════════════════════════════════════════════════════ */
+const ce = React.createElement;
+const { useState, useEffect, useMemo, useRef, useCallback, useTransition } = React;
+
+/* ════════════════════════════════════════════════════════════════════
+   DATA FETCHING
+   ════════════════════════════════════════════════════════════════════ */
+async function fetchData() {
+  let resp;
+  try { resp = await fetch(APPS_SCRIPT_URL, { cache: 'no-store' }); }
+  catch (e) { throw new Error('Network error: ' + e.message); }
+  if (!resp.ok) throw new Error('HTTP ' + resp.status);
+  const text = await resp.text();
+  let parsed;
+  try { parsed = JSON.parse(text); }
+  catch (e) { throw new Error('JSON parse failed: ' + text.slice(0, 80)); }
+  if (parsed.error) throw new Error('Server: ' + parsed.error);
+  if (!parsed.maps || !parsed.monthly) throw new Error('Unexpected data format');
+  return parsed;
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   AGGREGATION HELPERS
+   ════════════════════════════════════════════════════════════════════ */
+const EMPTY = Object.freeze({ l: 0, r: 0, l2r: 0 });
+
+function fin(l, r) { return { l, r, l2r: l > 0 ? r / l * 100 : 0 }; }
+
+/* Aggregate a compact-JSON table for ONE specific month, with optional source filter.
+   Returns { grand, grandSrc, dimAggs }
+   dimKeyFn(row,maps) → string dim key (or null for src-only tables)
+   srcKeyFn(row,maps) → string source name
+   monthKeyFn(row,maps) → string month
+   extraFilter(row,maps) → bool (optional extra filter e.g. model/state filter)
+*/
+function aggMonth(table, maps, month, srcFilter, dimKeyFn, srcKeyFn, monthKeyFn, extraFilter) {
+  const allSrcs = !srcFilter || srcFilter.size === 0;
+  const byDim = new Map();
+  const bySrc = new Map();
+  const byDimSrc = new Map();
+  let gL = 0, gR = 0;
+
+  for (const row of table) {
+    if (monthKeyFn(row, maps) !== month) continue;
+    const src = srcKeyFn ? srcKeyFn(row, maps) : null;
+    if (!allSrcs && src && !srcFilter.has(src)) continue;
+    if (extraFilter && !extraFilter(row, maps)) continue;
+    const l = row[row.length - 2], r = row[row.length - 1];
+    gL += l; gR += r;
+
+    if (src) { const c = bySrc.get(src)||[0,0]; c[0]+=l; c[1]+=r; bySrc.set(src,c); }
+    const dim = dimKeyFn ? dimKeyFn(row, maps) : null;
+    if (dim) {
+      const c = byDim.get(dim)||[0,0]; c[0]+=l; c[1]+=r; byDim.set(dim,c);
+      if (src) {
+        const k = dim+'\x00'+src;
+        const c2 = byDimSrc.get(k)||[0,0]; c2[0]+=l; c2[1]+=r; byDimSrc.set(k,c2);
+      }
+    }
+  }
+
+  const grandSrc = {};
+  for (const [s,v] of bySrc) grandSrc[s] = fin(v[0],v[1]);
+  const dimAggs = {};
+  for (const [d,dv] of byDim) {
+    const srcAgg = {};
+    for (const s of bySrc.keys()) {
+      const v = byDimSrc.get(d+'\x00'+s);
+      srcAgg[s] = v ? fin(v[0],v[1]) : EMPTY;
+    }
+    dimAggs[d] = { total: fin(dv[0],dv[1]), src: srcAgg };
+  }
+  return { grand: fin(gL,gR), grandSrc, dimAggs };
+}
+
+/* Aggregate across ALL (or selected) months — used for Overview KPIs */
+function aggAll(table, maps, monthFilter, srcFilter, dimKeyFn, srcKeyFn, monthKeyFn, extraFilter) {
+  const allMonths = !monthFilter || monthFilter.size === 0;
+  const allSrcs   = !srcFilter   || srcFilter.size === 0;
+  const byDim = new Map();
+  const bySrc = new Map();
+  const byDimSrc = new Map();
+  let gL = 0, gR = 0;
+
+  for (const row of table) {
+    const m = monthKeyFn(row, maps);
+    if (!allMonths && !monthFilter.has(m)) continue;
+    const src = srcKeyFn ? srcKeyFn(row, maps) : null;
+    if (!allSrcs && src && !srcFilter.has(src)) continue;
+    if (extraFilter && !extraFilter(row, maps)) continue;
+    const l = row[row.length - 2], r = row[row.length - 1];
+    gL += l; gR += r;
+
+    if (src) { const c = bySrc.get(src)||[0,0]; c[0]+=l; c[1]+=r; bySrc.set(src,c); }
+    const dim = dimKeyFn ? dimKeyFn(row, maps) : null;
+    if (dim) {
+      const c = byDim.get(dim)||[0,0]; c[0]+=l; c[1]+=r; byDim.set(dim,c);
+      if (src) {
+        const k = dim+'\x00'+src;
+        const c2 = byDimSrc.get(k)||[0,0]; c2[0]+=l; c2[1]+=r; byDimSrc.set(k,c2);
+      }
+    }
+  }
+
+  const grandSrc = {};
+  for (const [s,v] of bySrc) grandSrc[s] = fin(v[0],v[1]);
+  const dimAggs = {};
+  for (const [d,dv] of byDim) {
+    const srcAgg = {};
+    for (const s of bySrc.keys()) {
+      const v = byDimSrc.get(d+'\x00'+s);
+      srcAgg[s] = v ? fin(v[0],v[1]) : EMPTY;
+    }
+    dimAggs[d] = { total: fin(dv[0],dv[1]), src: srcAgg };
+  }
+  return { grand: fin(gL,gR), grandSrc, dimAggs };
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   FORMATTERS
+   ════════════════════════════════════════════════════════════════════ */
+function Nf(n) { return (n == null || isNaN(n)) ? '—' : Number(n).toLocaleString('en-IN'); }
+function Pf(n, d=1) { return (n == null || isNaN(n) || n===0) ? '—' : n.toFixed(d) + '%'; }
+
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function monthOrder(m) {
+  if (!m) return 0;
+  const mt = m.match(/([A-Za-z]+)'(\d+)/);
+  if (!mt) return 0;
+  return parseInt(mt[2]) * 12 + MONTHS.indexOf(mt[1]);
+}
+
+function l2rBadge(pct) {
+  if (!pct || isNaN(pct) || pct === 0) return ce('span', { className: 'badge-gray' }, '—');
+  const cls = pct >= 15 ? 'badge-green' : pct >= 8 ? 'badge-amber' : 'badge-red';
+  return ce('span', { className: 'badge ' + cls }, pct.toFixed(1) + '%');
+}
+
+function cellClass(pct) {
+  if (!pct || pct === 0) return 'cell-nil';
+  if (pct >= 15) return 'cell-hot';
+  if (pct >= 8)  return 'cell-warm';
+  return 'cell-cold';
+}
+
+function grpSum(srcMap, srcs) {
+  let l = 0, r = 0;
+  for (const s of srcs) { const a = srcMap[s] || EMPTY; l += a.l; r += a.r; }
+  return fin(l, r);
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   EXCEL EXPORT
+   ════════════════════════════════════════════════════════════════════ */
+function exportXlsx(sheetMap, filename) {
+  if (!window.XLSX) { alert('XLSX library not loaded'); return; }
+  const wb = window.XLSX.utils.book_new();
+  for (const [name, aoa] of Object.entries(sheetMap)) {
+    const ws = window.XLSX.utils.aoa_to_sheet(aoa);
+    const colW = [];
+    for (const row of aoa) row.forEach((c, i) => {
+      const l = String(c == null ? '' : c).length;
+      if (!colW[i] || l > colW[i]) colW[i] = l;
+    });
+    ws['!cols'] = colW.map(w => ({ wch: Math.min(w + 2, 40) }));
+    window.XLSX.utils.book_append_sheet(wb, ws, String(name).slice(0, 31));
+  }
+  window.XLSX.writeFile(wb, filename + '.xlsx');
+}
+
+function ExportBtn({ onClick }) {
+  return ce('button', {
+    onClick, title: 'Export to Excel',
+    style: { padding:'4px 14px', fontSize:10, fontFamily:'inherit', fontWeight:700,
+      border:'1px solid #93C5FD', borderRadius:20, background:'#fff',
+      color:'#001F5B', cursor:'pointer', display:'inline-flex', alignItems:'center',
+      gap:4, whiteSpace:'nowrap' }
+  }, '↓ Export Excel');
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   MULTI-SELECT FILTER COMPONENT
+   ════════════════════════════════════════════════════════════════════ */
+const MultiSelect = React.memo(function MultiSelect({ label, options, selected, onChange }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef();
+
+  useEffect(() => {
+    function hdl(e) { if (ref.current && !ref.current.contains(e.target)) setOpen(false); }
+    document.addEventListener('mousedown', hdl);
+    return () => document.removeEventListener('mousedown', hdl);
+  }, []);
+
+  const isAll = !selected || selected.size === 0;
+  const count = selected ? selected.size : 0;
+
+  function toggle(opt) {
+    const next = new Set(selected || []);
+    if (next.has(opt)) next.delete(opt); else next.add(opt);
+    onChange(next.size === options.length ? new Set() : next);
+  }
+  function selectAll() { onChange(new Set()); }
+
+  return ce('div', { style: { position:'relative' }, ref },
+    ce('button', {
+      className: 'ms-btn' + (open ? ' open' : ''),
+      onClick: () => setOpen(p => !p)
+    },
+      label,
+      isAll
+        ? ce('span', { style:{color:'#94A3B8',fontSize:10} }, 'All ▾')
+        : ce('span', { className:'ms-count' }, count),
+      !isAll && ce('span', {style:{color:'#94A3B8',fontSize:10}}, '▾')
+    ),
+    open && ce('div', { className:'ms-dropdown' },
+      ce('div', { className:'ms-dropdown-header' },
+        ce('span', { style:{fontSize:10,fontWeight:700,color:'#475569',textTransform:'uppercase',letterSpacing:'.06em'} }, label),
+        ce('button', { onClick: selectAll, style:{fontSize:10,background:'none',border:'none',color:'#E31837',cursor:'pointer',fontWeight:700} }, 'All')
+      ),
+      ce('div', { className:'ms-dropdown-list' },
+        options.map(opt => ce('label', { key:opt, className:'ms-option' },
+          ce('input', {
+            type:'checkbox', checked: !isAll && selected.has(opt),
+            onChange: () => toggle(opt)
+          }),
+          ce('span', null, opt)
+        ))
+      )
+    )
+  );
+});
+
+/* ════════════════════════════════════════════════════════════════════
+   DIMENSION GRID WITH EXPAND/COLLAPSE SOURCE GROUPS + CONTRIB%
+   agg        : { grand, grandSrc, dimAggs }
+   srcGroups  : array of { id, label, color, srcs, subGroups }
+   dimLabel   : string for the row header column
+   expandedGrps : Set of group ids that are expanded
+   onToggleGrp : (id) => void
+   expandedRows : Set of dim keys where sub-rows are shown (optional)
+   subRowsOf   : (dimKey) => array of { label, srcMap } (optional, for LT expand)
+   ════════════════════════════════════════════════════════════════════ */
+const DimGrid = React.memo(function DimGrid({
+  agg, srcGroups, dimLabel, expandedGrps, onToggleGrp,
+  expandedRows, onToggleRow, subRowsFn, grandForContrib, noSort
+}) {
+  if (!agg) return null;
+  const { grand, grandSrc, dimAggs } = agg;
+  const gL = (grandForContrib || grand).l;
+
+  function contrib(l) { return gL > 0 ? l / gL * 100 : 0; }
+
+  // Compute which cols are visible for each group
+  function groupCols(grp) {
+    if (!expandedGrps || !expandedGrps.has(grp.id)) return 4; // collapsed: L R C% L2R%
+    return grp.subGroups.reduce((s, sg) => s + (sg.srcs.length > 0 ? 4 : 0), 0) || 4;
+  }
+
+  // Render cells for a group (collapsed = group total, expanded = sub-group cells)
+  function grpCells(srcMap, grp, isTotal) {
+    if (!expandedGrps || !expandedGrps.has(grp.id)) {
+      const a = grpSum(srcMap, grp.srcs);
+      return [
+        ce('td', { key: grp.id+'l', style:{ borderLeft:'2px solid '+grp.color+'44' } }, Nf(a.l)),
+        ce('td', { key: grp.id+'r', style:{ color: isTotal ? '#ddd6fe' : grp.color, fontWeight:700 } }, Nf(a.r)),
+        ce('td', { key: grp.id+'c' }, a.l > 0 ? Pf(contrib(a.l)) : '—'),
+        ce('td', { key: grp.id+'l2r', className: cellClass(a.l2r) }, Pf(a.l2r)),
+      ];
+    }
+    return grp.subGroups.filter(sg => sg.srcs.length > 0).flatMap((sg, si) => {
+      const a = grpSum(srcMap, sg.srcs);
+      return [
+        ce('td', { key:sg.id+'l', style: si===0 ? {borderLeft:'2px solid '+grp.color+'44'} : {} }, Nf(a.l)),
+        ce('td', { key:sg.id+'r', style:{ color: isTotal ? '#c4b5fd' : sg.color, fontWeight:700 } }, Nf(a.r)),
+        ce('td', { key:sg.id+'c' }, a.l > 0 ? Pf(contrib(a.l)) : '—'),
+        ce('td', { key:sg.id+'l2r', className: cellClass(a.l2r) }, Pf(a.l2r)),
+      ];
+    });
+  }
+
+  function renderRow(label, tot, srcMap, isTotal, isSection, dimKey, isSub) {
+    const rowClass = isTotal ? 'total-row' : isSection ? 'section-row' : isSub ? 'sub-row' : '';
+    const canExpand = !isTotal && !isSub && expandedRows !== undefined && onToggleRow;
+    const isExpanded = canExpand && expandedRows.has(dimKey);
+    const tdClass = isSub ? 'sub-label' : 'label';
+    const labelContent = canExpand
+      ? ce('span', { style:{display:'flex',alignItems:'center',gap:6} },
+          ce('span', { style:{fontSize:10,color:'#94A3B8'} }, isExpanded ? '▾' : '▸'),
+          label
+        )
+      : label;
+    return ce('tr', {
+      className: rowClass, key: label + (isSub ? '_sub' : ''),
+      onClick: canExpand ? () => onToggleRow(dimKey) : undefined,
+      style: canExpand ? { cursor:'pointer' } : {}
+    },
+      ce('td', { className: tdClass, style: isTotal ? { color:'#93C5FD' } : {} }, labelContent),
+      // TOTAL
+      ce('td', { key:'tl' }, Nf(tot.l)),
+      ce('td', { key:'tr', style:{ color: isTotal ? '#fca5a5' : '#E31837', fontWeight:700 } }, Nf(tot.r)),
+      ce('td', { key:'tc' }, tot.l > 0 ? Pf(contrib(tot.l)) : '—'),
+      ce('td', { key:'tl2r', className: cellClass(tot.l2r) }, l2rBadge(tot.l2r)),
+      // Groups
+      ...srcGroups.flatMap(grp => grpCells(srcMap, grp, isTotal))
+    );
+  }
+
+  const dimRows = noSort
+    ? Object.entries(dimAggs)
+    : Object.entries(dimAggs).sort((a,b) => b[1].total.l - a[1].total.l);
+
+  // Header row 1
+  const hdr1 = [
+    ce('th', { key:'dim', className:'left', rowSpan:2, style:{minWidth:160,zIndex:3} }, dimLabel),
+    ce('th', { key:'tot', colSpan:4, style:{background:'#0B1629'} }, 'TOTAL'),
+    ...srcGroups.map(grp => {
+      const exp = expandedGrps && expandedGrps.has(grp.id);
+      const sgs = grp.subGroups.filter(sg => sg.srcs.length > 0);
+      const cs = exp ? sgs.length * 4 : 4;
+      return ce('th', {
+        key: grp.id, colSpan: cs,
+        className: 'grp-toggle',
+        style: { background: grp.color },
+        onClick: onToggleGrp ? () => onToggleGrp(grp.id) : undefined
+      }, (exp ? '▴ ' : '▾ ') + grp.label);
+    })
+  ];
+
+  // Header row 2 (sub)
+  const hdr2 = [
+    ce('th', { key:'tl', className:'sub' }, 'Leads'),
+    ce('th', { key:'tr', className:'sub' }, 'Retail'),
+    ce('th', { key:'tc', className:'sub' }, 'Contrib%'),
+    ce('th', { key:'tl2r', className:'sub' }, 'L2R%'),
+    ...srcGroups.flatMap(grp => {
+      const exp = expandedGrps && expandedGrps.has(grp.id);
+      if (!exp) return [
+        ce('th', { key:grp.id+'l', className:'sub', style:{borderLeft:'2px solid '+grp.color+'44'} }, 'Leads'),
+        ce('th', { key:grp.id+'r', className:'sub' }, 'Retail'),
+        ce('th', { key:grp.id+'c', className:'sub' }, 'Contrib%'),
+        ce('th', { key:grp.id+'l2r', className:'sub' }, 'L2R%'),
+      ];
+      return grp.subGroups.filter(sg => sg.srcs.length > 0).flatMap((sg, si) => [
+        ce('th', { key:sg.id+'l', className:'sub', style: si===0 ? {borderLeft:'2px solid '+grp.color+'44'} : {}, title:sg.label }, sg.label+' L'),
+        ce('th', { key:sg.id+'r', className:'sub', title:sg.label }, sg.label+' R'),
+        ce('th', { key:sg.id+'c', className:'sub', title:sg.label }, 'Contrib%'),
+        ce('th', { key:sg.id+'l2r', className:'sub', title:sg.label }, 'L2R%'),
+      ]);
+    })
+  ];
+
+  const rows = [];
+  rows.push(renderRow('∑ Grand Total', grand, grandSrc, true, false, null, false));
+
+  for (const [dimKey, da] of dimRows) {
+    rows.push(renderRow(dimKey, da.total, da.src, false, false, dimKey, false));
+    // Sub-rows if this dim is expanded
+    if (expandedRows && expandedRows.has(dimKey) && subRowsFn) {
+      const subRows = subRowsFn(dimKey, da);
+      for (const sr of subRows) {
+        rows.push(renderRow(sr.label, sr.tot, sr.srcMap, false, false, null, true));
+      }
+    }
+  }
+
+  return ce('div', { className:'scroll-x' },
+    ce('table', null,
+      ce('thead', null,
+        ce('tr', null, ...hdr1),
+        ce('tr', null, ...hdr2),
+      ),
+      ce('tbody', null, ...rows)
+    )
+  );
+});
+
+/* ════════════════════════════════════════════════════════════════════
+   MONTHLY GRIDS WRAPPER
+   Renders one DimGrid per selected month.
+   ════════════════════════════════════════════════════════════════════ */
+function MonthlyGrids({ title, months, renderAgg, srcGroups, dimLabel, expandedGrps, onToggleGrp, expandedRows, onToggleRow, subRowsFn }) {
+  return ce('div', { className:'fade-up' },
+    months.map(M => {
+      const agg = renderAgg(M);
+      if (!agg || agg.grand.l === 0) return null;
+      return ce('div', { key: M, className:'card', style:{ padding:'16px 18px', marginBottom:14 } },
+        ce('div', { className:'section-title', style:{marginBottom:10} }, (title || dimLabel) + ' — ' + M),
+        ce(DimGrid, { agg, srcGroups, dimLabel, expandedGrps, onToggleGrp, expandedRows, onToggleRow, subRowsFn })
+      );
+    })
+  );
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   OVERVIEW TAB
+   ════════════════════════════════════════════════════════════════════ */
+const OverviewTab = React.memo(function OverviewTab({ data, filters }) {
+  const { maps, monthly, sm } = data;
+  const chartRef = useRef(); const chartInst = useRef();
+
+  const allSrcs = useMemo(() => [...new Set(maps.src)], [maps]);
+  const srcGroups = useMemo(() => buildSrcGroups(allSrcs), [allSrcs]);
+  const paidGrp = srcGroups.find(g => g.id === 'paid');
+  const orgGrp  = srcGroups.find(g => g.id === 'organic');
+
+  // KPI totals across selected months
+  const totals = useMemo(() => {
+    const allM = !filters.months || filters.months.size === 0;
+    const allS = !filters.sources || filters.sources.size === 0;
+    let gL=0,gR=0,pL=0,pR=0,oL=0,oR=0;
+    for (const row of sm) {
+      const m = maps.lm[row[1]];
+      if (!allM && !filters.months.has(m)) continue;
+      const src = maps.src[row[0]];
+      if (!allS && !filters.sources.has(src)) continue;
+      const l=row[2],r=row[3];
+      gL+=l; gR+=r;
+      if (paidGrp && paidGrp.srcs.includes(src)) { pL+=l; pR+=r; }
+      if (orgGrp  && orgGrp.srcs.includes(src))  { oL+=l; oR+=r; }
+    }
+    return { l:gL,r:gR,l2r:gL>0?gR/gL*100:0, pL,pR,pL2r:pL>0?pR/pL*100:0, oL,oR,oL2r:oL>0?oR/oL*100:0 };
+  }, [sm, maps, filters, paidGrp, orgGrp]);
+
+  // Monthly trend data (all months, ignore month filter for trend line)
+  const trendData = useMemo(() => {
+    const byMonth = new Map();
+    for (const row of monthly) {
+      const m = maps.lm[row[0]];
+      byMonth.set(m, { l: row[1], r: row[2] });
+    }
+    return [...byMonth.entries()]
+      .sort((a,b) => monthOrder(a[0]) - monthOrder(b[0]))
+      .map(([m, v]) => ({ m, l: v.l, r: v.r, l2r: v.l>0 ? v.r/v.l*100 : 0 }));
+  }, [monthly, maps]);
+
+  // Source breakdown
+  const srcBreak = useMemo(() => {
+    const allM = !filters.months || filters.months.size === 0;
+    const allS = !filters.sources || filters.sources.size === 0;
+    const bySrc = new Map();
+    for (const row of sm) {
+      const m = maps.lm[row[1]];
+      if (!allM && !filters.months.has(m)) continue;
+      const src = maps.src[row[0]];
+      if (!allS && !filters.sources.has(src)) continue;
+      const c = bySrc.get(src)||[0,0]; c[0]+=row[2]; c[1]+=row[3]; bySrc.set(src,c);
+    }
+    return [...bySrc.entries()]
+      .map(([s,v]) => ({ src:s, l:v[0], r:v[1], l2r:v[0]>0?v[1]/v[0]*100:0 }))
+      .sort((a,b) => b.l-a.l);
+  }, [sm, maps, filters]);
+
+  // Chart
+  useEffect(() => {
+    const canvas = chartRef.current;
+    if (!canvas || !window.Chart) return;
+    if (chartInst.current) { try { chartInst.current.destroy(); } catch(e){} }
+    chartInst.current = new Chart(canvas, {
+      type:'bar',
+      data:{
+        labels: trendData.map(d => d.m),
+        datasets:[
+          { label:'Leads',   data:trendData.map(d=>d.l), backgroundColor:'#0030872a', borderColor:'#003087', borderWidth:1.5, borderRadius:3, yAxisID:'y' },
+          { label:'Retails', data:trendData.map(d=>d.r), backgroundColor:'#E3183755', borderColor:'#E31837', borderWidth:1.5, borderRadius:3, yAxisID:'y' },
+          { label:'L2R%',    data:trendData.map(d=>parseFloat(d.l2r.toFixed(2))), type:'line', borderColor:'#F5A623', backgroundColor:'transparent', borderWidth:2.5, pointRadius:5, pointBackgroundColor:'#F5A623', yAxisID:'y2', tension:.3 },
+        ]
+      },
+      options:{
+        responsive:true, maintainAspectRatio:false,
+        interaction:{mode:'index',intersect:false},
+        plugins:{
+          legend:{position:'top',labels:{boxWidth:10,boxHeight:10,font:{size:10,family:'DM Mono,monospace'},color:'#475569'}},
+          tooltip:{backgroundColor:'rgba(11,22,41,.92)',titleColor:'#DBEAFE',bodyColor:'#93C5FD',padding:10,cornerRadius:8},
+        },
+        scales:{
+          x:{grid:{color:'rgba(100,116,139,.1)'},ticks:{color:'#475569',font:{size:10}}},
+          y:{grid:{color:'rgba(100,116,139,.1)'},ticks:{color:'#475569',font:{size:10}},position:'left',beginAtZero:true,title:{display:true,text:'Volume',color:'#94a3b8',font:{size:9}}},
+          y2:{position:'right',ticks:{color:'#F5A623',font:{size:10},callback:v=>v+'%'},grid:{display:false},title:{display:true,text:'L2R%',color:'#F5A623',font:{size:9}},beginAtZero:true},
+        }
+      }
+    });
+    return () => { try { if(chartInst.current) chartInst.current.destroy(); } catch(e){} };
+  }, [trendData]);
+
+  const KPIs = [
+    { label:'Total Leads',        value:Nf(totals.l),                      sub:'All sources',             color:'#003087' },
+    { label:'Total Retails',      value:Nf(totals.r),                      sub:'Converted',               color:'#E31837' },
+    { label:'L2R %',              value:totals.l2r.toFixed(1)+'%',         sub:'Retails ÷ Leads',         color:'#F5A623' },
+    { label:'Paid L2R%',          value:totals.pL2r.toFixed(1)+'%',        sub:Nf(totals.pL)+' paid leads',  color:'#7C3AED' },
+    { label:'Organic L2R%',       value:totals.oL2r.toFixed(1)+'%',        sub:Nf(totals.oL)+' organic leads', color:'#059669' },
+  ];
+
+  return ce('div', { className:'fade-up' },
+    ce('div', { style:{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(175px,1fr))',gap:10,marginBottom:20} },
+      KPIs.map((k,i) => ce('div', { key:i, className:'kpi' },
+        ce('div', { style:{position:'absolute',top:0,left:0,right:0,height:3,background:k.color,borderRadius:'12px 12px 0 0'} }),
+        ce('div', { className:'kpi-label' }, k.label),
+        ce('div', { className:'kpi-value', style:{fontSize:k.value.length>7?16:20,color:k.color} }, k.value),
+        ce('div', { className:'kpi-sub', style:{color:k.color} }, k.sub)
+      ))
+    ),
+    ce('div', { className:'card', style:{padding:'16px 18px',marginBottom:14} },
+      ce('div', { className:'section-title' }, 'Month-wise Trend — Leads, Retails & L2R%'),
+      ce('div', { style:{height:260,position:'relative'} }, ce('canvas', { ref:chartRef }))
+    ),
+    ce('div', { className:'card', style:{padding:'16px 18px',marginBottom:14} },
+      ce('div', { style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8} },
+        ce('div', { className:'section-title', style:{marginBottom:0} }, 'Source Summary'),
+        ce(ExportBtn, { onClick:() => {
+          const aoa=[['Source','Leads','Retails','Contrib%','L2R%']];
+          for (const s of srcBreak) aoa.push([s.src,s.l,s.r,+(s.l/totals.l*100).toFixed(2),+s.l2r.toFixed(2)]);
+          aoa.push(['∑ Total',totals.l,totals.r,'100.0%',+totals.l2r.toFixed(2)]);
+          exportXlsx({'Source Summary':aoa},'TVS_Overview_Source');
+        }})
+      ),
+      ce('div', { className:'scroll-x' },
+        ce('table', null,
+          ce('thead', null, ce('tr', null,
+            ce('th', { className:'left', style:{minWidth:140} }, 'Source'),
+            ce('th', null, 'Leads'),
+            ce('th', { style:{background:'#E31837'} }, 'Retails'),
+            ce('th', null, 'Contrib%'),
+            ce('th', { style:{background:'#F5A623',color:'#111'} }, 'L2R%'),
+          )),
+          ce('tbody', null,
+            ...srcBreak.map((s,i) => ce('tr', { key:i },
+              ce('td', { className:'label' }, s.src),
+              ce('td', null, Nf(s.l)),
+              ce('td', { style:{color:'#E31837',fontWeight:700} }, Nf(s.r)),
+              ce('td', null, totals.l > 0 ? Pf(s.l/totals.l*100) : '—'),
+              ce('td', null, l2rBadge(s.l2r)),
+            )),
+            ce('tr', { className:'total-row' },
+              ce('td', { className:'label' }, '∑ Grand Total'),
+              ce('td', null, Nf(totals.l)),
+              ce('td', { style:{color:'#fca5a5',fontWeight:700} }, Nf(totals.r)),
+              ce('td', null, '100.0%'),
+              ce('td', null, ce('span', { style:{color:'#fde68a',fontWeight:700} }, totals.l2r.toFixed(1)+'%')),
+            )
+          )
+        )
+      )
+    )
+  );
+});
+
+/* ════════════════════════════════════════════════════════════════════
+   SOURCE ANALYSIS TAB
+   ════════════════════════════════════════════════════════════════════ */
+const SourceTab = React.memo(function SourceTab({ data, filters, months }) {
+  const { maps, sm } = data;
+  const allSrcs = useMemo(() => [...new Set(maps.src)], [maps]);
+  const srcGroups = useMemo(() => buildSrcGroups(allSrcs), [allSrcs]);
+  const [expandedGrps, setExpandedGrps] = useState(new Set());
+  const onToggleGrp = useCallback(id => setExpandedGrps(prev => {
+    const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n;
+  }), []);
+
+  // Build per-month source agg: dim=src, srcMap has only own source data
+  const renderAgg = useCallback((M) => {
+    const allS = !filters.sources || filters.sources.size === 0;
+    const bySrc = new Map();
+    let gL=0,gR=0;
+    for (const row of sm) {
+      if (maps.lm[row[1]] !== M) continue;
+      const src = maps.src[row[0]];
+      if (!allS && !filters.sources.has(src)) continue;
+      const l=row[2],r=row[3];
+      gL+=l; gR+=r;
+      const c=bySrc.get(src)||[0,0]; c[0]+=l; c[1]+=r; bySrc.set(src,c);
+    }
+    const grand = fin(gL,gR);
+    const grandSrc = {};
+    const dimAggs = {};
+    for (const [src,[l,r]] of bySrc) {
+      grandSrc[src] = fin(l,r);
+      // For source-as-dim: each row's srcMap contains only that source
+      dimAggs[src] = { total: fin(l,r), src: { [src]: fin(l,r) } };
+    }
+    return { grand, grandSrc, dimAggs };
+  }, [sm, maps, filters]);
+
+  return ce(MonthlyGrids, { title:'Source Analysis', months, renderAgg, srcGroups, dimLabel:'Source', expandedGrps, onToggleGrp });
+});
+
+/* ════════════════════════════════════════════════════════════════════
+   LT × SOURCE TAB
+   ════════════════════════════════════════════════════════════════════ */
+const LTSourceTab = React.memo(function LTSourceTab({ data, filters, months }) {
+  const { maps, ltm } = data;
+  const allSrcs = useMemo(() => [...new Set(maps.src)], [maps]);
+  const srcGroups = useMemo(() => buildSrcGroups(allSrcs), [allSrcs]);
+  const allLTs = useMemo(() => [...new Set(maps.lt)].sort(), [maps]);
+  const [expandedGrps, setExpandedGrps] = useState(new Set());
+  const [expandedRows, setExpandedRows] = useState(new Set());
+  const [ltFilter, setLtFilter] = useState('All');
+  const onToggleGrp = useCallback(id => setExpandedGrps(prev => {
+    const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n;
+  }), []);
+  const onToggleRow = useCallback(lt => setExpandedRows(prev => {
+    const n = new Set(prev); n.has(lt) ? n.delete(lt) : n.add(lt); return n;
+  }), []);
+
+  const renderAgg = useCallback((M) => {
+    const allS = !filters.sources || filters.sources.size === 0;
+    return aggMonth(
+      ltm, maps, M, filters.sources,
+      (row,maps) => { const lt=maps.lt[row[0]]; return ltFilter==='All'||lt===ltFilter ? lt : null; },
+      (row,maps) => maps.src[row[1]],
+      (row,maps) => maps.lm[row[2]]
+    );
+  }, [ltm, maps, filters, ltFilter]);
+
+  // Sub-rows: for a given LT, show source breakdown
+  const subRowsFn = useCallback((ltKey, da) => {
+    return Object.entries(da.src)
+      .filter(([,a]) => a.l > 0)
+      .sort((a,b) => b[1].l - a[1].l)
+      .map(([src, a]) => ({
+        label: src,
+        tot: a,
+        srcMap: { [src]: a }
+      }));
+  }, []);
+
+  return ce('div', { className:'fade-up' },
+    ce('div', { className:'filter-bar', style:{marginBottom:10} },
+      ce('label', null, 'Lead Type'),
+      ce('select', { value: ltFilter, onChange: e => setLtFilter(e.target.value),
+        style:{border:'1px solid #CBD5E1',borderRadius:20,padding:'4px 14px',fontSize:11,fontFamily:'inherit',outline:'none',background:'#fff',cursor:'pointer'} },
+        ce('option', { value:'All' }, 'All Lead Types'),
+        allLTs.map(lt => ce('option', { key:lt, value:lt }, lt))
+      )
+    ),
+    ce(MonthlyGrids, { title:'Lead Type × Source', months, renderAgg, srcGroups, dimLabel:'Lead Type',
+      expandedGrps, onToggleGrp, expandedRows, onToggleRow, subRowsFn })
+  );
+});
+
+/* ════════════════════════════════════════════════════════════════════
+   MODEL × SOURCE TAB
+   ════════════════════════════════════════════════════════════════════ */
+const ModelSourceTab = React.memo(function ModelSourceTab({ data, filters, months }) {
+  const { maps, mm } = data;
+  const allSrcs = useMemo(() => [...new Set(maps.src)], [maps]);
+  const srcGroups = useMemo(() => buildSrcGroups(allSrcs), [allSrcs]);
+  const allModels = useMemo(() => [...new Set(maps.mdl)].sort(), [maps]);
+  const [expandedGrps, setExpandedGrps] = useState(new Set());
+  const [modelFilter, setModelFilter] = useState('All');
+  const onToggleGrp = useCallback(id => setExpandedGrps(prev => {
+    const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n;
+  }), []);
+
+  const renderAgg = useCallback((M) => aggMonth(
+    mm, maps, M, filters.sources,
+    (row,maps) => { const mdl=maps.mdl[row[0]]; return modelFilter==='All'||mdl===modelFilter ? mdl : null; },
+    (row,maps) => maps.src[row[1]],
+    (row,maps) => maps.lm[row[2]]
+  ), [mm, maps, filters, modelFilter]);
+
+  return ce('div', { className:'fade-up' },
+    ce('div', { className:'filter-bar', style:{marginBottom:10} },
+      ce('label', null, 'Model'),
+      ce('select', { value: modelFilter, onChange: e => setModelFilter(e.target.value),
+        style:{border:'1px solid #CBD5E1',borderRadius:20,padding:'4px 14px',fontSize:11,fontFamily:'inherit',outline:'none',background:'#fff',cursor:'pointer'} },
+        ce('option', { value:'All' }, 'All Models'),
+        allModels.map(m => ce('option', { key:m, value:m }, m))
+      )
+    ),
+    ce(MonthlyGrids, { title:'Model × Source', months, renderAgg, srcGroups, dimLabel:'Model', expandedGrps, onToggleGrp })
+  );
+});
+
+/* ════════════════════════════════════════════════════════════════════
+   STATE × SOURCE TAB  (with Zone group rows)
+   ════════════════════════════════════════════════════════════════════ */
+const StateSourceTab = React.memo(function StateSourceTab({ data, filters, months }) {
+  const { maps, stm, zm } = data;
+  const allSrcs = useMemo(() => [...new Set(maps.src)], [maps]);
+  const srcGroups = useMemo(() => buildSrcGroups(allSrcs), [allSrcs]);
+  const [expandedGrps, setExpandedGrps] = useState(new Set());
+  const [expandedZones, setExpandedZones] = useState(new Set(['North','West','South','East','Central','Northeast']));
+  const onToggleGrp = useCallback(id => setExpandedGrps(prev => {
+    const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n;
+  }), []);
+  const onToggleZone = useCallback(z => setExpandedZones(prev => {
+    const n = new Set(prev); n.has(z) ? n.delete(z) : n.add(z); return n;
+  }), []);
+
+  const renderMonthGrid = useCallback((M) => {
+    const allS = !filters.sources || filters.sources.size === 0;
+    const allSt = !filters.states || filters.states.size === 0;
+
+    // Build state × src data for this month
+    const stateData = new Map(); // state → { src → [l,r], total:[l,r] }
+    let gL=0, gR=0;
+    const grandSrcMap = new Map();
+
+    for (const row of stm) {
+      if (maps.lm[row[2]] !== M) continue;
+      const state = maps.st[row[0]];
+      if (!allSt && !filters.states.has(state)) continue;
+      const src = maps.src[row[1]];
+      if (!allS && !filters.sources.has(src)) continue;
+      const l=row[3],r=row[4];
+      gL+=l; gR+=r;
+      if (!stateData.has(state)) stateData.set(state, { total:[0,0], byS: new Map() });
+      const sd = stateData.get(state);
+      sd.total[0]+=l; sd.total[1]+=r;
+      const c = sd.byS.get(src)||[0,0]; c[0]+=l; c[1]+=r; sd.byS.set(src,c);
+      const gc = grandSrcMap.get(src)||[0,0]; gc[0]+=l; gc[1]+=r; grandSrcMap.set(src,gc);
+    }
+
+    // Group states into zones
+    const zoneData = new Map(); // zone → { states: [state,...], total:[l,r], bySrc: Map }
+    for (const [state, sd] of stateData) {
+      const zone = getZone(state);
+      if (!zoneData.has(zone)) zoneData.set(zone, { states:[], total:[0,0], bySrc: new Map() });
+      const zd = zoneData.get(zone);
+      zd.states.push(state);
+      zd.total[0]+=sd.total[0]; zd.total[1]+=sd.total[1];
+      for (const [src,[l,r]] of sd.byS) {
+        const c = zd.bySrc.get(src)||[0,0]; c[0]+=l; c[1]+=r; zd.bySrc.set(src,c);
+      }
+    }
+
+    const grandSrc = {};
+    for (const [s,v] of grandSrcMap) grandSrc[s] = fin(v[0],v[1]);
+    const grand = fin(gL,gR);
+
+    // Render
+    const ZONE_ORDER = ['North','West','South','East','Central','Northeast','Other'];
+
+    function buildSrcMap(bySrc) {
+      const sm = {};
+      for (const [s,v] of bySrc) sm[s] = fin(v[0],v[1]);
+      return sm;
+    }
+
+    function grpCells(srcMap, grp, isZone) {
+      const exp = expandedGrps.has(grp.id);
+      if (!exp) {
+        const a = grpSum(srcMap, grp.srcs);
+        return [
+          ce('td', { key:grp.id+'l', style:{borderLeft:'2px solid '+grp.color+'44'} }, Nf(a.l)),
+          ce('td', { key:grp.id+'r', style:{color: isZone ? '#ddd6fe' : grp.color, fontWeight:700} }, Nf(a.r)),
+          ce('td', { key:grp.id+'c' }, gL>0 ? Pf(a.l/gL*100) : '—'),
+          ce('td', { key:grp.id+'l2r', className:cellClass(a.l2r) }, Pf(a.l2r)),
+        ];
+      }
+      return grp.subGroups.filter(sg => sg.srcs.length > 0).flatMap((sg,si) => {
+        const a = grpSum(srcMap, sg.srcs);
+        return [
+          ce('td', { key:sg.id+'l', style: si===0?{borderLeft:'2px solid '+grp.color+'44'}:{} }, Nf(a.l)),
+          ce('td', { key:sg.id+'r', style:{color:sg.color,fontWeight:700} }, Nf(a.r)),
+          ce('td', { key:sg.id+'c' }, gL>0 ? Pf(a.l/gL*100) : '—'),
+          ce('td', { key:sg.id+'l2r', className:cellClass(a.l2r) }, Pf(a.l2r)),
+        ];
+      });
+    }
+
+    // Total col count
+    function totalCols() {
+      return 5 + srcGroups.reduce((s,grp) => {
+        const exp = expandedGrps.has(grp.id);
+        if (!exp) return s+4;
+        return s + grp.subGroups.filter(sg=>sg.srcs.length>0).length*4;
+      }, 0);
+    }
+
+    const hdr1 = [
+      ce('th', { key:'dim', className:'left', rowSpan:2, style:{minWidth:150,zIndex:3} }, 'Zone / State'),
+      ce('th', { key:'tot', colSpan:4, style:{background:'#0B1629'} }, 'TOTAL'),
+      ...srcGroups.map(grp => {
+        const exp = expandedGrps.has(grp.id);
+        const sgs = grp.subGroups.filter(sg=>sg.srcs.length>0);
+        return ce('th', { key:grp.id, colSpan: exp ? sgs.length*4 : 4,
+          className:'grp-toggle', style:{background:grp.color},
+          onClick:() => onToggleGrp(grp.id)
+        }, (exp?'▴ ':'▾ ')+grp.label);
+      })
+    ];
+    const hdr2 = [
+      ce('th',{key:'tl',className:'sub'},'Leads'),ce('th',{key:'tr',className:'sub'},'Retail'),
+      ce('th',{key:'tc',className:'sub'},'Contrib%'),ce('th',{key:'tl2r',className:'sub'},'L2R%'),
+      ...srcGroups.flatMap(grp => {
+        const exp = expandedGrps.has(grp.id);
+        if (!exp) return [
+          ce('th',{key:grp.id+'l',className:'sub',style:{borderLeft:'2px solid '+grp.color+'44'}},'Leads'),
+          ce('th',{key:grp.id+'r',className:'sub'},'Retail'),
+          ce('th',{key:grp.id+'c',className:'sub'},'Contrib%'),
+          ce('th',{key:grp.id+'l2r',className:'sub'},'L2R%'),
+        ];
+        return grp.subGroups.filter(sg=>sg.srcs.length>0).flatMap((sg,si) => [
+          ce('th',{key:sg.id+'l',className:'sub',style:si===0?{borderLeft:'2px solid '+grp.color+'44'}:{},title:sg.label},sg.label+' L'),
+          ce('th',{key:sg.id+'r',className:'sub',title:sg.label},sg.label+' R'),
+          ce('th',{key:sg.id+'c',className:'sub',title:sg.label},'Contrib%'),
+          ce('th',{key:sg.id+'l2r',className:'sub',title:sg.label},'L2R%'),
+        ]);
+      })
+    ];
+
+    const bodyRows = [];
+
+    // Grand Total row
+    bodyRows.push(ce('tr', { key:'gtotal', className:'total-row' },
+      ce('td', { className:'label', style:{color:'#93C5FD'} }, '∑ Grand Total'),
+      ce('td', null, Nf(gL)), ce('td', { style:{color:'#fca5a5',fontWeight:700} }, Nf(gR)),
+      ce('td', null, '100.0%'), ce('td', null, l2rBadge(grand.l2r)),
+      ...srcGroups.flatMap(grp => grpCells(grandSrc, grp, true))
+    ));
+
+    for (const zone of ZONE_ORDER) {
+      const zd = zoneData.get(zone);
+      if (!zd || zd.total[0] === 0) continue;
+      const zTot = fin(zd.total[0], zd.total[1]);
+      const zSrcMap = buildSrcMap(zd.bySrc);
+      const isExpZ = expandedZones.has(zone);
+
+      bodyRows.push(ce('tr', { key:'zone_'+zone, className:'section-row',
+        onClick:() => onToggleZone(zone), style:{cursor:'pointer'} },
+        ce('td', { className:'label', style:{color:'#001F5B'} },
+          ce('span', { style:{display:'flex',alignItems:'center',gap:6} },
+            ce('span', { style:{fontSize:11} }, isExpZ ? '▾' : '▸'),
+            zone + ' Zone'
+          )
+        ),
+        ce('td', null, Nf(zTot.l)), ce('td', { style:{color:'#003087',fontWeight:700} }, Nf(zTot.r)),
+        ce('td', null, gL>0 ? Pf(zTot.l/gL*100) : '—'), ce('td', null, l2rBadge(zTot.l2r)),
+        ...srcGroups.flatMap(grp => grpCells(zSrcMap, grp, false))
+      ));
+
+      if (isExpZ) {
+        for (const state of zd.states.sort()) {
+          const sd = stateData.get(state);
+          if (!sd) continue;
+          const sTot = fin(sd.total[0], sd.total[1]);
+          const sSrcMap = buildSrcMap(sd.byS);
+          bodyRows.push(ce('tr', { key:'state_'+state, className:'sub-row' },
+            ce('td', { className:'sub-label' }, state),
+            ce('td', null, Nf(sTot.l)), ce('td', { style:{color:'#E31837',fontWeight:700} }, Nf(sTot.r)),
+            ce('td', null, gL>0 ? Pf(sTot.l/gL*100) : '—'), ce('td', null, l2rBadge(sTot.l2r)),
+            ...srcGroups.flatMap(grp => grpCells(sSrcMap, grp, false))
+          ));
+        }
+      }
+    }
+
+    return { grand, grandSrc, hdr1, hdr2, bodyRows };
+  }, [stm, zm, maps, filters, expandedGrps, expandedZones, srcGroups]);
+
+  return ce('div', { className:'fade-up' },
+    months.map(M => {
+      const grid = renderMonthGrid(M);
+      if (!grid || grid.grand.l === 0) return null;
+      return ce('div', { key:M, className:'card', style:{padding:'16px 18px',marginBottom:14} },
+        ce('div', { className:'section-title', style:{marginBottom:10} }, 'State × Source — ' + M),
+        ce('div', { className:'scroll-x' },
+          ce('table', null,
+            ce('thead', null,
+              ce('tr', null, ...grid.hdr1),
+              ce('tr', null, ...grid.hdr2),
+            ),
+            ce('tbody', null, ...grid.bodyRows)
+          )
+        )
+      );
+    })
+  );
+});
+
+/* ════════════════════════════════════════════════════════════════════
+   BUYING INTENT TAB
+   ════════════════════════════════════════════════════════════════════ */
+const BuyingIntentTab = React.memo(function BuyingIntentTab({ data, filters, months }) {
+  const { maps, bdm } = data;
+  const allSrcs = useMemo(() => [...new Set(maps.src)], [maps]);
+  const srcGroups = useMemo(() => buildSrcGroups(allSrcs), [allSrcs]);
+  const [expandedGrps, setExpandedGrps] = useState(new Set());
+  const onToggleGrp = useCallback(id => setExpandedGrps(prev => {
+    const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n;
+  }), []);
+
+  const renderAgg = useCallback((M) => {
+    const allS = !filters.sources || filters.sources.size === 0;
+    const byBucket = new Map();
+    const bySrc = new Map();
+    const byBucketSrc = new Map();
+    let gL=0,gR=0;
+    for (const row of bdm) {
+      if (maps.lm[row[2]] !== M) continue;
+      const src = maps.src[row[1]];
+      if (!allS && !filters.sources.has(src)) continue;
+      const bucket = bdBucket(row[0]);
+      const l=row[3],r=row[4];
+      gL+=l; gR+=r;
+      const cb = byBucket.get(bucket)||[0,0]; cb[0]+=l; cb[1]+=r; byBucket.set(bucket,cb);
+      const cs = bySrc.get(src)||[0,0]; cs[0]+=l; cs[1]+=r; bySrc.set(src,cs);
+      const k=bucket+'\x00'+src;
+      const cbs = byBucketSrc.get(k)||[0,0]; cbs[0]+=l; cbs[1]+=r; byBucketSrc.set(k,cbs);
+    }
+    const grandSrc = {};
+    for (const [s,v] of bySrc) grandSrc[s] = fin(v[0],v[1]);
+    const dimAggs = {};
+    for (const [b,bv] of byBucket) {
+      const srcAgg = {};
+      for (const s of bySrc.keys()) {
+        const v = byBucketSrc.get(b+'\x00'+s);
+        srcAgg[s] = v ? fin(v[0],v[1]) : EMPTY;
+      }
+      dimAggs[b] = { total: fin(bv[0],bv[1]), src: srcAgg };
+    }
+    // Sort by bucket order
+    const orderedDimAggs = {};
+    for (const bk of BD_BUCKETS) if (dimAggs[bk]) orderedDimAggs[bk] = dimAggs[bk];
+    return { grand: fin(gL,gR), grandSrc, dimAggs: orderedDimAggs };
+  }, [bdm, maps, filters]);
+
+  // Override DimGrid sort (buckets should follow BD_BUCKETS order, not desc leads)
+  const renderAggWithOrder = useCallback((M) => {
+    const agg = renderAgg(M);
+    if (!agg) return null;
+    // DimGrid sorts by l desc — we want bucket order. Inject rank prefix
+    const orderedDimAggs = {};
+    BD_BUCKETS.forEach((bk, i) => {
+      if (agg.dimAggs[bk]) orderedDimAggs['\x00'+i+bk] = agg.dimAggs[bk];
+    });
+    return { ...agg, dimAggs: orderedDimAggs, _labels: (k => k.replace(/^\x00\d/, '')) };
+  }, [renderAgg]);
+
+  // Custom render: preserve bucket order (0–7 first, 90+ last) via noSort
+  return ce('div', { className:'fade-up' },
+    months.map(M => {
+      const agg = renderAgg(M);
+      if (!agg || agg.grand.l === 0) return null;
+      // Rebuild dimAggs in canonical bucket order so noSort preserves it
+      const orderedAgg = { ...agg, dimAggs: {} };
+      BD_BUCKETS.forEach(bk => { if (agg.dimAggs[bk]) orderedAgg.dimAggs[bk + ' days'] = agg.dimAggs[bk]; });
+
+      return ce('div', { key:M, className:'card', style:{padding:'16px 18px',marginBottom:14} },
+        ce('div', { className:'section-title', style:{marginBottom:10} }, 'Buying Intent — ' + M),
+        ce(DimGrid, { agg: orderedAgg, srcGroups, dimLabel:'Intent (Days)', expandedGrps, onToggleGrp, noSort: true })
+      );
+    })
+  );
+});
+
+/* ════════════════════════════════════════════════════════════════════
+   FILTER BAR
+   ════════════════════════════════════════════════════════════════════ */
+const FilterBar = React.memo(function FilterBar({ data, filters, onFiltersChange }) {
+  const { maps } = data;
+  const months  = useMemo(() => [...new Set(maps.lm)].sort((a,b) => monthOrder(a)-monthOrder(b)), [maps]);
+  const sources  = useMemo(() => [...new Set(maps.src)].sort(), [maps]);
+  const models   = useMemo(() => [...new Set(maps.mdl)].sort(), [maps]);
+  const states   = useMemo(() => [...new Set(maps.st)].sort(), [maps]);
+
+  function set(key, val) { onFiltersChange({ ...filters, [key]: val }); }
+  function reset() { onFiltersChange({ months: new Set(), sources: new Set(), models: new Set(), states: new Set() }); }
+
+  const hasAnyFilter = [filters.months, filters.sources, filters.models, filters.states]
+    .some(s => s && s.size > 0);
+
+  return ce('div', { className:'filter-bar' },
+    ce(MultiSelect, { label:'Month',  options:months,  selected:filters.months,  onChange: v => set('months', v) }),
+    ce(MultiSelect, { label:'Source', options:sources,  selected:filters.sources, onChange: v => set('sources', v) }),
+    ce(MultiSelect, { label:'Model',  options:models,  selected:filters.models,  onChange: v => set('models', v) }),
+    ce(MultiSelect, { label:'State',  options:states,  selected:filters.states,  onChange: v => set('states', v) }),
+    hasAnyFilter && ce('button', { className:'btn-ghost', onClick:reset }, '✕ Reset All'),
+    !hasAnyFilter && ce('span', { style:{fontSize:10,color:'#94A3B8',fontFamily:'DM Mono'} }, 'Showing all data'),
+  );
+});
+
+/* ════════════════════════════════════════════════════════════════════
+   APP ROOT
+   ════════════════════════════════════════════════════════════════════ */
+const TABS = [
+  { id:'overview',  label:'Overview' },
+  { id:'source',    label:'Source Analysis' },
+  { id:'ltxsrc',   label:'LT × Source' },
+  { id:'modelxsrc',label:'Model × Source' },
+  { id:'statexsrc',label:'State × Source' },
+  { id:'buying',   label:'Buying Intent' },
+];
+
+function App() {
+  const [tab, setTab]             = useState('overview');
+  const [data, setData]           = useState(null);
+  const [loading, setLoading]     = useState(false);
+  const [err, setErr]             = useState(null);
+  const [lastSync, setLastSync]   = useState(null);
+  const [isPending, startT]       = useTransition();
+  const [filters, setFilters]     = useState({ months: new Set(), sources: new Set(), models: new Set(), states: new Set() });
+
+  const doFetch = useCallback(async () => {
+    setLoading(true); setErr(null);
+    try {
+      const parsed = await fetchData();
+      setData(parsed);
+      setLastSync(new Date());
+      try { localStorage.setItem(CACHE_KEY+'_t', parsed.t); } catch(e) {}
+    } catch(e) { setErr(e.message); }
+    finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => { doFetch(); }, []);
+
+  // Compute filtered month list for tabs
+  const months = useMemo(() => {
+    if (!data) return [];
+    const allM = [...new Set(data.maps.lm)].sort((a,b) => monthOrder(a)-monthOrder(b));
+    if (!filters.months || filters.months.size === 0) return allM;
+    return allM.filter(m => filters.months.has(m));
+  }, [data, filters.months]);
+
+  // State filter also needs to propagate to StateSourceTab stm filtering
+  // (handled inside StateSourceTab via filters.states)
+
+  const syncChip = data && ce('div', {
+    style:{fontSize:10,color:'#64748B',background:'#F0F4FF',padding:'2px 10px',borderRadius:20,fontFamily:'DM Mono'}
+  }, 'Synced: ' + (data.t ? new Date(data.t).toLocaleString('en-IN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}) : '—'));
+
+  const tabContent = useMemo(() => {
+    if (!data) return null;
+    const props = { data, filters, months };
+    switch (tab) {
+      case 'overview':  return ce(OverviewTab,     { ...props });
+      case 'source':    return ce(SourceTab,        { ...props });
+      case 'ltxsrc':   return ce(LTSourceTab,       { ...props });
+      case 'modelxsrc':return ce(ModelSourceTab,    { ...props });
+      case 'statexsrc':return ce(StateSourceTab,    { ...props });
+      case 'buying':   return ce(BuyingIntentTab,   { ...props });
+      default: return null;
+    }
+  }, [data, tab, filters, months]);
+
+  return ce('div', { style:{minHeight:'100vh',background:'#f8fafc'} },
+
+    // ── Header ──
+    ce('div', { style:{background:'#fff',borderBottom:'1px solid #E2E8F0',position:'sticky',top:0,zIndex:100,boxShadow:'0 1px 4px rgba(0,0,0,.06)'} },
+      ce('div', { style:{maxWidth:1440,margin:'0 auto',padding:'0 20px'} },
+        // Top bar
+        ce('div', { style:{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 0',borderBottom:'1px solid #F1F5F9'} },
+          ce('div', { style:{display:'flex',alignItems:'center',gap:12} },
+            // TVS Logo area
+            ce('div', { style:{display:'flex',alignItems:'center',gap:8} },
+              ce('div', { style:{width:36,height:36,borderRadius:10,background:'linear-gradient(135deg,#B01229,#E31837)',display:'flex',alignItems:'center',justifyContent:'center'} },
+                ce('span', { style:{fontSize:14,fontWeight:900,color:'#fff',fontFamily:'DM Mono,monospace',letterSpacing:'-.04em'} }, 'TVS')
+              ),
+              ce('div', null,
+                ce('div', { style:{fontSize:13,fontWeight:800,color:'#0f172a',letterSpacing:'-.03em',lineHeight:1.1} }, 'TVS Motor Company'),
+                ce('div', { style:{fontSize:10,color:'#E31837',fontWeight:600} }, 'Lead Disposition Dashboard v2.0'),
+              )
+            ),
+            ce('div', { style:{width:1,height:28,background:'#E2E8F0'} }),
+            syncChip,
+          ),
+          ce('div', { style:{display:'flex',gap:8,alignItems:'center'} },
+            loading && ce('div', { className:'spinner' }),
+            ce('button', { className:'btn btn-secondary', style:{fontSize:11}, onClick:doFetch }, '⟳ Refresh'),
+          )
+        ),
+        // Tab nav
+        ce('div', { style:{display:'flex',overflowX:'auto',gap:0} },
+          TABS.map(t => ce('button', {
+            key: t.id,
+            className: 'tab-pill' + (tab === t.id ? ' active' : ''),
+            onClick: () => startT(() => setTab(t.id))
+          }, t.label))
+        )
+      )
+    ),
+
+    // ── Main ──
+    ce('div', { style:{maxWidth:1440,margin:'0 auto',padding:'20px'} },
+      err && ce('div', { className:'err-box', style:{marginBottom:14} }, '⚠ ' + err),
+
+      !data && !loading && ce('div', { style:{textAlign:'center',padding:60,color:'#94A3B8',fontSize:14} },
+        ce('div', { style:{fontSize:32,marginBottom:12} }, '📂'),
+        'No data loaded. ',
+        ce('button', { onClick:doFetch, style:{color:'#E31837',textDecoration:'underline',background:'none',border:'none',cursor:'pointer',fontSize:'inherit'} }, 'Click to fetch'),
+      ),
+
+      loading && !data && ce('div', { style:{textAlign:'center',padding:60} },
+        ce('div', { className:'spinner', style:{width:36,height:36,borderWidth:3,margin:'0 auto 16px'} }),
+        ce('div', { style:{color:'#64748B',fontSize:13} }, 'Fetching data from Apps Script…')
+      ),
+
+      data && ce('div', null,
+        ce(FilterBar, { data, filters, onFiltersChange: f => startT(() => setFilters(f)) }),
+        isPending && ce('div', { style:{textAlign:'center',padding:8,color:'#94A3B8',fontSize:11} }, 'Filtering…'),
+        tabContent
+      )
+    )
+  );
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   BOOTSTRAP
+   ════════════════════════════════════════════════════════════════════ */
+ReactDOM.createRoot(document.getElementById('root')).render(ce(App));
+</script>
+</body>
+</html>
