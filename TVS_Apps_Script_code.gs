@@ -272,12 +272,14 @@ function handleGetCurrentLeads(page, pageSize) {
     });
   });
 
-  return jsonOut({
-    headers: needed,
-    rows:    rows,
-    done:    (startRow + count - 1) >= lastRow,
-    total:   totalData,
-  });
+  var result = {
+    headers:      needed,
+    rows:         rows,
+    done:         (startRow + count - 1) >= lastRow,
+    total:        totalData,
+  };
+  if (page === 0) result.sheetHeaders = headers;
+  return jsonOut(result);
 }
 
 /* ─── Current-month retails proxy (paginated) ─── */
@@ -304,7 +306,10 @@ function handleGetCurrentRetails(page, pageSize) {
   }
 
   var count = Math.min(pageSize, lastRow - startRow + 1);
-  var data  = sh.getRange(startRow, 1, count, numCols).getValues();
+  // Read only up to the highest-indexed needed column to minimise data transfer
+  var maxColNeeded = Math.max(processIdx, leadIdIdx, retailMonthIdx) + 1;
+  if (maxColNeeded < 1 || maxColNeeded > numCols) maxColNeeded = numCols;
+  var data  = sh.getRange(startRow, 1, count, maxColNeeded).getValues();
 
   var needed  = ['sourceLeadId', 'Retail_Attribution_Date'];
   var indices = [leadIdIdx, retailMonthIdx];

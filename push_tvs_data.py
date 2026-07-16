@@ -100,6 +100,8 @@ def fetch_current_leads():
             raise RuntimeError(f"getCurrentLeads error: {data['error']}")
         if headers is None:
             headers = data["headers"]
+        if page == 0 and "sheetHeaders" in data:
+            print(f"  [DEBUG] Current leads sheet columns: {data['sheetHeaders']}", flush=True)
         all_rows.extend(data["rows"])
         total = data.get("total", "?")
         print(f"  Page {page}: +{len(data['rows'])} rows  (fetched {len(all_rows):,}/{total})", flush=True)
@@ -413,16 +415,27 @@ print(f"  [DEBUG] Sample retail IDs: {retail_samples}", flush=True)
 
 # 5. Standardize and concat leads
 print("\n[5/5] Processing all leads…", flush=True)
+print(f"  [DEBUG] Hist XLSX raw columns: {list(hist_leads_raw.columns)}", flush=True)
 hist_leads_std = standardize_hist_leads(hist_leads_raw)
 curr_leads_std = standardize_curr_leads(curr_leads_raw, state_to_zone)
 
 print(f"  Hist leads (standardized):  {len(hist_leads_std):,}", flush=True)
 print(f"  Curr leads (standardized):  {len(curr_leads_std):,}", flush=True)
 # DEBUG: show sample lead IDs from each source
-hist_id_samples = [to_id(v) for v in hist_leads_std["SorceLeadId"].dropna().head(5)]
-curr_id_samples = [to_id(v) for v in curr_leads_std["SorceLeadId"].dropna().head(5)]
+hist_raw_samples = list(hist_leads_std["SorceLeadId"].dropna().head(5))
+hist_id_samples  = [to_id(v) for v in hist_raw_samples]
+curr_id_samples  = [to_id(v) for v in curr_leads_std["SorceLeadId"].dropna().head(5)]
+print(f"  [DEBUG] Raw hist lead IDs:    {hist_raw_samples}", flush=True)
 print(f"  [DEBUG] Sample hist lead IDs: {hist_id_samples}", flush=True)
 print(f"  [DEBUG] Sample curr lead IDs: {curr_id_samples}", flush=True)
+# DEBUG: cross-match retail IDs against both lead sources
+retail_key_set   = set(retail_map.keys())
+hist_id_set      = {to_id(v) for v in hist_leads_std["SorceLeadId"].dropna() if to_id(v)}
+curr_id_set      = {to_id(v) for v in curr_leads_std["SorceLeadId"].dropna() if to_id(v)}
+hist_match_count = len(retail_key_set & hist_id_set)
+curr_match_count = len(retail_key_set & curr_id_set)
+print(f"  [DEBUG] Retail IDs matching hist leads: {hist_match_count:,} / {len(retail_key_set):,}", flush=True)
+print(f"  [DEBUG] Retail IDs matching curr leads: {curr_match_count:,} / {len(retail_key_set):,}", flush=True)
 
 all_leads = pd.concat([hist_leads_std, curr_leads_std], ignore_index=True)
 print(f"  Combined total:             {len(all_leads):,}", flush=True)
