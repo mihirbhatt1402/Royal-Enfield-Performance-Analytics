@@ -42,22 +42,26 @@ def to_id(v):
 def read_drive_xlsx(file_id, label=""):
     print(f"Downloading {label} from Google Drive…", flush=True)
     session = requests.Session()
-    resp = session.get("https://drive.google.com/uc?export=download",
-                       params={"id": file_id}, timeout=60)
+    resp = session.get("https://drive.google.com/uc",
+                       params={"export": "download", "id": file_id}, timeout=60)
     if "text/html" in resp.headers.get("Content-Type", ""):
-        action = re.search(r'<form[^>]*action="([^"]+)"', resp.text)
-        inputs = dict(re.findall(r'<input[^>]*name="([^"]+)"[^>]*value="([^"]+)"', resp.text))
-        if action and inputs:
-            # Old-style form — fix HTML entity encoding in action URL
-            resp = session.get(action.group(1).replace("&amp;", "&"),
-                               params=inputs, stream=True, timeout=120)
+        html = resp.text
+        # Method 1: modern Drive page — extract the full usercontent link (includes uuid)
+        direct = re.search(r'href="(https://drive\.usercontent\.google\.com/download[^"]+)"', html)
+        if direct:
+            resp = session.get(direct.group(1).replace("&amp;", "&"), stream=True, timeout=120)
         else:
-            # Fallback: modern usercontent endpoint with confirm bypass
-            resp = session.get(
-                "https://drive.usercontent.google.com/download",
-                params={"id": file_id, "export": "download", "authuser": "0", "confirm": "t"},
-                stream=True, timeout=120
-            )
+            # Method 2: old-style confirmation form
+            action = re.search(r'<form[^>]*action="([^"]+)"', html)
+            inputs = dict(re.findall(r'<input[^>]*name="([^"]+)"[^>]*value="([^"]+)"', html))
+            if action and inputs:
+                resp = session.get(action.group(1).replace("&amp;", "&"),
+                                   params=inputs, stream=True, timeout=120)
+            else:
+                # Method 3: last resort — add confirm=t to original URL
+                resp = session.get("https://drive.google.com/uc",
+                                   params={"export": "download", "id": file_id, "confirm": "t"},
+                                   stream=True, timeout=120)
     resp.raise_for_status()
     buf = io.BytesIO()
     for chunk in resp.iter_content(chunk_size=1024*1024):
