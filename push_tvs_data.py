@@ -438,7 +438,22 @@ curr_id_set      = {to_id(v) for v in curr_leads_std["SorceLeadId"].dropna() if 
 hist_match_count = len(retail_key_set & hist_id_set)
 curr_match_count = len(retail_key_set & curr_id_set)
 print(f"  [DEBUG] Retail IDs matching hist SorceLeadId: {hist_match_count:,} / {len(retail_key_set):,}", flush=True)
-print(f"  [DEBUG] Retail IDs matching curr oem_crm_id:  {curr_match_count:,} / {len(retail_key_set):,}", flush=True)
+print(f"  [DEBUG] Retail IDs matching curr opty_id:     {curr_match_count:,} / {len(retail_key_set):,}", flush=True)
+# Show matched IDs and their retail months
+matched_ids = retail_key_set & hist_id_set
+if matched_ids:
+    sample_matched = list(matched_ids)[:5]
+    matched_months = Counter(retail_map[rid]["rm"] for rid in matched_ids if rid in retail_map)
+    print(f"  [DEBUG] Sample MATCHED hist-retail IDs: {sample_matched}", flush=True)
+    print(f"  [DEBUG] Retail months for matched:      {dict(matched_months.most_common())}", flush=True)
+unmatched = retail_key_set - hist_id_set - curr_id_set
+unmatched_months = Counter(retail_map[rid]["rm"] for rid in list(unmatched)[:5000] if rid in retail_map)
+print(f"  [DEBUG] Retail months for unmatched (sample of 5k): {dict(unmatched_months.most_common())}", flush=True)
+# Show IDs from across the hist dataset (not just head)
+hist_mid = [to_id(v) for v in hist_leads_std["SorceLeadId"].dropna().iloc[100000:100005]]
+hist_end = [to_id(v) for v in hist_leads_std["SorceLeadId"].dropna().iloc[-5:]]
+print(f"  [DEBUG] Mid hist SorceLeadId (row ~100k): {hist_mid}", flush=True)
+print(f"  [DEBUG] End hist SorceLeadId (last rows): {hist_end}", flush=True)
 # Also check Enquiry ID from hist raw data
 if 'Enquiry ID' in hist_leads_raw.columns:
     eq_samples     = [to_id(v) for v in hist_leads_raw["Enquiry ID"].dropna().head(5)]
