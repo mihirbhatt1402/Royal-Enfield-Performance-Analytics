@@ -81,11 +81,11 @@ def read_drive_xlsx(file_id, label=""):
     print(f"  {label}: {size_kb:.0f} KB", flush=True)
     return buf
 
-def proxy_get(action, extra_params=None):
+def proxy_get(action, extra_params=None, timeout=120):
     params = {"action": action, "secret": SECRET}
     if extra_params:
         params.update(extra_params)
-    resp = requests.get(APPS_SCRIPT_URL, params=params, timeout=120)
+    resp = requests.get(APPS_SCRIPT_URL, params=params, timeout=timeout)
     resp.raise_for_status()
     return resp.json()
 
@@ -189,7 +189,7 @@ def fetch_current_retails():
     page, retail_map = 0, {}
     while True:
         try:
-            data = proxy_get("getCurrentRetails", {"page": page, "pageSize": 25000})
+            data = proxy_get("getCurrentRetails", {"page": page, "pageSize": 25000}, timeout=300)
         except Exception as e:
             print(f"  WARNING: getCurrentRetails page {page} failed ({e}); skipping rest.", flush=True)
             break
