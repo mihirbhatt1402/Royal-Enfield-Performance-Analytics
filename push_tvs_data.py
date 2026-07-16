@@ -289,6 +289,39 @@ def standardize_leads(df):
                          "State","Zone","BuyingDays","CityName","DealerName"] if c in out.columns]
     return out[keep].copy()
 
+# ─── Generic sheet reader via Apps Script proxy (paginated) ──────────────────
+
+def fetch_sheet_via_proxy(file_id, name):
+    """
+    Fetch any Google Sheet via Apps Script getSheetData endpoint.
+    Returns DataFrame with original column headers.
+    Used for TVS CPS folder files (private sheets, no GitHub Actions auth).
+    """
+    page, all_rows, headers = 0, [], None
+    while True:
+        for attempt in range(3):
+            try:
+                data = proxy_get("getSheetData", {"fileId": file_id, "page": page, "pageSize": 25000}, timeout=300)
+                break
+            except Exception as e:
+                if attempt < 2:
+                    print(f"    WARNING: {name} page {page} attempt {attempt+1} failed ({e}); retrying in 30s…", flush=True)
+                    time.sleep(30)
+                else:
+                    raise RuntimeError(f"getSheetData {name} page {page} failed after 3 attempts: {e}")
+        if "error" in data:
+            raise RuntimeError(f"getSheetData error for {name}: {data['error']}")
+        if headers is None:
+            headers = data["headers"]
+        rows  = data.get("rows", [])
+        total = data.get("total", "?")
+        all_rows.extend(rows)
+        print(f"    {name} page {page}: +{len(rows):,} rows (total {len(all_rows):,}/{total})", flush=True)
+        if data.get("done", True):
+            break
+        page += 1
+    return pd.DataFrame(all_rows, columns=headers)
+
 # ─── Fetch current month leads (paginated via Apps Script) ────────────────────
 
 def fetch_current_leads():
@@ -470,13 +503,12 @@ try:
     print(f"  TVS CPS files in folder: {len(file_list)}", flush=True)
     for f in file_list:
         try:
-            buf = read_drive_xlsx(f["id"], f["name"])
-            raw = pd.read_excel(buf, dtype=str, engine="openpyxl")
+            raw = fetch_sheet_via_proxy(f["id"], f["name"])
             raw.columns = [c.strip() for c in raw.columns]
             embed_map.update(build_retail_map_from_leads(raw))
             std = standardize_leads(raw)
             lead_dfs.append(std)
-            print(f"    {f['name']}: {len(raw):,} rows", flush=True)
+            print(f"    {f['name']}: {len(raw):,} rows loaded", flush=True)
         except Exception as e:
             print(f"    WARNING: Could not read {f['name']}: {e}", flush=True)
 except Exception as e:

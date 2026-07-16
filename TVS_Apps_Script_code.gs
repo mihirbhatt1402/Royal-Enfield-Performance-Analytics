@@ -116,6 +116,14 @@ function doGet(e) {
       return handleGetLeadFileList();
     }
 
+    if (action === 'getSheetData') {
+      if (secret !== PUSH_SECRET) return jsonOut({ error: 'Unauthorized' });
+      var fileId   = e.parameter.fileId;
+      var page     = parseInt(e.parameter.page     || '0');
+      var pageSize = parseInt(e.parameter.pageSize || '25000');
+      return handleGetSheetData(fileId, page, pageSize);
+    }
+
     if (action === 'getCurrentLeads') {
       if (secret !== PUSH_SECRET) return jsonOut({ error: 'Unauthorized' });
       var page     = parseInt(e.parameter.page     || '0');
@@ -357,6 +365,47 @@ function handleGetLeadFileList() {
     return jsonOut({ files: files });
   } catch (e) {
     return jsonOut({ error: 'getLeadFileList failed: ' + e.message });
+  }
+}
+
+/* ─── Generic sheet reader via proxy (paginated) — used for TVS CPS folder files ─── */
+function handleGetSheetData(fileId, page, pageSize) {
+  if (!fileId) return jsonOut({ error: 'fileId required' });
+  try {
+    var ss      = SpreadsheetApp.openById(fileId);
+    var sh      = ss.getSheets()[0];
+    var lastRow = sh.getLastRow();
+    var numCols = sh.getLastColumn();
+
+    if (lastRow < 2) {
+      return jsonOut({ headers: [], rows: [], done: true, total: 0 });
+    }
+
+    var headers  = sh.getRange(1, 1, 1, numCols).getValues()[0].map(String);
+    var startRow = 2 + page * pageSize;
+
+    if (startRow > lastRow) {
+      return jsonOut({ headers: headers, rows: [], done: true, total: lastRow - 1 });
+    }
+
+    var count = Math.min(pageSize, lastRow - startRow + 1);
+    var data  = sh.getRange(startRow, 1, count, numCols).getValues();
+
+    var rows = data.map(function(row) {
+      return row.map(function(v) {
+        if (v instanceof Date) return Utilities.formatDate(v, 'Asia/Kolkata', 'yyyy-MM-dd');
+        return String(v == null ? '' : v);
+      });
+    });
+
+    return jsonOut({
+      headers: headers,
+      rows:    rows,
+      done:    (startRow + count - 1) >= lastRow,
+      total:   lastRow - 1,
+    });
+  } catch (e) {
+    return jsonOut({ error: 'getSheetData failed: ' + e.message });
   }
 }
 
