@@ -17,11 +17,20 @@
 =================================================================*/
 
 const CONFIG = {
-  LEADS_FILE_ID:   'PASTE_LEADS_XLSX_FILE_ID_HERE',
-  RETAILS_FILE_ID: 'PASTE_RETAILS_XLSX_FILE_ID_HERE',
-  CACHE_SHEET_ID:  'PASTE_CACHE_GOOGLE_SHEET_ID_HERE',
+  // Historical completed-month XLSX files (on Google Drive)
+  HIST_LEAD_FILE_IDS:    ['1jPYG0LGFFd_ljWpfPr2NPfIU0fK1i7px'],   // Apr-Jun FY26-27
+  HIST_RETAIL_FILE_IDS:  ['167q8mrckJeeL9DWTMLxe5Iq59RqVTamd'],   // Apr-Jun FY26-27
+
+  // Current month live Google Sheets
+  CURR_LEADS_SHEET_ID:   '1iSw5zXF67q5Wkoz2mSPFqql9OPAcqmd0um5BEHUGf4o',
+  CURR_LEADS_TAB:        'TVS',
+  CURR_RETAILS_SHEET_ID: '1ZWBlzxX-g2R5iCcrsGUWrqSvxIHcchFHtajDDPcFJgE',
+  CURR_RETAILS_TAB:      'Raw',
+
+  // Cache (output)
+  CACHE_SHEET_ID:  '1leebtjg8P7bKRrwfAolCNcDHrmM18GQVclD9xzhayIk',
   CACHE_TAB:       'Data',
-  CACHE_TTL_MS:    4 * 60 * 60 * 1000,
+  CACHE_TTL_MS:    25 * 60 * 60 * 1000,  // 25 h — survives until next daily pipeline run
 };
 
 const PUSH_SECRET    = 'tvs2026push';
@@ -91,6 +100,29 @@ function doGet(e) {
       const email = ((e.parameter.email) || '').toLowerCase().trim();
       if (!isAdmin(email)) return jsonOut({ error: 'Unauthorized' });
       return jsonOut({ pending: getPendingMap() });
+    }
+
+    // Data proxy endpoints (protected by PUSH_SECRET)
+    const secret = e.parameter && e.parameter.secret;
+
+    if (action === 'getConfig') {
+      if (secret !== PUSH_SECRET) return jsonOut({ error: 'Unauthorized' });
+      return jsonOut({
+        histLeadFileIds:   CONFIG.HIST_LEAD_FILE_IDS,
+        histRetailFileIds: CONFIG.HIST_RETAIL_FILE_IDS,
+      });
+    }
+
+    if (action === 'getCurrentLeads') {
+      if (secret !== PUSH_SECRET) return jsonOut({ error: 'Unauthorized' });
+      var page     = parseInt(e.parameter.page     || '0');
+      var pageSize = parseInt(e.parameter.pageSize || '25000');
+      return handleGetCurrentLeads(page, pageSize);
+    }
+
+    if (action === 'getCurrentRetails') {
+      if (secret !== PUSH_SECRET) return jsonOut({ error: 'Unauthorized' });
+      return handleGetCurrentRetails();
     }
 
     // Default: serve dashboard data
@@ -176,29 +208,28 @@ function writeChunked(json) {
   });
 }
 
-/* ─── Read from cache if fresh, otherwise recompute ─── */
+/* ─── Read from cache sheet (always — pipeline is the sole writer) ─── */
 function getOrBuildJson() {
-  const props    = PropertiesService.getScriptProperties();
-  const cacheAge = props.getProperty('tvs_cache_ts');
-  if (cacheAge && (Date.now() - parseInt(cacheAge)) < CONFIG.CACHE_TTL_MS) {
-    try {
-      const ss = SpreadsheetApp.openById(CONFIG.CACHE_SHEET_ID);
-      const sh = ss.getSheetByName(CONFIG.CACHE_TAB);
-      if (sh) {
-        const chunks = parseInt(props.getProperty('tvs_chunks') || '1');
-        var val;
-        if (chunks <= 1) {
-          val = String(sh.getRange('A1').getValue());
-        } else {
-          val = sh.getRange(1, 1, chunks, 1).getValues().map(function(r) { return String(r[0]); }).join('');
-        }
-        if (val && val.length > 10) {
-          Logger.log('Serving from cache (' + chunks + ' chunks, ' + val.length + ' chars)');
-          return val;
-        }
+  const props = PropertiesService.getScriptProperties();
+  try {
+    const ss = SpreadsheetApp.openById(CONFIG.CACHE_SHEET_ID);
+    const sh = ss.getSheetByName(CONFIG.CACHE_TAB);
+    if (sh) {
+      const chunks = parseInt(props.getProperty('tvs_chunks') || '1');
+      var val;
+      if (chunks <= 1) {
+        val = String(sh.getRange('A1').getValue());
+      } else {
+        val = sh.getRange(1, 1, chunks, 1).getValues().map(function(r) { return String(r[0]); }).join('');
       }
-    } catch (e) { Logger.log('Cache read failed: ' + e); }
-  }
+      if (val && val.length > 10) {
+        const cacheAge = props.getProperty('tvs_cache_ts');
+        const stale    = cacheAge && (Date.now() - parseInt(cacheAge)) > CONFIG.CACHE_TTL_MS;
+        Logger.log('Serving from sheet (' + chunks + ' chunks, ' + val.length + ' chars' + (stale ? ', stale' : '') + ')');
+        return val;
+      }
+    }
+  } catch (e) { Logger.log('Cache read failed: ' + e); }
   return JSON.stringify({ error: 'No data — run push_tvs_data.py to populate' });
 }
 
@@ -206,6 +237,79 @@ function getOrBuildJson() {
 function clearCache() {
   PropertiesService.getScriptProperties().deleteProperty('tvs_cache_ts');
   Logger.log('Cache cleared.');
+}
+
+/* ─── Current-month leads proxy (paginated) ─── */
+function handleGetCurrentLeads(page, pageSize) {
+  var ss        = SpreadsheetApp.openById(CONFIG.CURR_LEADS_SHEET_ID);
+  var sh        = ss.getSheetByName(CONFIG.CURR_LEADS_TAB);
+  var lastRow   = sh.getLastRow();
+  var totalData = lastRow - 1;
+
+  var startRow = 2 + page * pageSize;
+  if (startRow > lastRow) {
+    return jsonOut({ headers: [], rows: [], done: true, total: totalData });
+  }
+
+  var count   = Math.min(pageSize, lastRow - startRow + 1);
+  var numCols = sh.getLastColumn();
+  var headers = sh.getRange(1, 1, 1, numCols).getValues()[0].map(String);
+  var data    = sh.getRange(startRow, 1, count, numCols).getValues();
+
+  var needed = [
+    'opty_id', 'Lead_Month', 'model', 'City', 'State',
+    'Dealer_Name', 'lead_type', 'Medium',
+    'DMS_Retail_Month', 'Retail Date', 'Retail By'
+  ];
+  var colIdx = needed.map(function(n) { return headers.indexOf(n); });
+
+  var rows = data.map(function(row) {
+    return colIdx.map(function(i) {
+      if (i < 0) return '';
+      var v = row[i];
+      if (v instanceof Date) return Utilities.formatDate(v, 'Asia/Kolkata', 'yyyy-MM-dd');
+      return String(v == null ? '' : v);
+    });
+  });
+
+  return jsonOut({
+    headers: needed,
+    rows:    rows,
+    done:    (startRow + count - 1) >= lastRow,
+    total:   totalData,
+  });
+}
+
+/* ─── Current-month retails proxy ─── */
+function handleGetCurrentRetails() {
+  var ss   = SpreadsheetApp.openById(CONFIG.CURR_RETAILS_SHEET_ID);
+  var sh   = ss.getSheetByName(CONFIG.CURR_RETAILS_TAB);
+  var data = sh.getDataRange().getValues();
+  var hdr  = data[0].map(String);
+
+  var processIdx     = hdr.findIndex(function(h) { return h.toLowerCase() === 'process'; });
+  var leadIdIdx      = hdr.findIndex(function(h) { return h.toLowerCase() === 'sourceleadid'; });
+  var retailMonthIdx = hdr.findIndex(function(h) {
+    return h.toLowerCase().replace(/[_ ]/g, '') === 'retailattributiondate';
+  });
+
+  var needed  = ['sourceLeadId', 'Retail_Attribution_Date'];
+  var indices = [leadIdIdx, retailMonthIdx];
+
+  var rows = [];
+  for (var i = 1; i < data.length; i++) {
+    var row = data[i];
+    if (processIdx >= 0 && String(row[processIdx] || '').trim().toUpperCase() !== 'TVS') continue;
+    var out = indices.map(function(idx) {
+      if (idx < 0) return '';
+      var v = row[idx];
+      if (v instanceof Date) return Utilities.formatDate(v, 'Asia/Kolkata', 'MMM-yyyy');
+      return String(v == null ? '' : v);
+    });
+    rows.push(out);
+  }
+
+  return jsonOut({ headers: needed, rows: rows, total: rows.length });
 }
 
 /* ─── Debug: view current roles and pending ─── */

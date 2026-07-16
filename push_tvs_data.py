@@ -47,15 +47,26 @@ def read_drive_xlsx(file_id, label=""):
     if "text/html" in resp.headers.get("Content-Type", ""):
         action = re.search(r'<form[^>]*action="([^"]+)"', resp.text)
         inputs = dict(re.findall(r'<input[^>]*name="([^"]+)"[^>]*value="([^"]+)"', resp.text))
-        if not action or not inputs:
-            raise RuntimeError(f"Cannot parse Drive confirmation page for {label}")
-        resp = session.get(action.group(1), params=inputs, stream=True, timeout=120)
+        if action and inputs:
+            # Old-style form — fix HTML entity encoding in action URL
+            resp = session.get(action.group(1).replace("&amp;", "&"),
+                               params=inputs, stream=True, timeout=120)
+        else:
+            # Fallback: modern usercontent endpoint with confirm bypass
+            resp = session.get(
+                "https://drive.usercontent.google.com/download",
+                params={"id": file_id, "export": "download", "authuser": "0", "confirm": "t"},
+                stream=True, timeout=120
+            )
     resp.raise_for_status()
     buf = io.BytesIO()
     for chunk in resp.iter_content(chunk_size=1024*1024):
         buf.write(chunk)
     buf.seek(0)
-    print(f"  {label}: {len(buf.getvalue())/1024:.0f} KB", flush=True)
+    size_kb = len(buf.getvalue()) / 1024
+    if size_kb < 10:
+        raise RuntimeError(f"{label} download too small ({size_kb:.0f} KB) — possible Drive auth error")
+    print(f"  {label}: {size_kb:.0f} KB", flush=True)
     return buf
 
 def proxy_get(action, extra_params=None):
