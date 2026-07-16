@@ -292,25 +292,24 @@ function handleGetCurrentRetails(page, pageSize) {
 
   var hdr = sh.getRange(1, 1, 1, numCols).getValues()[0].map(String);
 
-  var processIdx     = hdr.findIndex(function(h) { return h.toLowerCase() === 'process'; });
-  var leadIdIdx      = hdr.findIndex(function(h) { return h.toLowerCase() === 'sourceleadid'; });
-  var retailMonthIdx = hdr.findIndex(function(h) {
-    return h.toLowerCase().replace(/[_ ]/g, '') === 'retailattributiondate';
+  var processIdx    = hdr.findIndex(function(h) { return h.toLowerCase() === 'process'; });
+  var leadIdIdx     = hdr.findIndex(function(h) { return h.toLowerCase() === 'sourceleadid'; });
+  var perfMonthIdx  = hdr.findIndex(function(h) {
+    return h.toLowerCase().replace(/[_ ]/g, '') === 'performancemonth';
   });
+  var modelIdx      = hdr.findIndex(function(h) { return h.toLowerCase() === 'purchasedmodel'; });
+  var createTimeIdx = hdr.findIndex(function(h) { return h.toLowerCase() === 'createtime'; });
+
+  var needed  = ['sourceLeadId', 'performanceMonth', 'purchasedModel', 'createTime'];
+  var indices = [leadIdIdx, perfMonthIdx, modelIdx, createTimeIdx];
 
   var startRow = 2 + page * pageSize;
   if (startRow > lastRow) {
-    return jsonOut({ headers: ['sourceLeadId', 'Retail_Attribution_Date'], rows: [], done: true, total: lastRow - 1 });
+    return jsonOut({ headers: needed, rows: [], done: true, total: lastRow - 1 });
   }
 
   var count = Math.min(pageSize, lastRow - startRow + 1);
-  // Read only up to the highest-indexed needed column to minimise data transfer
-  var maxColNeeded = Math.max(processIdx, leadIdIdx, retailMonthIdx) + 1;
-  if (maxColNeeded < 1 || maxColNeeded > numCols) maxColNeeded = numCols;
-  var data  = sh.getRange(startRow, 1, count, maxColNeeded).getValues();
-
-  var needed  = ['sourceLeadId', 'Retail_Attribution_Date'];
-  var indices = [leadIdIdx, retailMonthIdx];
+  var data  = sh.getRange(startRow, 1, count, numCols).getValues();
 
   var rows = [];
   for (var i = 0; i < data.length; i++) {
@@ -319,7 +318,7 @@ function handleGetCurrentRetails(page, pageSize) {
     var out = indices.map(function(idx) {
       if (idx < 0) return '';
       var v = row[idx];
-      if (v instanceof Date) return Utilities.formatDate(v, 'Asia/Kolkata', 'MMM-yyyy');
+      if (v instanceof Date) return Utilities.formatDate(v, 'Asia/Kolkata', 'yyyy-MM-dd HH:mm:ss');
       return String(v == null ? '' : v);
     });
     rows.push(out);

@@ -17,9 +17,6 @@ MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov'
 APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwzgnXPbCbunBblnMUrqdWg3eY9qsIwCrFxuYuvYSpxtH22l4Cs32vdkOkDhUn-qwM64w/exec"
 SECRET = "tvs2026push"
 
-RETAILS_FILE_ID = '1ZWBlzxX-g2R5iCcrsGUWrqSvxIHcchFHtajDDPcFJgE'
-RETAILS_TAB     = 'Raw'
-
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 
 def norm_month(s):
@@ -37,6 +34,28 @@ def norm_month(s):
         if yr2:
             return f"{mn}'{yr2.group(1)}"
     return s
+
+def parse_ym(s):
+    """Parse any date/month string to Mon'YY — handles ISO datetime and Mon-YYYY formats."""
+    s = str(s or '').strip()
+    if not s:
+        return ''
+    try:
+        ts = pd.Timestamp(s)
+        return f"{MONTH_NAMES[ts.month - 1]}'{ts.strftime('%y')}"
+    except Exception:
+        return norm_month(s)
+
+def lid_to_month(lid):
+    """Decode lead creation month from 18-digit sequential CRM ID (YYMMDD prefix)."""
+    try:
+        yy = int(lid[0:2])
+        mm = int(lid[2:4])
+        if 1 <= mm <= 12:
+            return f"{MONTH_NAMES[mm - 1]}'{yy:02d}"
+    except Exception:
+        pass
+    return ''
 
 def to_id(v):
     if pd.isna(v): return ""
@@ -92,27 +111,48 @@ def proxy_get(action, extra_params=None, timeout=120):
     resp.raise_for_status()
     return resp.json()
 
-# ─── Retails: load from XLSX ──────────────────────────────────────────────────
+# ─── Retails: load via Apps Script proxy (authenticated, paginated) ───────────
 
-def fetch_retails_xlsx():
-    """Download retail master XLSX and return filtered DataFrame (TVS only)."""
-    buf = read_drive_xlsx(RETAILS_FILE_ID, "RetailMaster")
-    df = pd.read_excel(buf, sheet_name=RETAILS_TAB, dtype=str, engine='openpyxl')
-    df.columns = [c.strip() for c in df.columns]
-    proc_col = next((c for c in df.columns if c.lower() == 'process'), None)
-    if proc_col:
-        df = df[df[proc_col].str.strip().str.upper() == 'TVS'].copy()
+def fetch_retails_proxy():
+    """
+    Fetch all TVS retails from the retail master via Apps Script proxy (paginated).
+    Returns a DataFrame with columns: sourceLeadId, performanceMonth, purchasedModel, createTime.
+    The Apps Script filters to TVS rows and returns these four columns.
+    """
+    print("Fetching retail master via Apps Script (paginated)…", flush=True)
+    page, all_rows, headers = 0, [], None
+    while True:
+        try:
+            data = proxy_get("getCurrentRetails", {"page": page, "pageSize": 25000}, timeout=300)
+        except Exception as e:
+            raise RuntimeError(f"getCurrentRetails page {page} failed: {e}")
+        if "error" in data:
+            raise RuntimeError(f"getCurrentRetails error: {data['error']}")
+        if headers is None:
+            headers = data["headers"]
+        rows  = data.get("rows", [])
+        total = data.get("total", "?")
+        all_rows.extend(rows)
+        print(f"  Page {page}: +{len(rows)} rows  (fetched {len(all_rows):,}/{total})", flush=True)
+        if data.get("done", True):
+            break
+        page += 1
+    df = pd.DataFrame(all_rows, columns=headers)
     print(f"  Retails master: {len(df):,} TVS rows", flush=True)
     return df
 
-def build_retail_map_from_xlsx(retail_df):
-    """Build retail_map {normalized_sourceLeadId → {rm, rtype}} from the retail master."""
+def build_retail_map_from_proxy(retail_df):
+    """Build retail_map {normalized_sourceLeadId → {rm, rtype}} from the proxy DataFrame.
+    Handles both old 2-column (sourceLeadId, Retail_Attribution_Date) and
+    new 4-column (sourceLeadId, performanceMonth, purchasedModel, createTime) responses.
+    """
     retail_map = {}
     for _, row in retail_df.iterrows():
         lid = to_id(row.get('sourceLeadId', ''))
         if not lid:
             continue
-        rm = norm_month(str(row.get('performanceMonth', '') or '').strip())
+        # performanceMonth is available in new Apps Script; fall back to Retail_Attribution_Date
+        rm = parse_ym(row.get('performanceMonth', '') or row.get('Retail_Attribution_Date', ''))
         retail_map[lid] = {'rm': rm, 'rtype': ''}
     return retail_map
 
@@ -120,7 +160,9 @@ def make_synthetic_leads(retail_df, matched_lid_set):
     """
     Create synthetic lead rows for retails whose sourceLeadId is absent from hist/curr data.
     These are leads that were retailed and removed from the active sheet before the pipeline ran.
-    Model is taken from retail master purchasedModel; lead month from createTime.
+    Model: from purchasedModel if Apps Script returns it; else 'Unknown'.
+    Lead month: from createTime, or decoded from the 18-digit sourceLeadId (YYMMDD prefix),
+                or falls back to retail month.
     State/city/dealer/source are Unknown since that data is unavailable.
     """
     rows = []
@@ -128,12 +170,10 @@ def make_synthetic_leads(retail_df, matched_lid_set):
         lid = to_id(row.get('sourceLeadId', ''))
         if not lid or lid in matched_lid_set:
             continue
-        ct = str(row.get('createTime', '') or '').strip()
-        try:
-            ts = pd.Timestamp(ct)
-            lm = f"{MONTH_NAMES[ts.month - 1]}'{ts.strftime('%y')}"
-        except Exception:
-            lm = norm_month(str(row.get('performanceMonth', '') or ''))
+        # Lead month: try createTime, then decode from sourceLeadId, then retail month
+        lm = (parse_ym(row.get('createTime', ''))
+              or lid_to_month(lid)
+              or parse_ym(row.get('performanceMonth', '') or row.get('Retail_Attribution_Date', '')))
         model = str(row.get('purchasedModel', '') or '').strip() or 'Unknown'
         rows.append({
             'SorceLeadId': lid,
@@ -407,9 +447,9 @@ config = proxy_get("getConfig")
 hist_lead_ids = config["histLeadFileIds"]
 print(f"  Historical lead files: {hist_lead_ids}", flush=True)
 
-# 2. Download retails master XLSX (all months, all retails)
+# 2. Fetch retails master via Apps Script proxy (all months, TVS only)
 print("\n[2/6] Loading retail master…", flush=True)
-retail_df = fetch_retails_xlsx()
+retail_df = fetch_retails_proxy()
 
 # 3. Download historical leads XLSX
 print("\n[3/6] Loading historical lead data…", flush=True)
@@ -430,9 +470,9 @@ print(f"  State→Zone mappings: {len(state_to_zone)}", flush=True)
 print("\n[4/6] Fetching current-month leads from Apps Script…", flush=True)
 curr_leads_raw = fetch_current_leads()
 
-# 5. Build retail map: base from retail master XLSX, enhanced by embedded retail cols in leads sheet
+# 5. Build retail map: base from retail master proxy, enhanced by embedded retail cols in leads sheet
 print("\n[5/6] Building retail maps…", flush=True)
-retail_map     = build_retail_map_from_xlsx(retail_df)        # all retails, retail month from master
+retail_map     = build_retail_map_from_proxy(retail_df)       # all retails, retail month from master
 curr_embed_map = build_retail_map_from_curr(curr_leads_raw)   # provides rtype (DMS/Call) + DMS month
 retail_map.update(curr_embed_map)                              # embed overrides for rtype accuracy
 print(f"  Retail master:          {len(retail_df):,}", flush=True)
