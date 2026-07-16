@@ -5,7 +5,7 @@ Runs via GitHub Actions at 11 AM IST every day.
 DATA SOURCES:
   Historical leads (Apr-Jun): Google Sheet 1jPYG0LGFFd_ljWpfPr2NPfIU0fK1i7px → fetched via XLSX export
   Current leads   (Jul+):     Private Google Sheet via Apps Script proxy
-  Retails (all months):       Google Sheet 1ZWBlzxX-g2R5iCcrsGUWrqSvxIHcchFHtajDDPcFJgE → via Apps Script proxy
+  Retails (all months):       Google Sheet 1ZWBlzxX-g2R5iCcrsGUWrqSvxIHcchFHtajDDPcFJgE → XLSX export
 """
 
 import json, sys, io, re, urllib.request
@@ -13,6 +13,14 @@ import pandas as pd
 import requests
 
 MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+
+APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwzgnXPbCbunBblnMUrqdWg3eY9qsIwCrFxuYuvYSpxtH22l4Cs32vdkOkDhUn-qwM64w/exec"
+SECRET = "tvs2026push"
+
+RETAILS_FILE_ID = '1ZWBlzxX-g2R5iCcrsGUWrqSvxIHcchFHtajDDPcFJgE'
+RETAILS_TAB     = 'Raw'
+
+# ─── Helpers ─────────────────────────────────────────────────────────────────
 
 def norm_month(s):
     """Normalize any month string to Mon'YY format (e.g. Jul'26)."""
@@ -29,11 +37,6 @@ def norm_month(s):
         if yr2:
             return f"{mn}'{yr2.group(1)}"
     return s
-
-APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwzgnXPbCbunBblnMUrqdWg3eY9qsIwCrFxuYuvYSpxtH22l4Cs32vdkOkDhUn-qwM64w/exec"
-SECRET = "tvs2026push"
-
-# ─── Helpers ─────────────────────────────────────────────────────────────────
 
 def to_id(v):
     if pd.isna(v): return ""
@@ -89,6 +92,65 @@ def proxy_get(action, extra_params=None, timeout=120):
     resp.raise_for_status()
     return resp.json()
 
+# ─── Retails: load from XLSX ──────────────────────────────────────────────────
+
+def fetch_retails_xlsx():
+    """Download retail master XLSX and return filtered DataFrame (TVS only)."""
+    buf = read_drive_xlsx(RETAILS_FILE_ID, "RetailMaster")
+    df = pd.read_excel(buf, sheet_name=RETAILS_TAB, dtype=str, engine='openpyxl')
+    df.columns = [c.strip() for c in df.columns]
+    proc_col = next((c for c in df.columns if c.lower() == 'process'), None)
+    if proc_col:
+        df = df[df[proc_col].str.strip().str.upper() == 'TVS'].copy()
+    print(f"  Retails master: {len(df):,} TVS rows", flush=True)
+    return df
+
+def build_retail_map_from_xlsx(retail_df):
+    """Build retail_map {normalized_sourceLeadId → {rm, rtype}} from the retail master."""
+    retail_map = {}
+    for _, row in retail_df.iterrows():
+        lid = to_id(row.get('sourceLeadId', ''))
+        if not lid:
+            continue
+        rm = norm_month(str(row.get('performanceMonth', '') or '').strip())
+        retail_map[lid] = {'rm': rm, 'rtype': ''}
+    return retail_map
+
+def make_synthetic_leads(retail_df, matched_lid_set):
+    """
+    Create synthetic lead rows for retails whose sourceLeadId is absent from hist/curr data.
+    These are leads that were retailed and removed from the active sheet before the pipeline ran.
+    Model is taken from retail master purchasedModel; lead month from createTime.
+    State/city/dealer/source are Unknown since that data is unavailable.
+    """
+    rows = []
+    for _, row in retail_df.iterrows():
+        lid = to_id(row.get('sourceLeadId', ''))
+        if not lid or lid in matched_lid_set:
+            continue
+        ct = str(row.get('createTime', '') or '').strip()
+        try:
+            ts = pd.Timestamp(ct)
+            lm = f"{MONTH_NAMES[ts.month - 1]}'{ts.strftime('%y')}"
+        except Exception:
+            lm = norm_month(str(row.get('performanceMonth', '') or ''))
+        model = str(row.get('purchasedModel', '') or '').strip() or 'Unknown'
+        rows.append({
+            'SorceLeadId': lid,
+            'LeadMonth':   lm,
+            'ModelName':   model,
+            'Source':      'Unknown',
+            'LeadType':    'Unknown',
+            'State':       'Unknown',
+            'Zone':        'Unknown',
+            'BuyingDays':  '0',
+            'CityName':    'Unknown',
+            'DealerName':  'Unknown',
+        })
+    return pd.DataFrame(rows) if rows else pd.DataFrame(columns=[
+        'SorceLeadId', 'LeadMonth', 'ModelName', 'Source', 'LeadType',
+        'State', 'Zone', 'BuyingDays', 'CityName', 'DealerName'])
+
 # ─── Fetch current month leads (paginated) ───────────────────────────────────
 
 def fetch_current_leads():
@@ -100,8 +162,6 @@ def fetch_current_leads():
             raise RuntimeError(f"getCurrentLeads error: {data['error']}")
         if headers is None:
             headers = data["headers"]
-        if page == 0 and "sheetHeaders" in data:
-            print(f"  [DEBUG] Current leads sheet columns: {data['sheetHeaders']}", flush=True)
         all_rows.extend(data["rows"])
         total = data.get("total", "?")
         print(f"  Page {page}: +{len(data['rows'])} rows  (fetched {len(all_rows):,}/{total})", flush=True)
@@ -143,10 +203,8 @@ def standardize_hist_leads(df):
     }
     mapping = {k: v for k, v in mapping.items() if k}
     out = df.rename(columns=mapping)
-    # Normalize month format to Mon'YY
     if "LeadMonth" in out.columns:
         out["LeadMonth"] = out["LeadMonth"].apply(norm_month)
-    # Keep only the canonical columns that exist
     keep = [c for c in ["SorceLeadId","LeadMonth","Source","LeadType","ModelName",
                          "State","Zone","BuyingDays","CityName","DealerName"] if c in out.columns]
     return out[keep].copy()
@@ -167,9 +225,9 @@ CURR_COL_MAP = {
 
 def build_retail_map_from_curr(curr_df):
     """
-    Extract retail data embedded in current-month leads sheet.
-    Rows with non-empty 'Retail Date' are retailed.
-    Uses DMS_Retail_Month as retail month and 'Retail By' as retail type.
+    Extract retail type and month from retailed leads embedded in the current leads sheet.
+    Rows with non-empty 'Retail Date' are retailed; this provides DMS_Retail_Month and Retail By.
+    Used to enhance rtype (DMS vs Call) over retail master which has no type info.
     """
     retail_map = {}
     for _, row in curr_df.iterrows():
@@ -185,53 +243,23 @@ def build_retail_map_from_curr(curr_df):
         }
     return retail_map
 
-def fetch_current_retails():
-    """Fetch current-month retails from the separate retails sheet via Apps Script (paginated)."""
-    print("Fetching current-month retails from Apps Script (paginated)…", flush=True)
-    page, retail_map = 0, {}
-    while True:
-        try:
-            data = proxy_get("getCurrentRetails", {"page": page, "pageSize": 25000}, timeout=300)
-        except Exception as e:
-            print(f"  WARNING: getCurrentRetails page {page} failed ({e}); skipping rest.", flush=True)
-            break
-        if "error" in data:
-            print(f"  WARNING: getCurrentRetails error: {data['error']}", flush=True)
-            break
-        rows  = data.get("rows", [])
-        total = data.get("total", "?")
-        for row in rows:
-            lid = to_id(row[0]) if len(row) > 0 else ""
-            rm  = norm_month(str(row[1]).strip()) if len(row) > 1 else ""
-            if lid:
-                retail_map[lid] = {"rm": rm, "rtype": ""}
-        print(f"  Page {page}: +{len(rows)} rows  (map size {len(retail_map):,}/{total})", flush=True)
-        if data.get("done", True):
-            break
-        page += 1
-    print(f"  Retails sheet total: {len(retail_map):,}", flush=True)
-    return retail_map
-
 def standardize_curr_leads(curr_df, state_to_zone):
     """Rename columns, derive Zone from historical state lookup, add BuyingDays=0."""
     out = curr_df.rename(columns=CURR_COL_MAP).copy()
     out["State"] = out["State"].astype(str).str.strip().str.title()
-    # Add Zone from state lookup
     out["Zone"] = out["State"].map(state_to_zone).fillna("Unknown")
     out["BuyingDays"] = "0"
-    # Normalize month format to Mon'YY
     if "LeadMonth" in out.columns:
         out["LeadMonth"] = out["LeadMonth"].apply(norm_month)
     # Drop raw retail columns (already extracted into retail_map)
     for c in ["DMS_Retail_Month", "Retail Date", "Retail By"]:
         if c in out.columns:
             out = out.drop(columns=[c])
-    # Keep only canonical columns
     keep = [c for c in ["SorceLeadId","LeadMonth","Source","LeadType","ModelName",
                          "State","Zone","BuyingDays","CityName","DealerName"] if c in out.columns]
     return out[keep].copy()
 
-# ─── Core aggregation (unchanged logic, now works on combined DataFrame) ──────
+# ─── Core aggregation ─────────────────────────────────────────────────────────
 
 def build_payload(all_leads, retail_map):
     dl_col = "DealerName" if "DealerName" in all_leads.columns else None
@@ -374,13 +402,17 @@ print("TVS Lead Disposition — Daily Data Push", flush=True)
 print("=" * 60, flush=True)
 
 # 1. Get historical lead file IDs from Apps Script CONFIG
-print("\n[1/5] Fetching config from Apps Script…", flush=True)
+print("\n[1/6] Fetching config from Apps Script…", flush=True)
 config = proxy_get("getConfig")
 hist_lead_ids = config["histLeadFileIds"]
 print(f"  Historical lead files: {hist_lead_ids}", flush=True)
 
-# 2. Download historical leads XLSX
-print("\n[2/5] Loading historical lead data…", flush=True)
+# 2. Download retails master XLSX (all months, all retails)
+print("\n[2/6] Loading retail master…", flush=True)
+retail_df = fetch_retails_xlsx()
+
+# 3. Download historical leads XLSX
+print("\n[3/6] Loading historical lead data…", flush=True)
 hist_lead_dfs  = [read_hist_leads(fid, f"Leads-{i+1}") for i, fid in enumerate(hist_lead_ids)]
 hist_leads_raw = pd.concat(hist_lead_dfs, ignore_index=True)
 print(f"  Historical leads: {len(hist_leads_raw):,} rows", flush=True)
@@ -394,83 +426,37 @@ for _, row in hist_leads_raw.iterrows():
         state_to_zone[s] = z
 print(f"  State→Zone mappings: {len(state_to_zone)}", flush=True)
 
-# 3. Fetch current month leads from Apps Script proxy
-print("\n[3/5] Fetching current-month data from Apps Script…", flush=True)
+# 4. Fetch current month leads from Apps Script proxy
+print("\n[4/6] Fetching current-month leads from Apps Script…", flush=True)
 curr_leads_raw = fetch_current_leads()
 
-# 4. Build retail map from single retail master sheet
-print("\n[4/5] Building retail maps…", flush=True)
-curr_embed_map = build_retail_map_from_curr(curr_leads_raw)   # retails embedded in leads sheet
-curr_sheet_map = fetch_current_retails()                       # retail master sheet (all months)
-print(f"  Current (embedded) map:  {len(curr_embed_map):,}", flush=True)
-print(f"  Current (retails sheet): {len(curr_sheet_map):,}", flush=True)
+# 5. Build retail map: base from retail master XLSX, enhanced by embedded retail cols in leads sheet
+print("\n[5/6] Building retail maps…", flush=True)
+retail_map     = build_retail_map_from_xlsx(retail_df)        # all retails, retail month from master
+curr_embed_map = build_retail_map_from_curr(curr_leads_raw)   # provides rtype (DMS/Call) + DMS month
+retail_map.update(curr_embed_map)                              # embed overrides for rtype accuracy
+print(f"  Retail master:          {len(retail_df):,}", flush=True)
+print(f"  Current (embedded):     {len(curr_embed_map):,}", flush=True)
+print(f"  Combined retail map:    {len(retail_map):,}", flush=True)
 
-# Merge: retail master sheet base → embedded col overrides (most specific wins)
-retail_map = {**curr_sheet_map, **curr_embed_map}
-print(f"  Combined retail map:     {len(retail_map):,}", flush=True)
-
-# DEBUG: show sample IDs and retail month distribution
-retail_samples = list(retail_map.keys())[:5]
-print(f"  [DEBUG] Sample retail IDs: {retail_samples}", flush=True)
-from collections import Counter
-retail_month_dist = Counter(v["rm"] for v in retail_map.values())
-print(f"  [DEBUG] Retail month distribution: {dict(retail_month_dist.most_common())}", flush=True)
-
-# 5. Standardize and concat leads
-print("\n[5/5] Processing all leads…", flush=True)
-print(f"  [DEBUG] Hist XLSX raw columns: {list(hist_leads_raw.columns)}", flush=True)
+# 6. Standardize and concat leads; inject synthetic rows for unmatched retails
+print("\n[6/6] Processing all leads…", flush=True)
 hist_leads_std = standardize_hist_leads(hist_leads_raw)
 curr_leads_std = standardize_curr_leads(curr_leads_raw, state_to_zone)
-
-print(f"  Hist leads (standardized):  {len(hist_leads_std):,}", flush=True)
-print(f"  Curr leads (standardized):  {len(curr_leads_std):,}", flush=True)
-# DEBUG: show sample lead IDs from each source
-hist_raw_samples = list(hist_leads_std["SorceLeadId"].dropna().head(5))
-hist_id_samples  = [to_id(v) for v in hist_raw_samples]
-curr_id_samples  = [to_id(v) for v in curr_leads_std["SorceLeadId"].dropna().head(5)]
-print(f"  [DEBUG] Raw hist lead IDs:    {hist_raw_samples}", flush=True)
-print(f"  [DEBUG] Sample hist lead IDs: {hist_id_samples}", flush=True)
-print(f"  [DEBUG] Sample curr lead IDs: {curr_id_samples}", flush=True)
-# DEBUG: cross-match retail IDs against all candidate columns
-retail_key_set   = set(retail_map.keys())
-hist_id_set      = {to_id(v) for v in hist_leads_std["SorceLeadId"].dropna() if to_id(v)}
-curr_id_set      = {to_id(v) for v in curr_leads_std["SorceLeadId"].dropna() if to_id(v)}
-hist_match_count = len(retail_key_set & hist_id_set)
-curr_match_count = len(retail_key_set & curr_id_set)
-print(f"  [DEBUG] Retail IDs matching hist SorceLeadId: {hist_match_count:,} / {len(retail_key_set):,}", flush=True)
-print(f"  [DEBUG] Retail IDs matching curr opty_id:     {curr_match_count:,} / {len(retail_key_set):,}", flush=True)
-# Show matched IDs and their retail months
-matched_ids = retail_key_set & hist_id_set
-if matched_ids:
-    sample_matched = list(matched_ids)[:5]
-    matched_months = Counter(retail_map[rid]["rm"] for rid in matched_ids if rid in retail_map)
-    print(f"  [DEBUG] Sample MATCHED hist-retail IDs: {sample_matched}", flush=True)
-    print(f"  [DEBUG] Retail months for matched:      {dict(matched_months.most_common())}", flush=True)
-unmatched = retail_key_set - hist_id_set - curr_id_set
-unmatched_months = Counter(retail_map[rid]["rm"] for rid in list(unmatched)[:5000] if rid in retail_map)
-print(f"  [DEBUG] Retail months for unmatched (sample of 5k): {dict(unmatched_months.most_common())}", flush=True)
-# Show IDs from across the hist dataset (not just head)
-hist_mid = [to_id(v) for v in hist_leads_std["SorceLeadId"].dropna().iloc[100000:100005]]
-hist_end = [to_id(v) for v in hist_leads_std["SorceLeadId"].dropna().iloc[-5:]]
-print(f"  [DEBUG] Mid hist SorceLeadId (row ~100k): {hist_mid}", flush=True)
-print(f"  [DEBUG] End hist SorceLeadId (last rows): {hist_end}", flush=True)
-# Also check Enquiry ID from hist raw data
-if 'Enquiry ID' in hist_leads_raw.columns:
-    eq_samples     = [to_id(v) for v in hist_leads_raw["Enquiry ID"].dropna().head(5)]
-    hist_eq_set    = {to_id(v) for v in hist_leads_raw["Enquiry ID"].dropna() if to_id(v)}
-    eq_match_count = len(retail_key_set & hist_eq_set)
-    print(f"  [DEBUG] Hist 'Enquiry ID' samples: {eq_samples}", flush=True)
-    print(f"  [DEBUG] Retail IDs matching hist 'Enquiry ID': {eq_match_count:,} / {len(retail_key_set):,}", flush=True)
-# Also check opty_id from current leads raw data
-if 'opty_id' in curr_leads_raw.columns:
-    opty_samples   = [to_id(v) for v in curr_leads_raw["opty_id"].dropna().head(5)]
-    opty_id_set    = {to_id(v) for v in curr_leads_raw["opty_id"].dropna() if to_id(v)}
-    opty_match     = len(retail_key_set & opty_id_set)
-    print(f"  [DEBUG] Curr 'opty_id' samples:  {opty_samples}", flush=True)
-    print(f"  [DEBUG] Retail IDs matching curr 'opty_id':   {opty_match:,} / {len(retail_key_set):,}", flush=True)
+print(f"  Hist leads (standardized):          {len(hist_leads_std):,}", flush=True)
+print(f"  Curr leads (standardized):          {len(curr_leads_std):,}", flush=True)
 
 all_leads = pd.concat([hist_leads_std, curr_leads_std], ignore_index=True)
-print(f"  Combined total:             {len(all_leads):,}", flush=True)
+
+# Find retails with no matching lead row (e.g. retailed and removed from the active sheet mid-month)
+# Inject synthetic lead rows for them using retail master model/month data so they are counted.
+matched_lid_set = {to_id(v) for v in all_leads["SorceLeadId"].dropna() if to_id(v)}
+synthetic_leads = make_synthetic_leads(retail_df, matched_lid_set)
+if len(synthetic_leads):
+    all_leads = pd.concat([all_leads, synthetic_leads], ignore_index=True)
+    print(f"  Synthetic retail leads (gap fill):  {len(synthetic_leads):,}", flush=True)
+
+print(f"  Combined total:                     {len(all_leads):,}", flush=True)
 
 payload  = build_payload(all_leads, retail_map)
 json_str = json.dumps(payload, separators=(",", ":"))

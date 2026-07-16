@@ -257,7 +257,7 @@ function handleGetCurrentLeads(page, pageSize) {
   var data    = sh.getRange(startRow, 1, count, numCols).getValues();
 
   var needed = [
-    'enquiryId', 'Lead_Month', 'model', 'City', 'State',
+    'opty_id', 'Lead_Month', 'model', 'City', 'State',
     'Dealer_Name', 'lead_type', 'Medium',
     'DMS_Retail_Month', 'Retail Date', 'Retail By'
   ];
@@ -272,14 +272,12 @@ function handleGetCurrentLeads(page, pageSize) {
     });
   });
 
-  var result = {
+  return jsonOut({
     headers:      needed,
     rows:         rows,
     done:         (startRow + count - 1) >= lastRow,
     total:        totalData,
-  };
-  if (page === 0) result.sheetHeaders = headers;
-  return jsonOut(result);
+  });
 }
 
 /* ─── Current-month retails proxy (paginated) ─── */
