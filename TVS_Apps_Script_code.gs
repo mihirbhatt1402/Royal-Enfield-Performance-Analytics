@@ -257,7 +257,7 @@ function handleGetCurrentLeads(page, pageSize) {
   var data    = sh.getRange(startRow, 1, count, numCols).getValues();
 
   var needed = [
-    'opty_id', 'Lead_Month', 'model', 'City', 'State',
+    'enquiryId', 'Lead_Month', 'model', 'City', 'State',
     'Dealer_Name', 'lead_type', 'Medium',
     'DMS_Retail_Month', 'Retail Date', 'Retail By'
   ];

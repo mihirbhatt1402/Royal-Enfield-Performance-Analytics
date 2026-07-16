@@ -130,7 +130,7 @@ def standardize_hist_leads(df):
         return None
 
     mapping = {
-        col(["SorceLeadId", "SourceLeadId"]):          "SorceLeadId",
+        col(["Enquiry ID", "EnquiryId", "enquiryId", "SorceLeadId", "SourceLeadId"]): "SorceLeadId",
         col(["LeadMonth", "Lead Month"]):               "LeadMonth",
         col(["Source"]):                                "Source",
         col(["LeadType", "Lead Type"]):                 "LeadType",
@@ -155,7 +155,7 @@ def standardize_hist_leads(df):
 
 # Maps current-month sheet column names → canonical names
 CURR_COL_MAP = {
-    "opty_id":     "SorceLeadId",
+    "enquiryId":   "SorceLeadId",   # retail sourceLeadId = enquiry ID
     "Lead_Month":  "LeadMonth",
     "Medium":      "Source",
     "lead_type":   "LeadType",
@@ -176,7 +176,7 @@ def build_retail_map_from_curr(curr_df):
         retail_date = str(row.get("Retail Date", "") or "").strip()
         if not retail_date:
             continue
-        lid = to_id(row.get("opty_id", ""))
+        lid = to_id(row.get("enquiryId", ""))
         if not lid:
             continue
         retail_map[lid] = {
