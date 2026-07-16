@@ -130,7 +130,7 @@ def standardize_hist_leads(df):
         return None
 
     mapping = {
-        col(["Enquiry ID", "EnquiryId", "enquiryId", "SorceLeadId", "SourceLeadId"]): "SorceLeadId",
+        col(["SorceLeadId", "SourceLeadId"]): "SorceLeadId",
         col(["LeadMonth", "Lead Month"]):               "LeadMonth",
         col(["Source"]):                                "Source",
         col(["LeadType", "Lead Type"]):                 "LeadType",
@@ -155,7 +155,7 @@ def standardize_hist_leads(df):
 
 # Maps current-month sheet column names → canonical names
 CURR_COL_MAP = {
-    "enquiryId":   "SorceLeadId",   # retail sourceLeadId = enquiry ID
+    "oem_crm_id":  "SorceLeadId",   # OEM CRM lead ID — matches retail sourceLeadId
     "Lead_Month":  "LeadMonth",
     "Medium":      "Source",
     "lead_type":   "LeadType",
@@ -176,7 +176,7 @@ def build_retail_map_from_curr(curr_df):
         retail_date = str(row.get("Retail Date", "") or "").strip()
         if not retail_date:
             continue
-        lid = to_id(row.get("enquiryId", ""))
+        lid = to_id(row.get("oem_crm_id", ""))
         if not lid:
             continue
         retail_map[lid] = {
@@ -428,14 +428,28 @@ curr_id_samples  = [to_id(v) for v in curr_leads_std["SorceLeadId"].dropna().hea
 print(f"  [DEBUG] Raw hist lead IDs:    {hist_raw_samples}", flush=True)
 print(f"  [DEBUG] Sample hist lead IDs: {hist_id_samples}", flush=True)
 print(f"  [DEBUG] Sample curr lead IDs: {curr_id_samples}", flush=True)
-# DEBUG: cross-match retail IDs against both lead sources
+# DEBUG: cross-match retail IDs against all candidate columns
 retail_key_set   = set(retail_map.keys())
 hist_id_set      = {to_id(v) for v in hist_leads_std["SorceLeadId"].dropna() if to_id(v)}
 curr_id_set      = {to_id(v) for v in curr_leads_std["SorceLeadId"].dropna() if to_id(v)}
 hist_match_count = len(retail_key_set & hist_id_set)
 curr_match_count = len(retail_key_set & curr_id_set)
-print(f"  [DEBUG] Retail IDs matching hist leads: {hist_match_count:,} / {len(retail_key_set):,}", flush=True)
-print(f"  [DEBUG] Retail IDs matching curr leads: {curr_match_count:,} / {len(retail_key_set):,}", flush=True)
+print(f"  [DEBUG] Retail IDs matching hist SorceLeadId: {hist_match_count:,} / {len(retail_key_set):,}", flush=True)
+print(f"  [DEBUG] Retail IDs matching curr oem_crm_id:  {curr_match_count:,} / {len(retail_key_set):,}", flush=True)
+# Also check Enquiry ID from hist raw data
+if 'Enquiry ID' in hist_leads_raw.columns:
+    eq_samples     = [to_id(v) for v in hist_leads_raw["Enquiry ID"].dropna().head(5)]
+    hist_eq_set    = {to_id(v) for v in hist_leads_raw["Enquiry ID"].dropna() if to_id(v)}
+    eq_match_count = len(retail_key_set & hist_eq_set)
+    print(f"  [DEBUG] Hist 'Enquiry ID' samples: {eq_samples}", flush=True)
+    print(f"  [DEBUG] Retail IDs matching hist 'Enquiry ID': {eq_match_count:,} / {len(retail_key_set):,}", flush=True)
+# Also check opty_id from current leads raw data
+if 'opty_id' in curr_leads_raw.columns:
+    opty_samples   = [to_id(v) for v in curr_leads_raw["opty_id"].dropna().head(5)]
+    opty_id_set    = {to_id(v) for v in curr_leads_raw["opty_id"].dropna() if to_id(v)}
+    opty_match     = len(retail_key_set & opty_id_set)
+    print(f"  [DEBUG] Curr 'opty_id' samples:  {opty_samples}", flush=True)
+    print(f"  [DEBUG] Retail IDs matching curr 'opty_id':   {opty_match:,} / {len(retail_key_set):,}", flush=True)
 
 all_leads = pd.concat([hist_leads_std, curr_leads_std], ignore_index=True)
 print(f"  Combined total:             {len(all_leads):,}", flush=True)
