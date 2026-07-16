@@ -2,7 +2,7 @@ name: TVS Daily Data Push
 
 on:
   schedule:
-    - cron: '30 5 * * *'   # 11:00 AM IST (UTC+5:30) every day
+    - cron: "30 6 * * *"   # 12:00 PM IST (UTC+5:30) every day
   workflow_dispatch:         # allow manual runs from GitHub UI
 
 jobs:
@@ -16,7 +16,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.11"
 
       - name: Install dependencies
         run: pip install requests pandas openpyxl
