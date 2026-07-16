@@ -3,8 +3,9 @@ TVS Lead Disposition — Daily Data Push
 Runs via GitHub Actions at 11 AM IST every day.
 
 DATA SOURCES:
-  Historical (Apr-Jun): XLSX files on public Google Drive  → fetched via direct download
-  Current month (Jul+): Private Google Sheets             → fetched via Apps Script proxy
+  Historical leads (Apr-Jun): Google Sheet 1jPYG0LGFFd_ljWpfPr2NPfIU0fK1i7px → fetched via XLSX export
+  Current leads   (Jul+):     Private Google Sheet via Apps Script proxy
+  Retails (all months):       Google Sheet 1ZWBlzxX-g2R5iCcrsGUWrqSvxIHcchFHtajDDPcFJgE → via Apps Script proxy
 """
 
 import json, sys, io, re, urllib.request
@@ -115,30 +116,6 @@ def read_hist_leads(file_id, label):
     df = pd.read_excel(buf, dtype=str, engine="openpyxl")
     df.columns = [c.strip() for c in df.columns]
     return df
-
-def read_hist_retails(file_id, label):
-    buf = read_drive_xlsx(file_id, label)
-    df = pd.read_excel(buf, dtype=str, engine="openpyxl")
-    df.columns = [c.strip() for c in df.columns]
-    return df
-
-def build_retail_map_from_hist(ret_df):
-    """Build {lead_id: {rm, rtype}} from historical retails XLSX."""
-    id_col  = next((c for c in ret_df.columns if c.lower().replace(" ","") in ("sorceleadid","sourceleadid")), None)
-    mth_col = next((c for c in ret_df.columns if c.lower() in ("retail month","retailmonth")), None)
-    rt_col  = next((c for c in ret_df.columns if "dms" in c.lower() or ("call" in c.lower() and "out" in c.lower())), None)
-    if not id_col:
-        raise ValueError(f"Cannot find SorceLeadId in historical retails. Columns: {list(ret_df.columns)}")
-    print(f"  Hist retail cols: id={id_col}, month={mth_col}, type={rt_col}", flush=True)
-    retail_map = {}
-    for _, row in ret_df.iterrows():
-        rid = to_id(row.get(id_col, ""))
-        if rid:
-            retail_map[rid] = {
-                "rm":    norm_month(str(row.get(mth_col, "") or "")),
-                "rtype": str(row.get(rt_col,  "") or "").strip() if rt_col else "",
-            }
-    return retail_map
 
 def standardize_hist_leads(df):
     """Normalize historical XLSX columns to canonical names."""
@@ -394,25 +371,19 @@ print("=" * 60, flush=True)
 print("TVS Lead Disposition — Daily Data Push", flush=True)
 print("=" * 60, flush=True)
 
-# 1. Get historical file IDs from Apps Script CONFIG
+# 1. Get historical lead file IDs from Apps Script CONFIG
 print("\n[1/5] Fetching config from Apps Script…", flush=True)
 config = proxy_get("getConfig")
-hist_lead_ids   = config["histLeadFileIds"]
-hist_retail_ids = config["histRetailFileIds"]
-print(f"  Historical lead files:   {hist_lead_ids}", flush=True)
-print(f"  Historical retail files: {hist_retail_ids}", flush=True)
+hist_lead_ids = config["histLeadFileIds"]
+print(f"  Historical lead files: {hist_lead_ids}", flush=True)
 
-# 2. Download and combine all historical XLSX files
-print("\n[2/5] Loading historical data…", flush=True)
-hist_lead_dfs   = [read_hist_leads(fid,   f"Leads-{i+1}")   for i, fid in enumerate(hist_lead_ids)]
-hist_retail_dfs = [read_hist_retails(fid, f"Retails-{i+1}") for i, fid in enumerate(hist_retail_ids)]
+# 2. Download historical leads XLSX
+print("\n[2/5] Loading historical lead data…", flush=True)
+hist_lead_dfs  = [read_hist_leads(fid, f"Leads-{i+1}") for i, fid in enumerate(hist_lead_ids)]
+hist_leads_raw = pd.concat(hist_lead_dfs, ignore_index=True)
+print(f"  Historical leads: {len(hist_leads_raw):,} rows", flush=True)
 
-hist_leads_raw  = pd.concat(hist_lead_dfs,   ignore_index=True)
-hist_retails_raw = pd.concat(hist_retail_dfs, ignore_index=True)
-print(f"  Historical leads:   {len(hist_leads_raw):,} rows", flush=True)
-print(f"  Historical retails: {len(hist_retails_raw):,} rows", flush=True)
-
-# 3. Build state→zone lookup from historical data (which has Zone column)
+# Build state→zone lookup from historical leads (which has Zone column)
 state_to_zone = {}
 for _, row in hist_leads_raw.iterrows():
     s = str(row.get("State", "") or "").strip().title()
@@ -421,24 +392,22 @@ for _, row in hist_leads_raw.iterrows():
         state_to_zone[s] = z
 print(f"  State→Zone mappings: {len(state_to_zone)}", flush=True)
 
-# 4. Fetch current month from Apps Script proxy
+# 3. Fetch current month leads from Apps Script proxy
 print("\n[3/5] Fetching current-month data from Apps Script…", flush=True)
 curr_leads_raw = fetch_current_leads()
 
-# 5. Build retail maps and merge
+# 4. Build retail map from single retail master sheet
 print("\n[4/5] Building retail maps…", flush=True)
-hist_retail_map  = build_retail_map_from_hist(hist_retails_raw)
-curr_embed_map   = build_retail_map_from_curr(curr_leads_raw)       # from embedded Retail Date col
-curr_sheet_map   = fetch_current_retails()                           # from separate retails sheet
-print(f"  Historical retail map:     {len(hist_retail_map):,}", flush=True)
-print(f"  Current (embedded) map:    {len(curr_embed_map):,}", flush=True)
-print(f"  Current (retails sheet):   {len(curr_sheet_map):,}", flush=True)
+curr_embed_map = build_retail_map_from_curr(curr_leads_raw)   # retails embedded in leads sheet
+curr_sheet_map = fetch_current_retails()                       # retail master sheet (all months)
+print(f"  Current (embedded) map:  {len(curr_embed_map):,}", flush=True)
+print(f"  Current (retails sheet): {len(curr_sheet_map):,}", flush=True)
 
-# Merge: historical base → retails sheet → embedded (most specific wins)
-retail_map = {**hist_retail_map, **curr_sheet_map, **curr_embed_map}
-print(f"  Combined retail map:       {len(retail_map):,}", flush=True)
+# Merge: retail master sheet base → embedded col overrides (most specific wins)
+retail_map = {**curr_sheet_map, **curr_embed_map}
+print(f"  Combined retail map:     {len(retail_map):,}", flush=True)
 
-# 6. Standardize and concat leads
+# 5. Standardize and concat leads
 print("\n[5/5] Processing all leads…", flush=True)
 hist_leads_std = standardize_hist_leads(hist_leads_raw)
 curr_leads_std = standardize_curr_leads(curr_leads_raw, state_to_zone)

@@ -17,9 +17,8 @@
 =================================================================*/
 
 const CONFIG = {
-  // Historical completed-month XLSX files (on Google Drive)
+  // Historical completed-month leads (Google Sheet, all months appended)
   HIST_LEAD_FILE_IDS:    ['1jPYG0LGFFd_ljWpfPr2NPfIU0fK1i7px'],   // Apr-Jun FY26-27
-  HIST_RETAIL_FILE_IDS:  ['167q8mrcKJeeL9DWTMLxe5Iq59RqVTamd'],   // Apr-Jun FY26-27
 
   // Current month live Google Sheets
   CURR_LEADS_SHEET_ID:   '1iSw5zXF67q5Wkoz2mSPFqql9OPAcqmd0um5BEHUGf4o',
@@ -108,8 +107,7 @@ function doGet(e) {
     if (action === 'getConfig') {
       if (secret !== PUSH_SECRET) return jsonOut({ error: 'Unauthorized' });
       return jsonOut({
-        histLeadFileIds:   CONFIG.HIST_LEAD_FILE_IDS,
-        histRetailFileIds: CONFIG.HIST_RETAIL_FILE_IDS,
+        histLeadFileIds: CONFIG.HIST_LEAD_FILE_IDS,
       });
     }
 
