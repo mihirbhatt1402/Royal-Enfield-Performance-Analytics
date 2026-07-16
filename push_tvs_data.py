@@ -45,27 +45,27 @@ def read_drive_xlsx(file_id, label=""):
     resp = session.get("https://drive.google.com/uc",
                        params={"export": "download", "id": file_id}, timeout=60)
     ct = resp.headers.get("Content-Type", "")
-    print(f"  {label} initial response: {resp.status_code} {ct[:60]}", flush=True)
-    if "text/html" in ct:
+    if resp.status_code == 404 or (resp.status_code == 200 and "text/html" in ct and "404" in resp.text[:500]):
+        # Google Sheet (not a Drive file) — use Sheets export endpoint
+        print(f"  {label} Drive 404, trying Sheets export…", flush=True)
+        resp = session.get(
+            f"https://docs.google.com/spreadsheets/d/{file_id}/export",
+            params={"format": "xlsx"}, stream=True, timeout=120)
+    elif "text/html" in ct:
         html = resp.text
-        print(f"  {label} HTML snippet: {html[:300].replace(chr(10),' ')}", flush=True)
-        # Method 1: modern Drive page — link with confirm= and uuid= (actual download button)
+        # Method 1: modern Drive confirmation page — extract full link including uuid
         direct = re.search(r'href="(https://drive\.usercontent\.google\.com/download[^"]*confirm[^"]+)"', html)
         if direct:
-            url = direct.group(1).replace("&amp;", "&")
-            print(f"  {label} method1 url: {url[:120]}", flush=True)
-            resp = session.get(url, stream=True, timeout=120)
+            resp = session.get(direct.group(1).replace("&amp;", "&"), stream=True, timeout=120)
         else:
             # Method 2: old-style confirmation form
             action = re.search(r'<form[^>]*action="([^"]+)"', html)
             inputs = dict(re.findall(r'<input[^>]*name="([^"]+)"[^>]*value="([^"]+)"', html))
             if action and inputs:
-                form_url = action.group(1).replace("&amp;", "&")
-                print(f"  {label} method2 form: {form_url[:120]}", flush=True)
-                resp = session.get(form_url, params=inputs, stream=True, timeout=120)
+                resp = session.get(action.group(1).replace("&amp;", "&"),
+                                   params=inputs, stream=True, timeout=120)
             else:
-                # Method 3: add confirm=t to original URL
-                print(f"  {label} method3 confirm=t fallback", flush=True)
+                # Method 3: last resort
                 resp = session.get("https://drive.google.com/uc",
                                    params={"export": "download", "id": file_id, "confirm": "t"},
                                    stream=True, timeout=120)
