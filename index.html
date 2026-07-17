@@ -685,7 +685,7 @@ function MonthlyGrids({ title, months, renderAgg, srcGroups, dimLabel, expandedG
    OVERVIEW TAB
    ════════════════════════════════════════════════════════════════════ */
 const OverviewTab = React.memo(function OverviewTab({ data, filters, RT }) {
-  const { maps, monthly, sm, cm } = data;
+  const { maps, monthly, sm, cm, mxst } = data;
   const getLR = useMemo(() => makeLR(data.rt_cols, RT), [data.rt_cols, RT]);
   const chartRef = useRef(); const chartInst = useRef();
 
@@ -758,6 +758,28 @@ const OverviewTab = React.memo(function OverviewTab({ data, filters, RT }) {
       .map(([s,v]) => ({ src:s, l:v[0], r:v[1], l2r:v[0]>0?v[1]/v[0]*100:0 }))
       .sort((a,b) => b.l-a.l);
   }, [sm, maps, filters]);
+
+  const heatData = useMemo(() => {
+    const rows   = mxst || [];
+    const allM   = !filters.months || filters.months.size === 0;
+    const allMdl = !filters.models || filters.models.size === 0;
+    const allSt  = !filters.states || filters.states.size === 0;
+    const modelTot = new Map(), stateTot = new Map(), cell = new Map();
+    for (const row of rows) {
+      const mdl = maps.mdl[row[0]], st = maps.st[row[1]], m = maps.lm[row[2]], v = row[3];
+      if (!allM   && !filters.months.has(m))   continue;
+      if (!allMdl && !filters.models.has(mdl)) continue;
+      if (!allSt  && !filters.states.has(st))  continue;
+      const k = mdl + '\x00' + st;
+      cell.set(k, (cell.get(k) || 0) + v);
+      modelTot.set(mdl, (modelTot.get(mdl) || 0) + v);
+      stateTot.set(st,  (stateTot.get(st)  || 0) + v);
+    }
+    const top10 = [...modelTot.entries()].sort((a,b) => b[1]-a[1]).slice(0,10).map(e=>e[0]);
+    const top15 = [...stateTot.entries()].sort((a,b) => b[1]-a[1]).slice(0,15).map(e=>e[0]);
+    const maxV  = Math.max(1, ...[...cell.values()]);
+    return { cell, top10, top15, maxV };
+  }, [mxst, maps, filters]);
 
   // Chart
   useEffect(() => {
@@ -846,6 +868,49 @@ const OverviewTab = React.memo(function OverviewTab({ data, filters, RT }) {
               ce('td', null, '100.0%'),
               ce('td', null, ce('span', { style:{color:'#D97706',fontWeight:700} }, totals.l2r.toFixed(1)+'%')),
             )
+          )
+        )
+      )
+    ),
+    heatData.top10.length > 0 && ce('div', { className:'card', style:{padding:'16px 18px',marginBottom:14} },
+      ce('div', { style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4} },
+        ce('div', { className:'section-title', style:{marginBottom:0} }, '🔥 Model × State — Lead Volume (Top 10 Models × Top 15 States)'),
+        ce(ExportBtn, { onClick:() => {
+          const aoa = [['Model', ...heatData.top15]];
+          for (const mdl of heatData.top10) {
+            aoa.push([mdl, ...heatData.top15.map(st => heatData.cell.get(mdl+'\x00'+st) || 0)]);
+          }
+          exportXlsx({'Model×State':aoa}, 'TVS_Model_State_Heatmap');
+        }})
+      ),
+      ce('div', { style:{fontSize:11,color:'#94A3B8',marginBottom:10} }, 'Cell shows lead count. Darker = higher volume. Month / Model / State filters apply.'),
+      ce('div', { className:'scroll-x' },
+        ce('table', { style:{borderCollapse:'collapse',fontSize:11,fontFamily:'DM Mono,monospace'} },
+          ce('thead', null,
+            ce('tr', null,
+              ce('th', { style:{minWidth:130,textAlign:'left',padding:'4px 8px',background:'#F8FAFC',fontWeight:700,fontSize:11,color:'#475569',borderBottom:'2px solid #E2E8F0',position:'sticky',left:0,zIndex:1} }, 'MODEL  STATE'),
+              ...heatData.top15.map(st => ce('th', { key:st, style:{
+                padding:'4px 6px', background:'#F8FAFC', fontWeight:600, fontSize:10, color:'#475569',
+                borderBottom:'2px solid #E2E8F0', whiteSpace:'nowrap', maxWidth:70,
+                writingMode:'vertical-rl', transform:'rotate(180deg)', height:90, verticalAlign:'bottom',
+              }}, st))
+            )
+          ),
+          ce('tbody', null,
+            ...heatData.top10.map((mdl, ri) => ce('tr', { key:mdl, style:{background: ri%2===0?'#fff':'#F8FAFC'} },
+              ce('td', { style:{padding:'5px 8px',fontWeight:700,fontSize:11,color:'#1E293B',borderBottom:'1px solid #F1F5F9',position:'sticky',left:0,background:ri%2===0?'#fff':'#F8FAFC',zIndex:1,whiteSpace:'nowrap'} }, mdl),
+              ...heatData.top15.map(st => {
+                const v = heatData.cell.get(mdl+'\x00'+st) || 0;
+                const intensity = v / heatData.maxV;
+                const bg = v === 0 ? '#F8FAFC' : `rgba(0,48,135,${0.08 + intensity * 0.82})`;
+                const color = intensity > 0.55 ? '#fff' : '#1E293B';
+                return ce('td', { key:st, style:{
+                  padding:'5px 8px', textAlign:'right', borderBottom:'1px solid #F1F5F9',
+                  background:bg, color, fontWeight: intensity > 0.3 ? 700 : 400,
+                  minWidth:60, transition:'background 200ms',
+                }}, v > 0 ? Nf(v) : '—');
+              })
+            ))
           )
         )
       )
@@ -1876,7 +1941,7 @@ function App() {
     return {
       ...data,
       monthly: data.u_monthly, sm: data.u_sm, ltm: data.u_ltm,
-      mm: data.u_mm, stm: data.u_stm, zm: data.u_zm, bdm: data.u_bdm,
+      mm: data.u_mm, stm: data.u_stm, zm: data.u_zm, bdm: data.u_bdm, mxst: data.u_mxst,
       maps: { ...data.maps, lm: data.maps.u_lm },
     };
   }, [data, leadsMode]);
