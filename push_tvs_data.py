@@ -419,6 +419,8 @@ def build_payload(all_leads, retail_map):
     monthly, sm, ltm, mm, stm, zm, bdm, cm = {},{},{},{},{},{},{},{}
     u_monthly, u_sm, u_ltm, u_mm, u_stm, u_zm, u_bdm = {},{},{},{},{},{},{}
     mxst, u_mxst = {}, {}
+    mlt,  u_mlt  = {}, {}   # model × lead-type × month
+    stlt, u_stlt = {}, {}   # state × lead-type × month
     disp, u_disp = {}, {}   # enquired_model × purchased_model × month (retails only)
     cdm, csm, cdsm = {},{},{}
 
@@ -467,6 +469,8 @@ def build_payload(all_leads, retail_map):
         bump(mm,      f"{mi}|{si}|{li}",   is_ret, rtype)
         bump(stm,     f"{sti}|{si}|{li}",  is_ret, rtype)
         bump(mxst,    f"{mi}|{sti}|{li}",  is_ret, rtype)
+        bump(mlt,     f"{mi}|{tti}|{li}",  is_ret, rtype)
+        bump(stlt,    f"{sti}|{tti}|{li}", is_ret, rtype)
         bump(zm,      f"{zi}|{li}",         is_ret, rtype)
         bump(bdm,     f"{bd}|{si}|{li}",   is_ret, rtype)
         bump(cm,      f"{cti}|{li}",        is_ret, rtype)
@@ -487,6 +491,8 @@ def build_payload(all_leads, retail_map):
         bump(u_mm,      f"{mi}|{si}|{uli}",   is_ret, rtype)
         bump(u_stm,     f"{sti}|{si}|{uli}",  is_ret, rtype)
         bump(u_mxst,    f"{mi}|{sti}|{uli}",  is_ret, rtype)
+        bump(u_mlt,     f"{mi}|{tti}|{uli}", is_ret, rtype)
+        bump(u_stlt,    f"{sti}|{tti}|{uli}",is_ret, rtype)
         bump(u_zm,      f"{zi}|{uli}",         is_ret, rtype)
         bump(u_bdm,     f"{bd}|{si}|{uli}",   is_ret, rtype)
 
@@ -520,7 +526,9 @@ def build_payload(all_leads, retail_map):
         'ltm':     to_rows(ltm, lambda k: list(map(int, k.split('|')))),
         'mm':      to_rows(mm,  lambda k: list(map(int, k.split('|')))),
         'stm':     to_rows(stm, lambda k: list(map(int, k.split('|')))),
-        'mxst':    to_rows(mxst, lambda k: list(map(int, k.split('|')))),
+        'mxst':    to_rows(mxst,  lambda k: list(map(int, k.split('|')))),
+        'mlt':     to_rows(mlt,   lambda k: list(map(int, k.split('|')))),
+        'stlt':    to_rows(stlt,  lambda k: list(map(int, k.split('|')))),
         'disp':    [[*map(int,k.split('|')), v] for k,v in disp.items()],
         'zm':      to_rows(zm,  lambda k: list(map(int, k.split('|')))),
         'bdm':     to_rows(bdm, lambda k: [int(k.split('|')[0])] + list(map(int, k.split('|')[1:]))),
@@ -533,7 +541,9 @@ def build_payload(all_leads, retail_map):
         'u_ltm':     to_rows(u_ltm, lambda k: list(map(int, k.split('|')))),
         'u_mm':      to_rows(u_mm,  lambda k: list(map(int, k.split('|')))),
         'u_stm':     to_rows(u_stm, lambda k: list(map(int, k.split('|')))),
-        'u_mxst':    to_rows(u_mxst, lambda k: list(map(int, k.split('|')))),
+        'u_mxst':    to_rows(u_mxst,  lambda k: list(map(int, k.split('|')))),
+        'u_mlt':     to_rows(u_mlt,   lambda k: list(map(int, k.split('|')))),
+        'u_stlt':    to_rows(u_stlt,  lambda k: list(map(int, k.split('|')))),
         'u_disp':  [[*map(int,k.split('|')), v] for k,v in u_disp.items()],
         'u_zm':      to_rows(u_zm,  lambda k: list(map(int, k.split('|')))),
         'u_bdm':     to_rows(u_bdm, lambda k: [int(k.split('|')[0])] + list(map(int, k.split('|')[1:]))),

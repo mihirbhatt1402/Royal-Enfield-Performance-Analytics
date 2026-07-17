@@ -1868,6 +1868,7 @@ const TABS = [
   { id:'modelxsrc',label:'Model × Source' },
   { id:'statexsrc',  label:'State × Source' },
   { id:'dispersion', label:'Retail Dispersion' },
+  { id:'pivot',      label:'Pivot Table'       },
 ];
 
 function App() {
@@ -1942,7 +1943,8 @@ function App() {
     return {
       ...data,
       monthly: data.u_monthly, sm: data.u_sm, ltm: data.u_ltm,
-      mm: data.u_mm, stm: data.u_stm, zm: data.u_zm, bdm: data.u_bdm, mxst: data.u_mxst, disp: data.u_disp,
+      mm: data.u_mm, stm: data.u_stm, zm: data.u_zm, bdm: data.u_bdm,
+      mxst: data.u_mxst, mlt: data.u_mlt, stlt: data.u_stlt, disp: data.u_disp,
       maps: { ...data.maps, lm: data.maps.u_lm },
     };
   }, [data, leadsMode]);
@@ -1970,6 +1972,7 @@ function App() {
       case 'modelxsrc':return ce(ModelSourceTab,   props);
       case 'statexsrc':  return ce(StateSourceTab,   props);
       case 'dispersion': return ce(DispersionTab,    props);
+      case 'pivot':      return ce(PivotTab,         props);
       default: return null;
     }
   }, [effectiveData, tab, filters, months, RT, viewerMode]);
@@ -2196,6 +2199,419 @@ const DispersionTab = React.memo(function DispersionTab({ data, filters, months,
       '📌 Retail Attribution leads only. Shows % of customers who purchased a different model than enquired. Month & Model filters apply.'
     ),
     ...sortedMonths.map(M => renderMonthGrid(M))
+  );
+});
+
+/* ════════════════════════════════════════════════════════════════════
+   PIVOT TABLE TAB
+   ════════════════════════════════════════════════════════════════════ */
+const PivotTab = React.memo(function PivotTab({ data, filters, months, RT }) {
+  const { maps } = data;
+
+  const [rowDim,  setRowDim]  = useState('mdl');
+  const [colDim,  setColDim]  = useState('lm');
+  const [metric,  setMetric]  = useState('leads');
+  const [sortBy,  setSortBy]  = useState('__total__');
+  const [sortDir, setSortDir] = useState('desc');
+  const [topN,    setTopN]    = useState(20);
+
+  const DIMS = useMemo(() => [
+    { key:'lm',  label:'Month'     },
+    { key:'mdl', label:'Model'     },
+    { key:'src', label:'Source'    },
+    { key:'st',  label:'State'     },
+    { key:'lt',  label:'Lead Type' },
+    { key:'city',label:'City'      },
+    ...(maps.dl ? [{ key:'dl', label:'Dealer' }] : []),
+  ], [maps.dl]);
+
+  const METRICS = [
+    { key:'leads',  label:'Leads'            },
+    { key:'ret',    label:'Retails'          },
+    { key:'retpct', label:'Retail %'         },
+    { key:'dms',    label:'DMS Retails'      },
+    { key:'call',   label:'Call-Out Retails' },
+  ];
+
+  const ALL_MATS = [
+    { key:'sm',   dims:['src','lm']             },
+    { key:'mm',   dims:['mdl','src','lm']        },
+    { key:'stm',  dims:['st','src','lm']         },
+    { key:'ltm',  dims:['lt','src','lm']         },
+    { key:'mxst', dims:['mdl','st','lm']         },
+    { key:'mlt',  dims:['mdl','lt','lm']         },
+    { key:'stlt', dims:['st','lt','lm']          },
+    { key:'cm',   dims:['city','lm']             },
+    { key:'csm',  dims:['city','src','lm']       },
+    { key:'cdm',  dims:['city','dl','lm']        },
+    { key:'cdsm', dims:['city','dl','src','lm']  },
+  ];
+
+  // Pick smallest matrix that contains both rowDim and colDim
+  const matConfig = useMemo(() => {
+    if (rowDim === colDim) return null;
+    let best = null, bestExtra = 99;
+    for (const m of ALL_MATS) {
+      if (!m.dims.includes(rowDim) || !m.dims.includes(colDim)) continue;
+      const extra = m.dims.filter(d => d !== rowDim && d !== colDim && d !== 'lm').length;
+      if (extra < bestExtra || (extra === bestExtra && m.dims.length < (best?.dims.length ?? 99))) {
+        bestExtra = extra; best = m;
+      }
+    }
+    return best;
+  }, [rowDim, colDim]);
+
+  const rawMatrix = useMemo(() => {
+    if (!matConfig) return [];
+    return data[matConfig.key] || [];
+  }, [data, matConfig]);
+
+  // Index filter sets from global filters, restricted to dims in chosen matrix
+  const filterSets = useMemo(() => {
+    if (!matConfig) return {};
+    const { dims } = matConfig;
+    const mk = (dim, fSet, arr) => {
+      if (!dims.includes(dim) || !fSet || fSet.size === 0) return null;
+      const s = new Set();
+      (arr || []).forEach((v, i) => { if (fSet.has(v)) s.add(i); });
+      return s.size ? s : null;
+    };
+    const sets = {};
+    const a = mk('lm',  filters.months,  maps.lm);  if (a) sets.lm  = a;
+    const b = mk('src', filters.sources, maps.src); if (b) sets.src = b;
+    const c = mk('st',  filters.states,  maps.st);  if (c) sets.st  = c;
+    const d = mk('mdl', filters.models,  maps.mdl); if (d) sets.mdl = d;
+    if (dims.includes('city') && filters.cities?.size > 0) {
+      const cs = new Set();
+      (maps.city || []).forEach((v, i) => { if (filters.cities.has(v)) cs.add(i); });
+      if (cs.size) sets.city = cs;
+    }
+    return sets;
+  }, [matConfig, filters, maps]);
+
+  function getMetricVal(vals, m) {
+    if (!vals) return 0;
+    if (m === 'leads')  return vals[0] || 0;
+    if (m === 'ret')    return vals[1] || 0;
+    if (m === 'retpct') return vals[0] > 0 ? (vals[1] / vals[0]) * 100 : 0;
+    if (m === 'dms')    return vals[2] || 0;
+    if (m === 'call')   return vals[3] || 0;
+    return 0;
+  }
+
+  function fmtCell(vals, m) {
+    const v = getMetricVal(vals, m);
+    if (m === 'retpct') return v > 0 ? v.toFixed(1) + '%' : '—';
+    return v === 0 ? '—' : v.toLocaleString();
+  }
+
+  // Core pivot aggregation
+  const pivotResult = useMemo(() => {
+    if (!matConfig || rawMatrix.length === 0) return null;
+    const { dims } = matConfig;
+    const nDims = dims.length;
+    const rPos  = dims.indexOf(rowDim);
+    const cPos  = dims.indexOf(colDim);
+    const getLabel = (dim, idx) => (maps[dim] || [])[idx] ?? '#' + idx;
+
+    const tbl    = new Map();
+    const colSet = new Set();
+
+    for (const row of rawMatrix) {
+      let ok = true;
+      for (const [dim, allowed] of Object.entries(filterSets)) {
+        const pos = dims.indexOf(dim);
+        if (pos < 0) continue;
+        if (!allowed.has(row[pos])) { ok = false; break; }
+      }
+      if (!ok) continue;
+
+      const rKey = getLabel(rowDim, row[rPos]);
+      const cKey = getLabel(colDim, row[cPos]);
+      colSet.add(cKey);
+
+      if (!tbl.has(rKey)) tbl.set(rKey, new Map());
+      const rMap = tbl.get(rKey);
+      if (!rMap.has(cKey)) rMap.set(cKey, [0, 0, 0, 0]);
+      const cur = rMap.get(cKey);
+      cur[0] += row[nDims]     || 0;
+      cur[1] += row[nDims + 1] || 0;
+      cur[2] += row[nDims + 2] || 0;
+      cur[3] += row[nDims + 3] || 0;
+    }
+
+    return { tbl, colLabels: [...colSet] };
+  }, [rawMatrix, matConfig, rowDim, colDim, filterSets, maps]);
+
+  // Column order: Month → chronological; else → desc by column grand total
+  const orderedCols = useMemo(() => {
+    if (!pivotResult) return [];
+    const { tbl, colLabels } = pivotResult;
+    if (colDim === 'lm') return [...colLabels].sort((a, b) => monthOrder(a) - monthOrder(b));
+    const cTot = {};
+    for (const rMap of tbl.values())
+      for (const [c, v] of rMap) cTot[c] = (cTot[c] || 0) + getMetricVal(v, metric);
+    return [...colLabels].sort((a, b) => (cTot[b] || 0) - (cTot[a] || 0));
+  }, [pivotResult, colDim, metric]);
+
+  // Sorted + top-N rows
+  const sortedRows = useMemo(() => {
+    if (!pivotResult) return [];
+    const { tbl } = pivotResult;
+    const rows = [];
+    for (const [label, rMap] of tbl) {
+      let total = 0, tl = 0, tr = 0;
+      for (const v of rMap.values()) { tl += v[0]; tr += v[1]; }
+      if (metric === 'retpct') {
+        total = tl > 0 ? (tr / tl) * 100 : 0;
+      } else {
+        for (const v of rMap.values()) total += getMetricVal(v, metric);
+      }
+      rows.push({ label, rMap, total });
+    }
+    rows.sort((a, b) => {
+      let av, bv;
+      if (sortBy === '__total__') { av = a.total; bv = b.total; }
+      else if (sortBy === '__label__') { av = a.label; bv = b.label; }
+      else { av = getMetricVal(a.rMap.get(sortBy), metric); bv = getMetricVal(b.rMap.get(sortBy), metric); }
+      if (av === bv) return 0;
+      if (typeof av === 'string') return sortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
+      return sortDir === 'asc' ? av - bv : bv - av;
+    });
+    return topN > 0 ? rows.slice(0, topN) : rows;
+  }, [pivotResult, metric, sortBy, sortDir, topN]);
+
+  // Grand totals over full dataset (not capped by topN)
+  const grandTotals = useMemo(() => {
+    if (!pivotResult) return { colVals: {}, gl: 0, gr: 0 };
+    const colVals = {};
+    let gl = 0, gr = 0;
+    for (const rMap of pivotResult.tbl.values()) {
+      for (const [c, v] of rMap) {
+        if (!colVals[c]) colVals[c] = [0, 0, 0, 0];
+        for (let i = 0; i < 4; i++) colVals[c][i] += v[i];
+        gl += v[0]; gr += v[1];
+      }
+    }
+    return { colVals, gl, gr };
+  }, [pivotResult]);
+
+  // Which active global filters can't be applied to the chosen matrix
+  const unapplied = useMemo(() => {
+    if (!matConfig) return [];
+    const ds = new Set(matConfig.dims);
+    const out = [];
+    if (filters.sources?.size > 0 && !ds.has('src') && rowDim !== 'src' && colDim !== 'src') out.push('Source');
+    if (filters.states?.size  > 0 && !ds.has('st')  && rowDim !== 'st'  && colDim !== 'st')  out.push('State');
+    if (filters.models?.size  > 0 && !ds.has('mdl') && rowDim !== 'mdl' && colDim !== 'mdl') out.push('Model');
+    return out;
+  }, [matConfig, filters, rowDim, colDim]);
+
+  function handleExport() {
+    if (!pivotResult || sortedRows.length === 0) return;
+    const rowLabel = DIMS.find(d => d.key === rowDim)?.label || rowDim;
+    const colLabel = DIMS.find(d => d.key === colDim)?.label || colDim;
+    const aoa = [[rowLabel, ...orderedCols, 'TOTAL']];
+    for (const row of sortedRows) {
+      const r = [row.label];
+      for (const col of orderedCols) {
+        const v = getMetricVal(row.rMap.get(col), metric);
+        r.push(metric === 'retpct' ? (v > 0 ? +v.toFixed(2) : 0) : v);
+      }
+      r.push(metric === 'retpct' ? (row.total > 0 ? +row.total.toFixed(2) : 0) : row.total);
+      aoa.push(r);
+    }
+    const gtRow = ['TOTAL'];
+    for (const col of orderedCols) {
+      const cv = grandTotals.colVals[col];
+      gtRow.push(metric === 'retpct'
+        ? (cv && cv[0] > 0 ? +(cv[1]/cv[0]*100).toFixed(2) : 0)
+        : getMetricVal(cv, metric));
+    }
+    if (metric === 'retpct') {
+      gtRow.push(grandTotals.gl > 0 ? +(grandTotals.gr/grandTotals.gl*100).toFixed(2) : 0);
+    } else {
+      let t = 0;
+      for (const rMap of pivotResult.tbl.values()) for (const v of rMap.values()) t += getMetricVal(v, metric);
+      gtRow.push(t);
+    }
+    aoa.push(gtRow);
+    exportXlsx({ [`${rowLabel} × ${colLabel}`]: aoa }, `TVS_Pivot_${rowLabel}_${colLabel}`);
+  }
+
+  const selSt = { padding:'6px 10px', fontSize:13, border:'1px solid #CBD5E1', borderRadius:8,
+                  background:'#fff', color:'#0f172a', fontFamily:'inherit', cursor:'pointer' };
+
+  const unsupported      = rowDim === colDim || !matConfig;
+  const awaitingPipeline = !unsupported && matConfig && !(data[matConfig.key]);
+  const noData           = !unsupported && !awaitingPipeline && (!pivotResult || pivotResult.tbl.size === 0);
+
+  return ce('div', { style:{ padding:'0 4px' } },
+
+    /* ── Config bar ── */
+    ce('div', { style:{ display:'flex', gap:14, flexWrap:'wrap', alignItems:'flex-end',
+        padding:'16px 18px', background:'#F8FAFC', borderRadius:12,
+        border:'1px solid #E2E8F0', marginBottom:14 } },
+
+      ce('div', null,
+        ce('div', { style:{fontSize:10,fontWeight:700,color:'#64748B',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:5} }, 'Rows'),
+        ce('select', { value:rowDim, onChange:e=>{ setRowDim(e.target.value); setSortBy('__total__'); }, style:selSt },
+          DIMS.map(d => ce('option',{key:d.key,value:d.key,disabled:d.key===colDim}, d.label))
+        )
+      ),
+
+      ce('div', { style:{color:'#CBD5E1',fontSize:22,alignSelf:'flex-end',paddingBottom:6,fontWeight:300} }, '×'),
+
+      ce('div', null,
+        ce('div', { style:{fontSize:10,fontWeight:700,color:'#64748B',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:5} }, 'Columns'),
+        ce('select', { value:colDim, onChange:e=>{ setColDim(e.target.value); setSortBy('__total__'); }, style:selSt },
+          DIMS.map(d => ce('option',{key:d.key,value:d.key,disabled:d.key===rowDim}, d.label))
+        )
+      ),
+
+      ce('div', null,
+        ce('div', { style:{fontSize:10,fontWeight:700,color:'#64748B',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:5} }, 'Value'),
+        ce('select', { value:metric, onChange:e=>setMetric(e.target.value), style:selSt },
+          METRICS.map(m => ce('option',{key:m.key,value:m.key}, m.label))
+        )
+      ),
+
+      ce('div', { style:{width:1,height:40,background:'#E2E8F0',alignSelf:'center'} }),
+
+      ce('div', null,
+        ce('div', { style:{fontSize:10,fontWeight:700,color:'#64748B',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:5} }, 'Sort By'),
+        ce('select', { value:sortBy, onChange:e=>setSortBy(e.target.value), style:selSt },
+          ce('option',{value:'__total__'},'Total'),
+          ce('option',{value:'__label__'},'Row Label'),
+          ...orderedCols.slice(0,8).map(c => ce('option',{key:c,value:c}, c.length>15 ? c.slice(0,14)+'…' : c))
+        )
+      ),
+
+      ce('div', null,
+        ce('div', { style:{fontSize:10,fontWeight:700,color:'#64748B',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:5} }, 'Order'),
+        ce('select', { value:sortDir, onChange:e=>setSortDir(e.target.value), style:selSt },
+          ce('option',{value:'desc'},'↓  High → Low'),
+          ce('option',{value:'asc' },'↑  Low → High'),
+        )
+      ),
+
+      ce('div', null,
+        ce('div', { style:{fontSize:10,fontWeight:700,color:'#64748B',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:5} }, 'Show'),
+        ce('select', { value:topN, onChange:e=>setTopN(+e.target.value), style:selSt },
+          ce('option',{value:10 },'Top 10'),
+          ce('option',{value:20 },'Top 20'),
+          ce('option',{value:50 },'Top 50'),
+          ce('option',{value:100},'Top 100'),
+          ce('option',{value:0  },'All rows'),
+        )
+      ),
+
+      !unsupported && !noData && !awaitingPipeline &&
+        ce('div', { style:{marginLeft:'auto',alignSelf:'flex-end'} },
+          ce(ExportBtn, { onClick: handleExport })
+        ),
+    ),
+
+    /* ── Unapplied-filter warning ── */
+    unapplied.length > 0 && ce('div', {
+      style:{ padding:'7px 14px', background:'#FFF3CD', border:'1px solid #F5A623',
+              borderRadius:8, fontSize:12, color:'#92400E', marginBottom:12 }
+    }, `⚠  ${unapplied.join(', ')} filter${unapplied.length > 1 ? 's' : ''} not applied — not a dimension in this matrix.`),
+
+    /* ── State messages ── */
+    unsupported && ce('div', { style:{ textAlign:'center', padding:50, color:'#94A3B8', fontSize:14 } },
+      rowDim === colDim
+        ? 'Row and Column cannot be the same dimension.'
+        : `The combination ${DIMS.find(d=>d.key===rowDim)?.label} × ${DIMS.find(d=>d.key===colDim)?.label} is not available.`
+    ),
+
+    awaitingPipeline && ce('div', { style:{ textAlign:'center', padding:50, color:'#94A3B8', fontSize:14 } },
+      '📦 This combination will be available after the next pipeline run.'
+    ),
+
+    noData && ce('div', { style:{ textAlign:'center', padding:50, color:'#94A3B8', fontSize:14 } },
+      'No data matches the current filters.'
+    ),
+
+    /* ── Pivot table ── */
+    !unsupported && !awaitingPipeline && !noData &&
+    ce('div', { style:{ overflowX:'auto', borderRadius:12, border:'1px solid #E2E8F0' } },
+      ce('table', { style:{ width:'100%', borderCollapse:'collapse', fontSize:13 } },
+
+        ce('thead', null,
+          ce('tr', { style:{ background:'#1a3a5c', color:'#fff' } },
+            ce('th', {
+              style:{ padding:'10px 16px', textAlign:'left', fontWeight:700, position:'sticky',
+                      left:0, background:'#1a3a5c', minWidth:160, whiteSpace:'nowrap',
+                      cursor:'pointer', userSelect:'none' },
+              onClick:()=>{ setSortBy('__label__'); setSortDir(d=>d==='asc'?'desc':'asc'); }
+            }, (DIMS.find(d=>d.key===rowDim)?.label||rowDim) + (sortBy==='__label__'?(sortDir==='asc'?' ↑':' ↓'):'')),
+
+            ...orderedCols.map(col =>
+              ce('th', {
+                key:col,
+                style:{ padding:'10px 12px', textAlign:'right', fontWeight:600,
+                        whiteSpace:'nowrap', cursor:'pointer', userSelect:'none', minWidth:80 },
+                onClick:()=>{ setSortBy(col); setSortDir(d=>d==='asc'?'desc':'asc'); }
+              }, col + (sortBy===col?(sortDir==='asc'?' ↑':' ↓'):''))
+            ),
+
+            ce('th', {
+              style:{ padding:'10px 12px', textAlign:'right', fontWeight:700,
+                      borderLeft:'2px solid rgba(255,255,255,0.25)', whiteSpace:'nowrap',
+                      cursor:'pointer', userSelect:'none' },
+              onClick:()=>{ setSortBy('__total__'); setSortDir(d=>d==='asc'?'desc':'asc'); }
+            }, 'TOTAL' + (sortBy==='__total__'?(sortDir==='asc'?' ↑':' ↓'):''))
+          )
+        ),
+
+        ce('tbody', null,
+          sortedRows.map((row, idx) =>
+            ce('tr', { key:row.label, style:{ background: idx%2===0?'#fff':'#F8FAFC' } },
+              ce('td', {
+                style:{ padding:'8px 16px', fontWeight:600, color:'#1a3a5c',
+                        position:'sticky', left:0, background:idx%2===0?'#fff':'#F8FAFC',
+                        borderRight:'1px solid #E2E8F0', whiteSpace:'nowrap' }
+              }, row.label),
+              ...orderedCols.map(col =>
+                ce('td', { key:col, style:{ padding:'8px 12px', textAlign:'right', color:'#374151' } },
+                  fmtCell(row.rMap.get(col), metric)
+                )
+              ),
+              ce('td', { style:{ padding:'8px 12px', textAlign:'right', fontWeight:700,
+                                 color:'#1a3a5c', borderLeft:'2px solid #E2E8F0' } },
+                metric === 'retpct'
+                  ? (row.total > 0 ? row.total.toFixed(1) + '%' : '—')
+                  : (row.total > 0 ? row.total.toLocaleString() : '—')
+              )
+            )
+          ),
+
+          /* Grand total row */
+          ce('tr', { style:{ background:'#EEF2FF', borderTop:'2px solid #CBD5E1', fontWeight:700 } },
+            ce('td', { style:{ padding:'10px 16px', color:'#1a3a5c', position:'sticky',
+                               left:0, background:'#EEF2FF', borderRight:'1px solid #CBD5E1' } }, 'TOTAL'),
+            ...orderedCols.map(col => {
+              const cv = grandTotals.colVals[col];
+              const display = metric === 'retpct'
+                ? (cv && cv[0]>0 ? (cv[1]/cv[0]*100).toFixed(1)+'%' : '—')
+                : (() => { const v=getMetricVal(cv,metric); return v>0?v.toLocaleString():'—'; })();
+              return ce('td',{key:col,style:{padding:'10px 12px',textAlign:'right',color:'#1a3a5c'}},display);
+            }),
+            ce('td', { style:{ padding:'10px 12px', textAlign:'right',
+                               borderLeft:'2px solid #CBD5E1', color:'#1a3a5c' } },
+              metric === 'retpct'
+                ? (grandTotals.gl>0?(grandTotals.gr/grandTotals.gl*100).toFixed(1)+'%':'—')
+                : (() => {
+                    let t=0;
+                    for (const rMap of pivotResult.tbl.values()) for (const v of rMap.values()) t+=getMetricVal(v,metric);
+                    return t>0?t.toLocaleString():'—';
+                  })()
+            )
+          )
+        )
+      )
+    )
   );
 });
 
