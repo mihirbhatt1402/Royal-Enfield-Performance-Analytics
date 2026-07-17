@@ -1866,7 +1866,8 @@ const TABS = [
   { id:'source',    label:'Source Analysis' },
   { id:'ltxsrc',   label:'LT × Source' },
   { id:'modelxsrc',label:'Model × Source' },
-  { id:'statexsrc',label:'State × Source' },
+  { id:'statexsrc',  label:'State × Source' },
+  { id:'dispersion', label:'Retail Dispersion' },
 ];
 
 function App() {
@@ -1941,7 +1942,7 @@ function App() {
     return {
       ...data,
       monthly: data.u_monthly, sm: data.u_sm, ltm: data.u_ltm,
-      mm: data.u_mm, stm: data.u_stm, zm: data.u_zm, bdm: data.u_bdm, mxst: data.u_mxst,
+      mm: data.u_mm, stm: data.u_stm, zm: data.u_zm, bdm: data.u_bdm, mxst: data.u_mxst, disp: data.u_disp,
       maps: { ...data.maps, lm: data.maps.u_lm },
     };
   }, [data, leadsMode]);
@@ -1967,7 +1968,8 @@ function App() {
       case 'source':    return ce(SourceTab,       props);
       case 'ltxsrc':   return ce(LTSourceTab,      props);
       case 'modelxsrc':return ce(ModelSourceTab,   props);
-      case 'statexsrc':return ce(StateSourceTab,   props);
+      case 'statexsrc':  return ce(StateSourceTab,   props);
+      case 'dispersion': return ce(DispersionTab,    props);
       default: return null;
     }
   }, [effectiveData, tab, filters, months, RT, viewerMode]);
@@ -2068,6 +2070,134 @@ function App() {
     )
   );
 }
+
+/* ════════════════════════════════════════════════════════════════════
+   RETAIL DISPERSION TAB
+   ════════════════════════════════════════════════════════════════════ */
+const DispersionTab = React.memo(function DispersionTab({ data, filters, months, RT }) {
+  const { maps, disp } = data;
+
+  // group by retail-attribution month → enquired_model_idx → purchased_model_idx → count
+  const byMonth = useMemo(() => {
+    const rows = disp || [];
+    const allM   = !filters.months || filters.months.size === 0;
+    const allMdl = !filters.models || filters.models.size === 0;
+    const allSt  = !filters.states || filters.states.size === 0;
+
+    const map = new Map(); // month → Map(ei → Map(pi → count))
+    for (const row of rows) {
+      const ei = row[0], pi = row[1], lmi = row[2], cnt = row[3];
+      const m   = maps.lm[lmi];
+      const mdl = maps.mdl[ei];
+      if (!allM   && !filters.months.has(m))   continue;
+      if (!allMdl && !filters.models.has(mdl)) continue;
+      // state filter doesn't apply here (no state dim in disp)
+      if (!map.has(m)) map.set(m, new Map());
+      const mMap = map.get(m);
+      if (!mMap.has(ei)) mMap.set(ei, new Map());
+      const eMap = mMap.get(ei);
+      eMap.set(pi, (eMap.get(pi) || 0) + cnt);
+    }
+    return map;
+  }, [disp, maps, filters]);
+
+  const sortedMonths = useMemo(() =>
+    [...byMonth.keys()].sort((a,b) => monthOrder(b) - monthOrder(a)),
+  [byMonth]);
+
+  if (!disp || disp.length === 0) return ce('div', {
+    style:{textAlign:'center',padding:60,color:'#94A3B8',fontSize:14}
+  }, ce('div',{style:{fontSize:32,marginBottom:12}},'📊'), 'Dispersion data will appear after the next pipeline run.');
+
+  const DISP_BAR = (pct) => {
+    const w = Math.min(100, pct);
+    const col = pct >= 80 ? '#DC2626' : pct >= 60 ? '#E31837' : pct >= 40 ? '#F97316' : '#F5A623';
+    return ce('div', { style:{display:'flex',alignItems:'center',gap:6} },
+      ce('div', { style:{flex:'0 0 80px',height:8,borderRadius:4,background:'#F1F5F9',overflow:'hidden'} },
+        ce('div', { style:{width:w+'%',height:'100%',background:col,borderRadius:4,transition:'width 300ms'} })
+      ),
+      ce('span', { style:{fontSize:11,fontWeight:700,color:col,minWidth:36} }, pct.toFixed(0)+'%')
+    );
+  };
+
+  const renderMonthGrid = (M) => {
+    const mMap = byMonth.get(M);
+    if (!mMap) return null;
+
+    // build rows: [enquired_model, same, cross, total, dispersion%]
+    const tableRows = [];
+    for (const [ei, piMap] of mMap.entries()) {
+      const enquiredMdl = maps.mdl[ei];
+      let same = 0, cross = 0;
+      for (const [pi, cnt] of piMap.entries()) {
+        const purchasedMdl = maps.mdl[pi];
+        if (purchasedMdl === enquiredMdl) same += cnt;
+        else cross += cnt;
+      }
+      const total = same + cross;
+      if (total === 0) continue;
+      tableRows.push({ enquiredMdl, same, cross, total, disp: cross / total * 100 });
+    }
+    tableRows.sort((a,b) => b.total - a.total);
+
+    const totSame  = tableRows.reduce((s,r) => s+r.same, 0);
+    const totCross = tableRows.reduce((s,r) => s+r.cross, 0);
+    const totTotal = totSame + totCross;
+    const totDisp  = totTotal > 0 ? totCross / totTotal * 100 : 0;
+
+    const exportData = () => {
+      const aoa = [['Enquired Model','Same','Cross','Total','Dispersion%']];
+      for (const r of tableRows) aoa.push([r.enquiredMdl, r.same, r.cross, r.total, +r.disp.toFixed(1)]);
+      aoa.push(['∑ Total', totSame, totCross, totTotal, +totDisp.toFixed(1)]);
+      exportXlsx({ [M]: aoa }, 'TVS_Dispersion_'+M.replace("'",""));
+    };
+
+    return ce('div', { key:M, className:'card', style:{padding:'16px 18px',marginBottom:14} },
+      ce('div', { style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8} },
+        ce('div', { style:{display:'flex',alignItems:'center',gap:10} },
+          ce('div', { className:'section-title', style:{marginBottom:0} }, M),
+          ce('span', { style:{fontSize:11,color:'#64748B',fontWeight:500} },
+            Nf(totTotal)+' retails · '+(totDisp.toFixed(1))+'% cross-sell')
+        ),
+        ce(ExportBtn, { onClick: exportData })
+      ),
+      ce('div', { className:'scroll-x' },
+        ce('table', null,
+          ce('thead', null, ce('tr', null,
+            ce('th', { className:'left', style:{minWidth:170} }, 'ENQUIRED MODEL'),
+            ce('th', { style:{color:'#059669'} }, 'SAME ✓'),
+            ce('th', { style:{color:'#E31837'} }, 'CROSS ✗'),
+            ce('th', null, 'TOTAL'),
+            ce('th', { style:{minWidth:150} }, 'DISPERSION%'),
+          )),
+          ce('tbody', null,
+            ...tableRows.map((r,i) => ce('tr', { key:i },
+              ce('td', { className:'label' }, r.enquiredMdl),
+              ce('td', { style:{color:'#059669',fontWeight:700} }, Nf(r.same)),
+              ce('td', { style:{color:'#E31837',fontWeight:700} }, Nf(r.cross)),
+              ce('td', null, Nf(r.total)),
+              ce('td', null, DISP_BAR(r.disp)),
+            )),
+            ce('tr', { className:'total-row' },
+              ce('td', { className:'label' }, '∑ Grand Total'),
+              ce('td', { style:{color:'#059669',fontWeight:700} }, Nf(totSame)),
+              ce('td', { style:{color:'#E31837',fontWeight:700} }, Nf(totCross)),
+              ce('td', null, Nf(totTotal)),
+              ce('td', null, DISP_BAR(totDisp)),
+            )
+          )
+        )
+      )
+    );
+  };
+
+  return ce('div', { className:'fade-up' },
+    ce('div', { style:{fontSize:12,color:'#64748B',marginBottom:14,padding:'8px 12px',background:'#F8FAFC',borderRadius:8,border:'1px solid #E2E8F0'} },
+      '📌 Retail Attribution leads only. Shows % of customers who purchased a different model than enquired. Month & Model filters apply.'
+    ),
+    ...sortedMonths.map(M => renderMonthGrid(M))
+  );
+});
 
 /* ════════════════════════════════════════════════════════════════════
    BOOTSTRAP

@@ -35,6 +35,178 @@ LEAD_SHEETS = [
 ]
 
 # Lead master column map: sheet column → canonical name
+# purchasedModel (raw from retail sheet) → canonical lead-model name
+PURCHASED_MODEL_MAP = {
+    # Apache RTR 160 4V
+    'APACHE  160 4V – PL 2CH USD OBDIIB':          'TVS Apache RTR 160 4V',
+    'APACHE  160 4V – PL DISC B.T OBDIIB':         'TVS Apache RTR 160 4V',
+    'APACHE  160 4V – PL DISC SPL ED OBDIIB':      'TVS Apache RTR 160 4V',
+    'APACHE  160 4V â€“ PL 2CH USD+TFT OBDIIB': 'TVS Apache RTR 160 4V',
+    'Apache RTR 160 4V Disc BT':                         'TVS Apache RTR 160 4V',
+    'TVS APACHE RTR 160 4V - 2CH ABS BT':               'TVS Apache RTR 160 4V',
+    'TVS APACHE RTR 160 4V - RM SPL ED':                 'TVS Apache RTR 160 4V',
+    'TVS APACHE RTR 160 4V USD – 2CH':              'TVS Apache RTR 160 4V',
+    'TVS APACHE RTR 1604V– RM OBDIIA DRUM B.E':    'TVS Apache RTR 160 4V',
+    'TVS APACHE RTR 1604V-OBDIIB DISC BLK.EDI':         'TVS Apache RTR 160 4V',
+    'TVS APACHE RTR1604V–OBDIIB SPL ED':           'TVS Apache RTR 160 4V',
+    'TVSAPACHERTR1604V–OBDIIB 2CH USD':            'TVS Apache RTR 160 4V',
+    # Apache RTR 160 (2V)
+    'APACHE 160-2V Disc 2CH A -EDI OBDIIB':             'TVS Apache RTR 160',
+    'APACHE 160-4V PL TFT USD 2CH A.EDI':               'TVS Apache RTR 160',
+    'APACHE RTR 160 2V RM DISC':                         'TVS Apache RTR 160',
+    'TVS APACHE RTR 160 2V DC ABS':                      'TVS Apache RTR 160',
+    'TVS APACHE RTR 160-2V RM OBDIIA DRUM B.E':         'TVS Apache RTR 160',
+    'TVS APACHE RTR 160-OBDIIB 2V DC ABS':              'TVS Apache RTR 160',
+    'TVS APACHE RTR160-OBDIIB 2V DISC':                 'TVS Apache RTR 160',
+    'TVS APACHE RTR160-OBDIIB 2V DISC BT':              'TVS Apache RTR 160',
+    'TVS APACHE RTR160-OBDIIB 2V DRUM':                 'TVS Apache RTR 160',
+    'TVS APACHE RTR160-OBDIIB 2V DRUM BLK.EDI':        'TVS Apache RTR 160',
+    'TVS APACHE RTR160-OBDIIB 2V RAC ED':               'TVS Apache RTR 160',
+    'TVS APACHE RTR180-OBDIIB DISC':                    'TVS Apache RTR 160',  # per user mapping
+    # Apache RTR 180
+    'APACHE 180-2V Disc 1CH A -EDI OBDIIB':             'TVS Apache RTR 180',
+    'APACHE RTR 180 RM':                                 'TVS Apache RTR 180',
+    # Apache RTR 200 4V
+    'APACHE  200 4V – PL 2CH USD+TFT OBDIIB':     'TVS Apache RTR 200 4V',
+    'APACHE  200 4V â€“ PL 2CH USD+TFT OBDIIB': 'TVS Apache RTR 200 4V',
+    'APACHE 200-4V PL TFT USD 2CH A.EDI':              'TVS Apache RTR 200 4V',
+    'TVS APACHE RTR 200 4V–OBDIIB 2CH':           'TVS Apache RTR 200 4V',
+    # Apache RR 310
+    'APACHE RR 310-O2B-M25-DYN+DYPR-GBLK GLD':        'TVS Apache RR 310',
+    'APACHE RR310-O2B-M24–BASE W/O QS-RAR':       'TVS Apache RR 310',
+    'APACHE RR310-O2B-M24–BASE-RAR':              'TVS Apache RR 310',
+    'APACHE RR310-O2B-M24–BASE-SMG':              'TVS Apache RR 310',
+    'APACHE RR310-O2B-M24-DYN PRO-SEP-BLU':           'TVS Apache RR 310',
+    # Apache RTR 310
+    'APACHE RTR 310 – BASE BLK':                  'TVS Apache RTR 310',
+    'APACHE RTR 310-O2B-M24- BASE-GL BLK':             'TVS Apache RTR 310',
+    'APACHE RTR 310-O2B-M24-BASE-BLK YEL':             'TVS Apache RTR 310',
+    'APACHE RTR 310-O2B-M24-BASE-RC-RED':              'TVS Apache RTR 310',
+    'APACHE RTR 310-O2B-M24-DYN+DYPR-RC-RED':         'TVS Apache RTR 310',
+    'APACHE RTR 310-O2B-M25-DYN+DYPR-GBLK GLD':       'TVS Apache RTR 310',
+    # Star City Plus
+    'CITY+ DRUM OBDIIB':                                'TVS Star City Plus',
+    'StarCity + ES DT BSVI':                            'TVS Star City Plus',
+    # Jupiter 125
+    'TVS JUPITER 125 DISC DT SXC OBDIIB':              'TVS Jupiter 125',
+    'TVS JUPITER 125 DISC OBDIIB':                      'TVS Jupiter 125',
+    'TVS JUPITER 125 DISC SXC OBDIIB':                 'TVS Jupiter 125',
+    'TVS JUPITER 125 DRUM OBDIIB':                      'TVS Jupiter 125',
+    # Jupiter (110)
+    'JUPITER 125 BSVI':                                 'TVS Jupiter',  # per user mapping
+    'JUPITER ZX DISC SXC':                              'TVS Jupiter',
+    'TVS JUPITER110 DISC ALLOY SXC':                   'TVS Jupiter',
+    'TVS JUPITER110 DISC ALLOY SXC OBDIIB':            'TVS Jupiter',
+    'TVS JUPITER110 DRUM ALLOY':                        'TVS Jupiter',
+    'TVS JUPITER110 DRUM ALLOY OBDIIB':                 'TVS Jupiter',
+    'TVS JUPITER110 DRUM ALLOY SXC OBDIIB':            'TVS Jupiter',
+    'TVS JUPITER110 DRUM OBDIIB':                       'TVS Jupiter',
+    'TVS JUPITER110 DRUM SMW OBDIIB':                   'TVS Jupiter',
+    # iQube S
+    'TVS iQUBE  S15 BEIGE  Fr Disc':                   'TVS iQube S',
+    'TVS iQUBE  S15 BLACK Fr Disc':                     'TVS iQube S',
+    'TVS iQube 11 Fr. Disc black':                      'TVS iQube S',
+    'TVS IQUBE ELECTRIC 9':                             'TVS iQube S',
+    'TVS IQube S-Beige':                                'TVS iQube S',
+    'TVS IQube S-New':                                  'TVS iQube S',
+    'TVS IQUBE ST 17':                                  'TVS iQube S',
+    'TVS IQUBE ST 17-Beige':                            'TVS iQube S',
+    'TVS IQube UG-Beige':                               'TVS iQube S',
+    'TVS IQube UG-New':                                 'TVS iQube S',
+    'U546 V2':                                          'TVS iQube S',
+    'U759 iQUBE':                                       'TVS iQube S',
+    'U759 iQUBE 11 Black':                              'TVS iQube S',
+    # NTORQ 125
+    'NTORQ 125 DISC – Race Edition BSVI':         'TVS NTORQ 125',
+    'NTORQ 125 DISC – SSE':                       'TVS NTORQ 125',
+    'NTORQ 125 DISC R.LCD OBD2B':                      'TVS NTORQ 125',
+    'NTORQ 125 RACE XP OBDIIB TORQUE ASSIST':          'TVS NTORQ 125',
+    'NTORQ 125 RE R.LCD OBD2B':                        'TVS NTORQ 125',
+    'NTORQ 125 SSE R.LCD OBD2B':                       'TVS NTORQ 125',
+    'NTORQ 125 XT':                                    'TVS NTORQ 125',
+    'TVS NTORQ 125 DISC BSVI':                         'TVS NTORQ 125',
+    'TVS NTORQ 125 DISC BSVI OBDIIB':                  'TVS NTORQ 125',
+    'TVS NTORQ 125 RACE EDT  BSVI OBDIIB':             'TVS NTORQ 125',
+    'TVS NTORQ 125 RACE XP BSVI OBDIIB':               'TVS NTORQ 125',
+    'TVS NTORQ 125 SUPER SQUAD BSVI OBDIIB':           'TVS NTORQ 125',
+    'TVS NTORQ 125 XT BSVI OBDIIB':                    'TVS NTORQ 125',
+    # Radeon
+    'RADEON DISC DIGI OBDIIB':                         'TVS Radeon',
+    'RADEON DRUM BLACK EDITION OBDIIB':                'TVS Radeon',
+    'RADEON DRUM DIGI OBDIIB':                         'TVS Radeon',
+    'RADEON DRUM OBDIIB':                              'TVS Radeon',
+    'TVS RADEON - DIGI DISC ':                         'TVS Radeon',
+    'TVS RADEON - DIGI DRUM ':                         'TVS Radeon',
+    'TVS RADEON 110 ES MAG BSVI':                      'TVS Radeon',
+    # Raider
+    'RAIDER - OBDIIB 1CH ABS':                         'TVS Raider',
+    'RAIDER DISC IGO I-ECU OBDIIB':                    'TVS Raider',
+    'RAIDER DRUM OBDIIB':                              'TVS Raider',
+    'RAIDER IGO I-ECU RD WH OBDIIB':                  'TVS Raider',
+    'Raider LCD OBDIIB 1CH ABS':                       'TVS Raider',
+    'RAIDER SQD EDN I-ECU OBDIIB':                     'TVS Raider',
+    'RAIDER SS DISC OBDIIB':                           'TVS Raider',
+    'TVS RAIDER DISC':                                 'TVS Raider',
+    'TVS RAIDER DISC - LCD SX':                        'TVS Raider',
+    'TVS RAIDER DISC - SS':                            'TVS Raider',
+    'TVS RAIDER DISC - SSE':                           'TVS Raider',
+    'TVS RAIDER DISC CONNECTED':                       'TVS Raider',
+    'TVS RAIDER DRUM':                                 'TVS Raider',
+    # Ronin
+    'TVS RONIN 1CH BASE-FL RED - OBDIIB':              'TVS Ronin',
+    'TVS RONIN 1CH BASE-LNG Black - OBDIIB':           'TVS Ronin',
+    'TVS RONIN 2CH MID SPECIAL EDI OBDIIB':            'TVS Ronin',
+    'TVS RONIN BASE OBIIB 1CH – MATTE WHITE':     'TVS Ronin',
+    'TVS RONIN MID 2CH – CHARCOAL EMBR OBDIIB':  'TVS Ronin',
+    'TVS RONIN MID 2CH – GLACIER SILVR OBDIIB':  'TVS Ronin',
+    # Scooty Zest
+    'Scooty Zest – OBDIIB':                       'TVS Scooty Zest',
+    'Scooty Zest Matte series – BSVI':            'TVS Scooty Zest',
+    'Scooty Zest Matte series – OBDIIB':          'TVS Scooty Zest',
+    'TVS ZEST - OBDIIB SXC BLACK':                     'TVS Scooty Zest',
+    'TVS ZEST - OBDIIB SXC NARDO GREY':                'TVS Scooty Zest',
+    # Sport
+    'SPORT ELS REFRESH OBDIIB':                        'TVS Sport',
+    'SPORT ES OBDIIB':                                 'TVS Sport',
+    'TVS SPORT ELS BSVI':                              'TVS Sport',
+    'TVS SPORT ES-U559':                               'TVS Sport',
+    # XL100
+    'TVS XL 100 COM iTs-BSVI':                        'TVS XL100',
+    'TVS XL 100 HD iTs – SBS Spl. Edition':      'TVS XL100',
+    'TVS XL 100 HD iTs BSVI':                         'TVS XL100',
+    'TVS XL 100 HD OBDIIB':                            'TVS XL100',
+    'TVS XL 100 HEAVY DUTY ES':                        'TVS XL100',
+}
+
+def normalize_purchased_model(pm):
+    """Map raw purchasedModel string to canonical lead-model name."""
+    pm = str(pm or '').strip()
+    if not pm: return 'Unknown'
+    # Try exact match (handles both proper unicode and corrupted encodings via keyword fallback)
+    if pm in PURCHASED_MODEL_MAP:
+        return PURCHASED_MODEL_MAP[pm]
+    pu = pm.upper()
+    # Keyword-based fallback for variants not in the explicit map
+    if 'RR 310' in pu or 'RR310' in pu:                          return 'TVS Apache RR 310'
+    if 'RTR 310' in pu or 'RTR310' in pu:                        return 'TVS Apache RTR 310'
+    if '200' in pu and ('4V' in pu or 'RTR' in pu):              return 'TVS Apache RTR 200 4V'
+    if '180' in pu and 'APACHE' in pu:                            return 'TVS Apache RTR 180'
+    if '160' in pu and '4V' in pu and ('APACHE' in pu or 'RTR' in pu): return 'TVS Apache RTR 160 4V'
+    if '160' in pu and ('APACHE' in pu or 'RTR' in pu):          return 'TVS Apache RTR 160'
+    if 'RAIDER' in pu:                                            return 'TVS Raider'
+    if 'JUPITER 125' in pu:                                       return 'TVS Jupiter 125'
+    if ('JUPITER' in pu or 'JUPTR' in pu) and '125' not in pu:   return 'TVS Jupiter'
+    if 'NTORQ' in pu and '150' not in pu:                        return 'TVS NTORQ 125'
+    if 'IQUBE' in pu or 'IQUE' in pu:                            return 'TVS iQube S'
+    if 'RONIN' in pu:                                             return 'TVS Ronin'
+    if 'RADEON' in pu:                                            return 'TVS Radeon'
+    if 'SPORT' in pu and 'TVS' not in pu.replace('TVS SPORT',''):return 'TVS Sport'
+    if 'SPORT' in pu:                                             return 'TVS Sport'
+    if 'XL 100' in pu or 'XL100' in pu:                          return 'TVS XL100'
+    if 'ZEST' in pu:                                              return 'TVS Scooty Zest'
+    if 'STAR CITY' in pu or 'STARCITY' in pu or 'CITY+' in pu:  return 'TVS Star City Plus'
+    return pm  # unmapped — keep raw for now
+
 LEAD_COL_MAP = {
     'opty_id':     'SorceLeadId',
     'Lead_Month':  'LeadMonth',
@@ -200,13 +372,14 @@ def fetch_retails():
     return df
 
 def build_retail_map(retail_df):
-    """Build {sourceLeadId → {rm, rtype}} using Retail_Attribution_Date."""
+    """Build {sourceLeadId → {rm, rtype, pm}} using Retail_Attribution_Date."""
     rmap = {}
     for _, row in retail_df.iterrows():
         lid = to_id(row.get('sourceLeadId', ''))
         if not lid: continue
         rm = parse_ym(row.get('Retail_Attribution_Date', ''))
-        rmap[lid] = {'rm': rm, 'rtype': ''}
+        pm = normalize_purchased_model(row.get('purchasedModel', ''))
+        rmap[lid] = {'rm': rm, 'rtype': '', 'pm': pm}
     return rmap
 
 def make_synthetic_leads(retail_df, matched_lids):
@@ -246,6 +419,7 @@ def build_payload(all_leads, retail_map):
     monthly, sm, ltm, mm, stm, zm, bdm, cm = {},{},{},{},{},{},{},{}
     u_monthly, u_sm, u_ltm, u_mm, u_stm, u_zm, u_bdm = {},{},{},{},{},{},{}
     mxst, u_mxst = {}, {}
+    disp, u_disp = {}, {}   # enquired_model × purchased_model × month (retails only)
     cdm, csm, cdsm = {},{},{}
 
     def bump(d, k, is_ret, rtype=''):
@@ -316,6 +490,12 @@ def build_payload(all_leads, retail_map):
         bump(u_zm,      f"{zi}|{uli}",         is_ret, rtype)
         bump(u_bdm,     f"{bd}|{si}|{uli}",   is_ret, rtype)
 
+        if is_ret:
+            pm  = retail_map[lid].get('pm', 'Unknown')
+            pmi = ix(mdl_idx, mdl_arr, pm)   # purchased model uses same mdl index
+            disp[f"{mi}|{pmi}|{li}"]   = disp.get(f"{mi}|{pmi}|{li}",   0) + 1
+            u_disp[f"{mi}|{pmi}|{uli}"] = u_disp.get(f"{mi}|{pmi}|{uli}", 0) + 1
+
     def to_rows(d, key_fn):
         return [[*key_fn(k), v[0], v[1], v[2], v[3]] for k, v in d.items()]
 
@@ -341,6 +521,7 @@ def build_payload(all_leads, retail_map):
         'mm':      to_rows(mm,  lambda k: list(map(int, k.split('|')))),
         'stm':     to_rows(stm, lambda k: list(map(int, k.split('|')))),
         'mxst':    to_rows(mxst, lambda k: list(map(int, k.split('|')))),
+        'disp':    [[*map(int,k.split('|')), v] for k,v in disp.items()],
         'zm':      to_rows(zm,  lambda k: list(map(int, k.split('|')))),
         'bdm':     to_rows(bdm, lambda k: [int(k.split('|')[0])] + list(map(int, k.split('|')[1:]))),
         'cm':      to_rows(cm,  lambda k: list(map(int, k.split('|')))),
@@ -353,6 +534,7 @@ def build_payload(all_leads, retail_map):
         'u_mm':      to_rows(u_mm,  lambda k: list(map(int, k.split('|')))),
         'u_stm':     to_rows(u_stm, lambda k: list(map(int, k.split('|')))),
         'u_mxst':    to_rows(u_mxst, lambda k: list(map(int, k.split('|')))),
+        'u_disp':  [[*map(int,k.split('|')), v] for k,v in u_disp.items()],
         'u_zm':      to_rows(u_zm,  lambda k: list(map(int, k.split('|')))),
         'u_bdm':     to_rows(u_bdm, lambda k: [int(k.split('|')[0])] + list(map(int, k.split('|')[1:]))),
     }
