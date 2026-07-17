@@ -2910,24 +2910,27 @@ const PivotTab = React.memo(function PivotTab({ data, filters, months, RT }) {
         ce('tbody', null,
           sortedRows.flatMap(({ label, entry }, rowIdx) => {
             const isCollapsed = hasR2 && collapsed.has(label);
-            const bg0 = rowIdx%2===0 ? '#fff' : '#F8FAFC';
+            const bg0    = rowIdx%2===0 ? '#F0F7FF' : '#E3EFFE';
+            const grpBg  = '#2563EB';
             const rows = [];
 
             // Primary row
             rows.push(ce('tr', {
               key: `p_${label}`,
-              style:{ background: hasR2 ? '#EFF6FF' : bg0, cursor: hasR2 ? 'pointer' : 'default' },
+              style:{ background: hasR2 ? grpBg : bg0, cursor: hasR2 ? 'pointer' : 'default' },
               onClick: hasR2 ? () => toggleCollapse(label) : undefined
             },
               // Primary label (sticky)
               ce('td', {
-                style:{ padding:'8px 16px', fontWeight:700, color:'#1a3a5c',
-                        position:'sticky', left:0, background: hasR2?'#EFF6FF':bg0,
-                        borderRight:'1px solid #E2E8F0', whiteSpace:'nowrap' }
+                style:{ padding:'8px 16px', fontWeight:700,
+                        color: hasR2 ? '#fff' : '#1E3A8A',
+                        position:'sticky', left:0, background: hasR2 ? grpBg : bg0,
+                        borderRight: hasR2 ? '1px solid rgba(255,255,255,0.2)' : '1px solid #BFDBFE',
+                        whiteSpace:'nowrap' }
               }, hasR2 ? (isCollapsed?'▶ ':'▼ ')+label : label),
               // Secondary label col: "Subtotal" label or collapsed item count
               hasR2 && ce('td', {
-                style:{ padding:'8px 10px', color:'#94A3B8', fontSize:12,
+                style:{ padding:'8px 10px', color:'rgba(255,255,255,0.8)', fontSize:12,
                         fontStyle:'italic', whiteSpace:'nowrap' }
               }, isCollapsed ? `(${entry.children.size} items)` : 'Subtotal'),
               // Data cells from sub (subtotals)
@@ -2938,17 +2941,19 @@ const PivotTab = React.memo(function PivotTab({ data, filters, months, RT }) {
                 return metrics.map((m, mi) =>
                   ce('td', { key:`${ck}_${m}`,
                     style:{ padding:'8px 12px', textAlign:'right',
-                            color: hasR2?'#1a3a5c':'#374151',
-                            fontWeight: hasR2?600:400,
-                            borderLeft: mi===0&&(groupBorder||(multiMetric&&ci>0)) ? '1px solid #E2E8F0' : 'none' }
+                            color: hasR2 ? '#fff' : '#1E293B',
+                            fontWeight: hasR2 ? 600 : 400,
+                            borderLeft: mi===0&&(groupBorder||(multiMetric&&ci>0))
+                              ? (hasR2 ? '1px solid rgba(255,255,255,0.2)' : '1px solid #BFDBFE') : 'none' }
                   }, fmtV(entry.sub.get(ck), m))
                 );
               }),
               // Row totals
               ...metrics.map((m, mi) =>
                 ce('td', { key:`tot_${m}`,
-                  style:{ padding:'8px 12px', textAlign:'right', fontWeight:700, color:'#1a3a5c',
-                          borderLeft: mi===0 ? '2px solid #E2E8F0' : 'none' }
+                  style:{ padding:'8px 12px', textAlign:'right', fontWeight:700,
+                          color: hasR2 ? '#fff' : '#1E3A8A',
+                          borderLeft: mi===0 ? (hasR2 ? '2px solid rgba(255,255,255,0.3)' : '2px solid #93C5FD') : 'none' }
                 }, fmtTotal(entry.sub, m))
               )
             ));
@@ -2957,16 +2962,17 @@ const PivotTab = React.memo(function PivotTab({ data, filters, months, RT }) {
             if (hasR2 && !isCollapsed) {
               let ci = 0;
               for (const [r2Label, cMap] of entry.children) {
-                const cBg = ci++%2===0 ? '#fff' : '#F8FAFC';
+                const cBg = ci++%2===0 ? '#EFF6FF' : '#DBEAFE';
                 rows.push(ce('tr', { key:`c_${label}_${r2Label}`, style:{ background:cBg } },
                   // Empty first col (sticky)
                   ce('td', {
                     style:{ padding:'7px 16px', position:'sticky', left:0,
-                            background:cBg, borderRight:'1px solid #E2E8F0' }
+                            background:cBg, borderRight:'1px solid #BFDBFE' }
                   }, ''),
                   // Secondary label
                   ce('td', {
-                    style:{ padding:'7px 10px 7px 20px', color:'#374151', fontSize:12, whiteSpace:'nowrap' }
+                    style:{ padding:'7px 10px 7px 20px', color:'#1E3A8A', fontSize:12,
+                            fontWeight:500, whiteSpace:'nowrap' }
                   }, r2Label),
                   // Data cells
                   ...orderedCols.flatMap((ck, colI) => {
@@ -2975,17 +2981,17 @@ const PivotTab = React.memo(function PivotTab({ data, filters, months, RT }) {
                     const groupBorder = hasC2 && (colI===0 || thisC0!==prevC0);
                     return metrics.map((m, mi) =>
                       ce('td', { key:`${ck}_${m}`,
-                        style:{ padding:'7px 12px', textAlign:'right', color:'#374151',
+                        style:{ padding:'7px 12px', textAlign:'right', color:'#1E293B',
                                 fontSize:12,
-                                borderLeft: mi===0&&(groupBorder||(multiMetric&&colI>0)) ? '1px solid #E2E8F0' : 'none' }
+                                borderLeft: mi===0&&(groupBorder||(multiMetric&&colI>0)) ? '1px solid #BFDBFE' : 'none' }
                       }, fmtV(cMap.get(ck), m))
                     );
                   }),
                   // Row totals
                   ...metrics.map((m, mi) =>
                     ce('td', { key:`tot_${m}`,
-                      style:{ padding:'7px 12px', textAlign:'right', fontWeight:600, color:'#374151',
-                              fontSize:12, borderLeft: mi===0 ? '2px solid #E2E8F0' : 'none' }
+                      style:{ padding:'7px 12px', textAlign:'right', fontWeight:600, color:'#1E3A8A',
+                              fontSize:12, borderLeft: mi===0 ? '2px solid #93C5FD' : 'none' }
                     }, fmtTotal(cMap, m))
                   )
                 ));
@@ -2996,11 +3002,11 @@ const PivotTab = React.memo(function PivotTab({ data, filters, months, RT }) {
           }),
 
           /* Grand total row */
-          ce('tr', { style:{ background:'#EEF2FF', borderTop:'2px solid #CBD5E1', fontWeight:700 } },
+          ce('tr', { style:{ background:'#1E3A8A', borderTop:'2px solid #1E40AF', fontWeight:700 } },
             ce('td', {
               colSpan: rowDims.length,
-              style:{ padding:'10px 16px', color:'#1a3a5c', position:'sticky', left:0,
-                      background:'#EEF2FF', borderRight:'1px solid #CBD5E1' }
+              style:{ padding:'10px 16px', color:'#fff', position:'sticky', left:0,
+                      background:'#1E3A8A', borderRight:'1px solid rgba(255,255,255,0.2)' }
             }, 'GRAND TOTAL'),
             ...orderedCols.flatMap((ck, ci) => {
               const prevC0 = ci > 0 ? orderedCols[ci-1].slice(0, orderedCols[ci-1].indexOf(COL_SEP)) : null;
@@ -3009,8 +3015,8 @@ const PivotTab = React.memo(function PivotTab({ data, filters, months, RT }) {
               const cv = grandTotals.colVals[ck];
               return metrics.map((m, mi) =>
                 ce('td', { key:`gt_${ck}_${m}`,
-                  style:{ padding:'10px 12px', textAlign:'right', color:'#1a3a5c',
-                          borderLeft: mi===0&&(groupBorder||(multiMetric&&ci>0)) ? '1px solid #CBD5E1' : 'none' }
+                  style:{ padding:'10px 12px', textAlign:'right', color:'#fff',
+                          borderLeft: mi===0&&(groupBorder||(multiMetric&&ci>0)) ? '1px solid rgba(255,255,255,0.2)' : 'none' }
                 }, fmtV(cv, m))
               );
             }),
@@ -3025,7 +3031,7 @@ const PivotTab = React.memo(function PivotTab({ data, filters, months, RT }) {
               }
               return ce('td', { key:`gt_tot_${m}`,
                 style:{ padding:'10px 12px', textAlign:'right',
-                        borderLeft: mi===0 ? '2px solid #CBD5E1' : 'none', color:'#1a3a5c' }
+                        borderLeft: mi===0 ? '2px solid rgba(255,255,255,0.3)' : 'none', color:'#fff' }
               }, display);
             })
           )
