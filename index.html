@@ -3038,7 +3038,7 @@ const PivotTab = React.memo(function PivotTab({ data, filters, months, RT }) {
               const cv = grandTotals.colVals[ck];
               return metrics.map((m, mi) =>
                 ce('td', { key:`gt_${ck}_${m}`,
-                  style:{ padding:'10px 12px', textAlign:'right', color:'#fff',
+                  style:{ padding:'10px 12px', textAlign:'right', color:'#fff', background:'#1E3A8A',
                           borderLeft: mi===0&&(groupBorder||(multiMetric&&ci>0)) ? '1px solid rgba(255,255,255,0.2)' : 'none' }
                 }, fmtV(cv, m))
               );
