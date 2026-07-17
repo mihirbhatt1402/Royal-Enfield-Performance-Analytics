@@ -25,12 +25,12 @@ RETAILS_TAB     = 'Raw'
 
 # Monthly lead master sheets — last one is current month (tab='TVS')
 LEAD_SHEETS = [
-    {'id': '1mJEi34xbeYW8q3WITTjyUQDLyREBS2dYpWP3svBoprw', 'tab': None,  'label': 'LeadSheet-1'},
-    {'id': '18LM6v6_BLzmKV2fbdXRI19Xr9vCZjJrLgbr4klP5Zis',  'tab': None,  'label': 'LeadSheet-2'},
-    {'id': '1fBvEbUzi6Tnhjq1SYljKDA4tFjuB8gLakmrTrJ2Mk_E',  'tab': None,  'label': 'LeadSheet-3'},
-    {'id': '1ZvoK_8_0BnavmKNqNKIONMC1hM35BwDwTXwGWwK0QzQ',  'tab': None,  'label': 'LeadSheet-4'},
-    {'id': '1jQbHZLrTCsrItGvV26TyDUQ_BiL3vd-sNpWim4tRKJE',  'tab': None,  'label': 'LeadSheet-5'},
-    {'id': '1tWV-wQ97KCZwrb7yz99s52XF5OIVfzj65gxdDSyAeaQ',  'tab': None,  'label': 'LeadSheet-6'},
+    {'id': '1mJEi34xbeYW8q3WITTjyUQDLyREBS2dYpWP3svBoprw', 'tab': 'TVS', 'label': 'LeadSheet-1'},
+    {'id': '18LM6v6_BLzmKV2fbdXRI19Xr9vCZjJrLgbr4klP5Zis',  'tab': 'TVS', 'label': 'LeadSheet-2'},
+    {'id': '1fBvEbUzi6Tnhjq1SYljKDA4tFjuB8gLakmrTrJ2Mk_E',  'tab': 'TVS', 'label': 'LeadSheet-3'},
+    {'id': '1ZvoK_8_0BnavmKNqNKIONMC1hM35BwDwTXwGWwK0QzQ',  'tab': 'TVS', 'label': 'LeadSheet-4'},
+    {'id': '1jQbHZLrTCsrItGvV26TyDUQ_BiL3vd-sNpWim4tRKJE',  'tab': 'TVS', 'label': 'LeadSheet-5'},
+    {'id': '1tWV-wQ97KCZwrb7yz99s52XF5OIVfzj65gxdDSyAeaQ',  'tab': 'TVS', 'label': 'LeadSheet-6'},
     {'id': '1iSw5zXF67q5Wkoz2mSPFqql9OPAcqmd0um5BEHUGf4o',  'tab': 'TVS', 'label': 'LeadSheet-7 (current)'},
 ]
 
