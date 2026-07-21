@@ -2129,43 +2129,67 @@ const DispersionTab = React.memo(function DispersionTab({ data, filters, months,
     const mMap = byMonth.get(M);
     if (!mMap) return null;
 
-    // build rows: [enquired_model, same, cross, total, dispersion%]
+    // ── Summary rows ────────────────────────────────────────────────
     const tableRows = [];
     for (const [ei, piMap] of mMap.entries()) {
       const enquiredMdl = maps.mdl[ei];
       let same = 0, cross = 0;
       for (const [pi, cnt] of piMap.entries()) {
-        const purchasedMdl = maps.mdl[pi];
-        if (purchasedMdl === enquiredMdl) same += cnt;
-        else cross += cnt;
+        if (maps.mdl[pi] === enquiredMdl) same += cnt; else cross += cnt;
       }
       const total = same + cross;
       if (total === 0) continue;
-      tableRows.push({ enquiredMdl, same, cross, total, disp: cross / total * 100 });
+      tableRows.push({ ei, enquiredMdl, same, cross, total, disp: cross / total * 100 });
     }
     tableRows.sort((a,b) => b.total - a.total);
 
-    const totSame  = tableRows.reduce((s,r) => s+r.same, 0);
+    const totSame  = tableRows.reduce((s,r) => s+r.same,  0);
     const totCross = tableRows.reduce((s,r) => s+r.cross, 0);
     const totTotal = totSame + totCross;
     const totDisp  = totTotal > 0 ? totCross / totTotal * 100 : 0;
 
+    // ── Cross-sell matrix ───────────────────────────────────────────
+    const allPiSet = new Set();
+    for (const pm of mMap.values()) for (const pi of pm.keys()) allPiSet.add(pi);
+    // X-axis (purchased): sort by column total desc
+    const sortedPi = [...allPiSet].sort((a,b) => {
+      let ta=0, tb=0;
+      for (const pm of mMap.values()) { ta+=pm.get(a)||0; tb+=pm.get(b)||0; }
+      return tb-ta;
+    });
+    // Y-axis (enquired): same order as summary table
+    const sortedEi = tableRows.map(r => r.ei);
+    let maxCell = 1;
+    for (const pm of mMap.values()) for (const [,c] of pm) if (c>maxCell) maxCell=c;
+
     const exportData = () => {
-      const aoa = [['Enquired Model','Same','Cross','Total','Dispersion%']];
-      for (const r of tableRows) aoa.push([r.enquiredMdl, r.same, r.cross, r.total, +r.disp.toFixed(1)]);
-      aoa.push(['∑ Total', totSame, totCross, totTotal, +totDisp.toFixed(1)]);
-      exportXlsx({ [M]: aoa }, 'TVS_Dispersion_'+M.replace("'",""));
+      const sum = [['Enquired Model','Same','Cross','Total','Dispersion%']];
+      for (const r of tableRows) sum.push([r.enquiredMdl, r.same, r.cross, r.total, +r.disp.toFixed(1)]);
+      sum.push(['∑ Total', totSame, totCross, totTotal, +totDisp.toFixed(1)]);
+      const mat = [['Enquired ↓ / Purchased →', ...sortedPi.map(pi=>maps.mdl[pi])]];
+      for (const ei of sortedEi) {
+        const pm = mMap.get(ei);
+        mat.push([maps.mdl[ei], ...sortedPi.map(pi => pm?.get(pi)||0)]);
+      }
+      exportXlsx({ [M+' Summary']: sum, [M+' Matrix']: mat }, 'TVS_Dispersion_'+M.replace("'",""));
     };
 
+    const thRotate = { writingMode:'vertical-rl', transform:'rotate(180deg)',
+      padding:'10px 5px', fontSize:10, fontWeight:600, color:'#334155',
+      whiteSpace:'nowrap', minWidth:34, textAlign:'left', verticalAlign:'bottom',
+      background:'#F8FAFC', borderBottom:'2px solid #E2E8F0' };
+
     return ce('div', { key:M, className:'card', style:{padding:'16px 18px',marginBottom:14} },
+      // ── Header ──
       ce('div', { style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8} },
         ce('div', { style:{display:'flex',alignItems:'center',gap:10} },
           ce('div', { className:'section-title', style:{marginBottom:0} }, M),
           ce('span', { style:{fontSize:11,color:'#64748B',fontWeight:500} },
-            Nf(totTotal)+' retails · '+(totDisp.toFixed(1))+'% cross-sell')
+            Nf(totTotal)+' retails · '+totDisp.toFixed(1)+'% cross-sell')
         ),
         ce(ExportBtn, { onClick: exportData })
       ),
+      // ── Summary table ──
       ce('div', { className:'scroll-x' },
         ce('table', null,
           ce('thead', null, ce('tr', null,
@@ -2189,6 +2213,60 @@ const DispersionTab = React.memo(function DispersionTab({ data, filters, months,
               ce('td', { style:{color:'#E31837',fontWeight:700} }, Nf(totCross)),
               ce('td', null, Nf(totTotal)),
               ce('td', null, DISP_BAR(totDisp)),
+            )
+          )
+        )
+      ),
+      // ── Cross-sell matrix ──
+      ce('div', { style:{marginTop:20, borderTop:'1px solid #F1F5F9', paddingTop:14} },
+        ce('div', { className:'section-title', style:{marginBottom:10} },
+          '🔀 Cross-Sell Matrix — Enquired (↓) × Purchased (→)'),
+        ce('div', { style:{fontSize:11,color:'#64748B',marginBottom:10} },
+          'Green diagonal = same model sold. Red = cross-sell. Darker = higher volume.'),
+        ce('div', { className:'scroll-x' },
+          ce('table', { style:{borderCollapse:'collapse', fontSize:11} },
+            ce('thead', null,
+              ce('tr', null,
+                ce('th', { style:{ padding:'4px 10px', background:'#1a3a5c', color:'#fff',
+                                   fontWeight:700, textAlign:'left', minWidth:160, maxWidth:160,
+                                   position:'sticky', left:0, zIndex:2,
+                                   borderRight:'2px solid #E2E8F0',
+                                   verticalAlign:'bottom', borderBottom:'2px solid #E2E8F0' }},
+                  'Enquired ↓  /  Purchased →'),
+                ...sortedPi.map(pi => ce('th', { key:pi, style:thRotate }, maps.mdl[pi]))
+              )
+            ),
+            ce('tbody', null,
+              sortedEi.map(ei => {
+                const pm = mMap.get(ei);
+                return ce('tr', { key:ei },
+                  ce('td', { style:{ padding:'5px 10px', fontWeight:600, color:'#1E293B', fontSize:12,
+                                     background:'#F8FAFC', position:'sticky', left:0, zIndex:1,
+                                     borderRight:'2px solid #E2E8F0', borderBottom:'1px solid #F1F5F9',
+                                     whiteSpace:'nowrap' }}, maps.mdl[ei]),
+                  ...sortedPi.map(pi => {
+                    const cnt = pm?.get(pi) || 0;
+                    const isSame = ei === pi;
+                    const intensity = cnt / maxCell;
+                    let bg, color;
+                    if (isSame) {
+                      bg = cnt > 0 ? `rgba(5,150,105,${0.12 + intensity*0.78})` : '#F0FDF4';
+                      color = intensity > 0.4 ? '#fff' : '#065F46';
+                    } else {
+                      bg = cnt > 0 ? `rgba(220,38,38,${0.07 + intensity*0.78})` : '#FAFAFA';
+                      color = intensity > 0.4 ? '#fff' : (cnt > 0 ? '#7F1D1D' : '#CBD5E1');
+                    }
+                    return ce('td', { key:pi,
+                      style:{ padding:'5px 8px', textAlign:'right',
+                              fontWeight: cnt > 0 ? 700 : 400,
+                              background: bg, color: color,
+                              borderBottom:'1px solid #F1F5F9',
+                              borderLeft: isSame ? '1px solid rgba(5,150,105,0.25)' : '1px solid #F1F5F9',
+                              minWidth:42, fontSize:11 }
+                    }, cnt > 0 ? Nf(cnt) : '—');
+                  })
+                );
+              })
             )
           )
         )
