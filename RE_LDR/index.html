@@ -1161,7 +1161,7 @@ function l2rColor(pct){
   return '#FECDD3';
 }
 
-const CompactMonthGrid=React.memo(function CompactMonthGrid({M,rows,rowKey,dimLabel,badgeLabel,vahanMonths,precomputed,viewerMode,bm='update'}){
+const CompactMonthGrid=React.memo(function CompactMonthGrid({M,rows,grandRows,rowKey,dimLabel,badgeLabel,vahanMonths,precomputed,viewerMode,bm='update'}){
   const vMonths=useMemo(()=>vahanMonths&&vahanMonths.length?vahanMonths:[M],[vahanMonths,M]);
   const [expanded,setExpanded]=useState(new Set());
   const toggleGrp=name=>setExpanded(p=>{const n=new Set(p);n.has(name)?n.delete(name):n.add(name);return n;});
@@ -1200,10 +1200,13 @@ const CompactMonthGrid=React.memo(function CompactMonthGrid({M,rows,rowKey,dimLa
      datasets with hundreds of thousands of rows and 30+ states). If the caller already
      passed in via `precomputed` instead of recomputing here. */
   const grouped=useMemo(()=>precomputed||aggGrouped(rows,M,r=>r[rowKey]||'Unknown',bm),[rows,M,rowKey,precomputed,bm]);
-  const grand=grouped.grand;
-  const grandSrc=isSourceGrid?{}:grouped.grandSrc;
-  const grandPaid=isSourceGrid?EMPTY_AGG:grouped.grandPaid;
-  const grandOrg=isSourceGrid?EMPTY_AGG:grouped.grandOrg;
+  /* When a source filter is active, grandRows is the same dataset minus the source condition,
+     so that Total/Paid/Organic column group headers always show all-source aggregations. */
+  const grandGrouped=useMemo(()=>grandRows&&grandRows!==rows?aggGrouped(grandRows,M,r=>r[rowKey]||'Unknown',bm):grouped,[grandRows,rows,M,rowKey,bm,grouped]);
+  const grand=grandGrouped.grand;
+  const grandSrc=isSourceGrid?{}:grandGrouped.grandSrc;
+  const grandPaid=isSourceGrid?EMPTY_AGG:grandGrouped.grandPaid;
+  const grandOrg=isSourceGrid?EMPTY_AGG:grandGrouped.grandOrg;
   const dimAggs=useMemo(()=>{
     if(!isSourceGrid) return grouped.dimAggs;
     const res={};
@@ -1257,7 +1260,8 @@ const CompactMonthGrid=React.memo(function CompactMonthGrid({M,rows,rowKey,dimLa
 
   function aggForCol(v,col){
     const a=dimAggs[v];
-    return col.aggKey==='src'?a.src[col.src]:a[col.aggKey];
+    if(!a) return EMPTY_AGG;
+    return col.aggKey==='src'?(a.src[col.src]||EMPTY_AGG):(a[col.aggKey]||EMPTY_AGG);
   }
 
   const grandVahan=useMemo(()=>{
@@ -1287,6 +1291,7 @@ const CompactMonthGrid=React.memo(function CompactMonthGrid({M,rows,rowKey,dimLa
   },[dimAggs,COLS,sort,isStateGrid,vMonths,vahanAllIndia]);
 
   function mkCells(agg,grandLeads,kpfx,bg,scols,vahanRetail,vahanAll){
+    if(!agg) agg=EMPTY_AGG;
     const contrib=grandLeads>0&&agg.uniqueLeads>0?(agg.uniqueLeads/grandLeads*100):0;
     const bcontrib=grand.bookings>0&&agg.bookings>0?(agg.bookings/grand.bookings*100):null;
     const l2r=agg.uniqueLeads>0?agg.e2bPct:0;
@@ -1408,7 +1413,7 @@ const CompactMonthGrid=React.memo(function CompactMonthGrid({M,rows,rowKey,dimLa
             return ce('tr',{key:v,style:{background:bg}},
               ce('td',{style:{...lblStyle,background:bg}},v),
               ...COLS.flatMap(col=>mkCells(
-                col.aggKey==='src'?a.src[col.src]:a[col.aggKey],
+                col.aggKey==='src'?(a.src[col.src]||EMPTY_AGG):a[col.aggKey],
                 col.grandLeads,v+col.key+'_',bg,col.scols,
                 col.aggKey==='total'&&isStateGrid?vahanRetailFor(v,vMonths):undefined,
                 col.aggKey==='total'&&isStateGrid?vahanAllIndia:undefined
@@ -1418,7 +1423,7 @@ const CompactMonthGrid=React.memo(function CompactMonthGrid({M,rows,rowKey,dimLa
           ce('tr',{key:'GT',style:{background:'#DBEAFE',borderTop:'2px solid #93C5FD'}},
             ce('td',{style:{...lblStyle,background:'#DBEAFE',fontWeight:700,color:'#1D4ED8'}},'∑ Grand Total'),
             ...COLS.flatMap(col=>mkCells(
-              col.aggKey==='src'?grandSrc[col.src]:(col.aggKey==='total'?grand:col.aggKey==='paid'?grandPaid:grandOrg),
+              col.aggKey==='src'?(grandSrc[col.src]||EMPTY_AGG):(col.aggKey==='total'?grand:col.aggKey==='paid'?grandPaid:grandOrg),
               col.grandLeads,'GT_'+col.key+'_','#E9EDF2',col.scols,
               col.aggKey==='total'&&isStateGrid?grandVahan:undefined,
               col.aggKey==='total'&&isStateGrid?vahanAllIndia:undefined
@@ -1434,7 +1439,7 @@ const CompactMonthGrid=React.memo(function CompactMonthGrid({M,rows,rowKey,dimLa
 /* ══════════════════════════════════════════════════════════════════════════
    SOURCE ANALYSIS TAB
 ══════════════════════════════════════════════════════════════════════════ */
-const SourceTab=React.memo(function SourceTab({rows,mf,viewerMode,bm='update'}){
+const SourceTab=React.memo(function SourceTab({rows,grandRows,mf,viewerMode,bm='update'}){
   const sources=useMemo(()=>[...new Set(rows.map(r=>r.source))].filter(Boolean).sort(),[rows]);
 
   /* All months, oldest first for charts (handled inside SourceMiniChart) */
@@ -1479,13 +1484,13 @@ const SourceTab=React.memo(function SourceTab({rows,mf,viewerMode,bm='update'}){
     ),
 
     /* Compact matrix grids — one per active month */
-    activeMonths.map(M=>ce(CompactMonthGrid,{key:M,M,rows,rowKey:'source',dimLabel:'Source',viewerMode,bm}))
+    activeMonths.map(M=>ce(CompactMonthGrid,{key:M,M,rows,grandRows,rowKey:'source',dimLabel:'Source',viewerMode,bm}))
   );
 });
 
 
 /* ── Generic Dimension × Source Tab ──────────────────────────────── */
-const DimSourceTab=React.memo(function DimSourceTab({rows,mf,rowKey,dimLabel,xTabLabel,viewerMode,flat=false,bm='update'}){
+const DimSourceTab=React.memo(function DimSourceTab({rows,grandRows,mf,rowKey,dimLabel,xTabLabel,viewerMode,flat=false,bm='update'}){
   const allMonths=useMemo(()=>
     [...new Set(rows.map(r=>r.lead_month))].filter(Boolean)
       .sort((a,b)=>monthOrder(b)-monthOrder(a))
@@ -1506,7 +1511,7 @@ const DimSourceTab=React.memo(function DimSourceTab({rows,mf,rowKey,dimLabel,xTa
         exportXlsx(sheets,'RE_LDR_'+dimLabel.replace(/\s+/g,'_')+'_x_Source');
       }})
     ),
-    activeMonths.map(M=>ce(CompactMonthGrid,{key:M,M,rows,rowKey,dimLabel,viewerMode,bm})),
+    activeMonths.map(M=>ce(CompactMonthGrid,{key:M,M,rows,grandRows,rowKey,dimLabel,viewerMode,bm})),
     /* Only show the All Months Summary when no month is filtered — when a single month is
        selected the per-month grid above already shows the same data, so the summary is a
        duplicate and its label is misleading. */
@@ -1514,19 +1519,19 @@ const DimSourceTab=React.memo(function DimSourceTab({rows,mf,rowKey,dimLabel,xTa
       ce('div',{style:{margin:'24px 0 16px',borderTop:'2px solid #D1D5DB'}}),
       ce('div',{style:{fontSize:11,fontWeight:700,color:'#6b7280',textTransform:'uppercase',
         letterSpacing:'.08em',marginBottom:12}},xTabLabel+' — All Months Summary'),
-      ce(CompactMonthGrid,{M:'All',rows,rowKey,dimLabel,viewerMode,bm})
+      ce(CompactMonthGrid,{M:'All',rows,grandRows,rowKey,dimLabel,viewerMode,bm})
     )
   );
 });
 
-const LTSourceTab=React.memo(function LTSourceTab({rows,mf,viewerMode,bm='update'}){
-  return ce(DimSourceTab,{rows,mf,rowKey:'lt',dimLabel:'LT',xTabLabel:'LT × Source',viewerMode,bm});
+const LTSourceTab=React.memo(function LTSourceTab({rows,grandRows,mf,viewerMode,bm='update'}){
+  return ce(DimSourceTab,{rows,grandRows,mf,rowKey:'lt',dimLabel:'LT',xTabLabel:'LT × Source',viewerMode,bm});
 });
-const ModelSourceTab=React.memo(function ModelSourceTab({rows,mf,viewerMode,bm='update'}){
-  return ce(DimSourceTab,{rows,mf,rowKey:'model',dimLabel:'Model',xTabLabel:'Model × Source',viewerMode,bm});
+const ModelSourceTab=React.memo(function ModelSourceTab({rows,grandRows,mf,viewerMode,bm='update'}){
+  return ce(DimSourceTab,{rows,grandRows,mf,rowKey:'model',dimLabel:'Model',xTabLabel:'Model × Source',viewerMode,bm});
 });
-const StateSourceTab=React.memo(function StateSourceTab({rows,mf,viewerMode,bm='update'}){
-  return ce(DimSourceTab,{rows,mf,rowKey:'state',dimLabel:'State',xTabLabel:'State × Source',viewerMode,bm});
+const StateSourceTab=React.memo(function StateSourceTab({rows,grandRows,mf,viewerMode,bm='update'}){
+  return ce(DimSourceTab,{rows,grandRows,mf,rowKey:'state',dimLabel:'State',xTabLabel:'State × Source',viewerMode,bm});
 });
 
 /* ── Model wise State × Source — replica of State × Source, one grid per Model instead of per Month
@@ -1571,7 +1576,7 @@ const MultiSelect=React.memo(function MultiSelect({label,options,selected,onChan
   );
 });
 
-const GeoModelTab=React.memo(function GeoModelTab({rows,mf,viewerMode,bm='update'}){
+const GeoModelTab=React.memo(function GeoModelTab({rows,grandRows,mf,viewerMode,bm='update'}){
   const allMonths=useMemo(()=>
     [...new Set(rows.map(r=>r.lead_month))].filter(Boolean).sort((a,b)=>monthOrder(b)-monthOrder(a))
   ,[rows]);
@@ -1589,6 +1594,15 @@ const GeoModelTab=React.memo(function GeoModelTab({rows,mf,viewerMode,bm='update
       .map(model=>({model,rows:m[model]}));
   },[rows]);
 
+  /* grandRows grouped by model — used to keep Total/Paid/Organic column group totals
+     stable even when a Source filter is active (mirrors the same logic in DimSourceTab). */
+  const modelGrandMap=useMemo(()=>{
+    if(!grandRows||grandRows===rows) return null;
+    const m={};
+    for(const r of grandRows){ const v=r.model||'Unknown'; if(!m[v]) m[v]=[]; m[v].push(r); }
+    return m;
+  },[grandRows,rows]);
+
   return ce('div',{className:'fade-up'},
     ce('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12,marginTop:8}},
       ce('div',{style:{fontSize:11,fontWeight:700,color:'#6b7280',textTransform:'uppercase',letterSpacing:'.08em'}},'State × Source — by Model'),
@@ -1604,14 +1618,16 @@ const GeoModelTab=React.memo(function GeoModelTab({rows,mf,viewerMode,bm='update
       }})
     ),
     modelGroups.map(({model,rows:mr})=>ce(CompactMonthGrid,{
-      key:model,M:mf,rows:mr,rowKey:'state',dimLabel:'State',
+      key:model,M:mf,rows:mr,
+      grandRows:modelGrandMap?modelGrandMap[model]:undefined,
+      rowKey:'state',dimLabel:'State',
       badgeLabel:model,vahanMonths:resolvedMonths,viewerMode,bm
     })),
     ce('div',{style:{margin:'24px 0 16px',borderTop:'2px solid #D1D5DB'}}),
     ce('div',{style:{fontSize:11,fontWeight:700,color:'#6b7280',textTransform:'uppercase',
       letterSpacing:'.08em',marginBottom:12}},'Model wise State × Source — All Models Summary'),
     ce(CompactMonthGrid,{
-      M:mf,rows,rowKey:'state',dimLabel:'State',
+      M:mf,rows,grandRows,rowKey:'state',dimLabel:'State',
       badgeLabel:'All Models',vahanMonths:resolvedMonths,viewerMode,bm
     })
   );
@@ -2062,6 +2078,20 @@ function App({fbUser,role,presence,onSignOut,onAdminOpen}){
     );
   },[rows,filters.source,filters.primarySrc,filters.state,filters.city,filters.model,filters.campaign]);
 
+  /* Same as baseRows but without the source filter — passed to dimension tabs so their
+     Total/Paid/Organic column group aggregations stay stable when a Source is selected. */
+  const baseRowsNoSrc=useMemo(()=>{
+    if(!rows) return [];
+    if(filters.source.size===0) return baseRows;
+    return rows.filter(r=>
+      (filters.primarySrc.size===0||filters.primarySrc.has(r.primary_src))&&
+      (filters.state.size===0||filters.state.has(r.state))&&
+      (filters.city.size===0||filters.city.has(r.city))&&
+      (filters.model.size===0||filters.model.has(r.model))&&
+      (filters.campaign.size===0||filters.campaign.has(r.utm_campaign))
+    );
+  },[baseRows,rows,filters.source,filters.primarySrc,filters.state,filters.city,filters.model,filters.campaign]);
+
   const mf=filters.month.size===1?[...filters.month][0]:'All';
 
   const totalM=useMemo(()=>aggRE(baseRows,mf,bookingMode),[baseRows,mf,bookingMode]);
@@ -2082,8 +2112,8 @@ function App({fbUser,role,presence,onSignOut,onAdminOpen}){
       geomodel:  GeoModelTab,
       pivot:     PivotTab,
     };
-    return ce(COMPONENTS[tab],{key:tab,rows:baseRows,mf,viewerMode,bm:bookingMode});
-  },[tab,baseRows,mf,viewerMode,bookingMode]);
+    return ce(COMPONENTS[tab],{key:tab,rows:baseRows,grandRows:baseRowsNoSrc,mf,viewerMode,bm:bookingMode});
+  },[tab,baseRows,baseRowsNoSrc,mf,viewerMode,bookingMode]);
 
   if(!rows) return ce(UploadScreen,{onData:setRows,onSync:handleSync,syncing,syncErr,sheetUrl,setSheetUrl,urlDraft,setUrlDraft,lastSynced});
 
