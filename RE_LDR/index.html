@@ -1204,7 +1204,11 @@ const CompactMonthGrid=React.memo(function CompactMonthGrid({M,rows,grandRows,ro
      so that Total/Paid/Organic column group headers always show all-source aggregations. */
   const grandGrouped=useMemo(()=>grandRows&&grandRows!==rows?aggGrouped(grandRows,M,r=>r[rowKey]||'Unknown',bm):grouped,[grandRows,rows,M,rowKey,bm,grouped]);
   const grand=grandGrouped.grand;
-  const grandSrc=isSourceGrid?{}:grandGrouped.grandSrc;
+  /* grandSrc is intentionally from `grouped` (source-filtered): when a source is selected,
+     individual expanded columns (MS FB, Adwords, Organic, Non MS) should only show data for
+     the selected source — all others show "—". The collapsed Total/Paid/Organic group columns
+     use grandGrouped (all-source) via dimAggs and grandPaid/grandOrg, so they never change. */
+  const grandSrc=isSourceGrid?{}:grouped.grandSrc;
   const grandPaid=isSourceGrid?EMPTY_AGG:grandGrouped.grandPaid;
   const grandOrg=isSourceGrid?EMPTY_AGG:grandGrouped.grandOrg;
   const dimAggs=useMemo(()=>{
@@ -1259,9 +1263,10 @@ const CompactMonthGrid=React.memo(function CompactMonthGrid({M,rows,grandRows,ro
   }),[expanded,grand,grandPaid,grandOrg,grandSrc,isStateGrid]);
 
   function aggForCol(v,col){
+    if(col.aggKey==='src'){const af=grouped.dimAggs[v];return af?(af.src[col.src]||EMPTY_AGG):EMPTY_AGG;}
     const a=dimAggs[v];
     if(!a) return EMPTY_AGG;
-    return col.aggKey==='src'?(a.src[col.src]||EMPTY_AGG):(a[col.aggKey]||EMPTY_AGG);
+    return a[col.aggKey]||EMPTY_AGG;
   }
 
   const grandVahan=useMemo(()=>{
@@ -1410,12 +1415,13 @@ const CompactMonthGrid=React.memo(function CompactMonthGrid({M,rows,grandRows,ro
         ),
         ce('tbody',null,
           dimVals.map((v,ri)=>{
-            const a=dimAggs[v];
+            const a=dimAggs[v];           // grandGrouped — all-source, for Total/Paid/Org columns
+            const af=grouped.dimAggs[v];  // source-filtered, for individual expanded src columns
             const bg=ri%2===0?'#FFFFFF':'#F0F9FF';
             return ce('tr',{key:v,style:{background:bg}},
               ce('td',{style:{...lblStyle,background:bg}},v),
               ...COLS.flatMap(col=>mkCells(
-                col.aggKey==='src'?(a.src[col.src]||EMPTY_AGG):a[col.aggKey],
+                col.aggKey==='src'?(af?(af.src[col.src]||EMPTY_AGG):EMPTY_AGG):a[col.aggKey]||EMPTY_AGG,
                 col.grandLeads,v+col.key+'_',bg,col.scols,
                 col.aggKey==='total'&&isStateGrid?vahanRetailFor(v,vMonths):undefined,
                 col.aggKey==='total'&&isStateGrid?vahanAllIndia:undefined
