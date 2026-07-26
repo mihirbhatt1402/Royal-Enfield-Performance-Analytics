@@ -1217,13 +1217,26 @@ const CompactMonthGrid=React.memo(function CompactMonthGrid({M,rows,grandRows,ro
     for(const v of Object.keys(grandGrouped.dimAggs)) res[v]={total:grandGrouped.dimAggs[v].total,paid:EMPTY_AGG,org:EMPTY_AGG,src:{}};
     return res;
   },[grandGrouped,isSourceGrid]);
-  const TOPGROUPS=(isSourceGrid||viewerMode)?[
-    {label:'Total',bg:'#1D4ED8',name:null,children:null,aggKey:'total',grandLeads:grand.uniqueLeads},
-  ]:[
-    {label:'Total',           bg:'#1D4ED8',name:null,             children:null,     aggKey:'total',grandLeads:grand.uniqueLeads},
-    {label:'Paid',            bg:'#7C3AED',name:'Paid',            children:PAID_MBRS,aggKey:'paid', grandLeads:grandPaid.uniqueLeads},
-    {label:'Organic + Non MS',bg:'#0D9488',name:'Organic + Non MS',children:ORG_MBRS, aggKey:'org',  grandLeads:grandOrg.uniqueLeads},
-  ];
+  /* When a source filter is active, replace the Paid/Organic group columns with individual
+     per-source columns for only the selected source(s). Total always stays. */
+  const hasSourceFilter=!!(grandRows&&grandRows!==rows);
+  const TOPGROUPS=useMemo(()=>{
+    const totalGroup={label:'Total',bg:'#1D4ED8',name:null,children:null,aggKey:'total',grandLeads:grand.uniqueLeads};
+    if(isSourceGrid||viewerMode) return[totalGroup];
+    if(hasSourceFilter){
+      const srcGroups=ALL_SRCS
+        .filter(src=>src in grouped.grandSrc)
+        .map(src=>({label:src,bg:PAID_MBRS.includes(src)?'#7C3AED':'#0D9488',
+          name:null,children:null,aggKey:'src',src,
+          grandLeads:(grouped.grandSrc[src]||EMPTY_AGG).uniqueLeads}));
+      return[totalGroup,...srcGroups];
+    }
+    return[
+      totalGroup,
+      {label:'Paid',bg:'#7C3AED',name:'Paid',children:PAID_MBRS,aggKey:'paid',grandLeads:grandPaid.uniqueLeads},
+      {label:'Organic + Non MS',bg:'#0D9488',name:'Organic + Non MS',children:ORG_MBRS,aggKey:'org',grandLeads:grandOrg.uniqueLeads},
+    ];
+  },[isSourceGrid,viewerMode,hasSourceFilter,grand,grandPaid,grandOrg,grouped.grandSrc]);
   const SCOLS=[
     {label:'Unique Leads',m:'leads'},
     {label:'Lead Contrib%',m:'contrib'},
@@ -1257,10 +1270,13 @@ const CompactMonthGrid=React.memo(function CompactMonthGrid({M,rows,grandRows,ro
 
   /* flat column list — each top group contributes either 1 aggregate col or N child-source cols */
   const COLS=useMemo(()=>TOPGROUPS.flatMap(g=>{
-    if(!g.children) return[{key:'total',aggKey:'total',grandLeads:g.grandLeads,scols:SCOLS_TOTAL}];
+    if(!g.children){
+      if(g.aggKey==='src') return[{key:g.src,aggKey:'src',src:g.src,grandLeads:g.grandLeads,scols:SCOLS_NONTOTAL}];
+      return[{key:'total',aggKey:'total',grandLeads:g.grandLeads,scols:SCOLS_TOTAL}];
+    }
     if(!expanded.has(g.name)) return[{key:g.aggKey,aggKey:g.aggKey,grandLeads:g.grandLeads,scols:SCOLS_NONTOTAL}];
     return g.children.map(src=>({key:src,aggKey:'src',src,grandLeads:(grandSrc[src]||EMPTY_AGG).uniqueLeads,scols:SCOLS_NONTOTAL}));
-  }),[expanded,grand,grandPaid,grandOrg,grandSrc,isStateGrid]);
+  }),[TOPGROUPS,expanded,grandSrc,isStateGrid]);
 
   function aggForCol(v,col){
     if(col.aggKey==='src'){const af=grouped.dimAggs[v];return af?(af.src[col.src]||EMPTY_AGG):EMPTY_AGG;}
@@ -1378,7 +1394,8 @@ const CompactMonthGrid=React.memo(function CompactMonthGrid({M,rows,grandRows,ro
               background:'#1D4ED8',position:'sticky',left:0,zIndex:4,
               borderRight:'2px solid rgba(255,255,255,.3)'}},dimLabel||rowKey.toUpperCase()),
             ...TOPGROUPS.flatMap((g,gi)=>{
-              if(!g.children) return[ce('th',{key:'tg'+gi,colSpan:SCOLS_TOTAL.length,
+              if(!g.children) return[ce('th',{key:'tg'+gi,
+                colSpan:g.aggKey==='src'?SCOLS_NONTOTAL.length:SCOLS_TOTAL.length,
                 style:{...thBase,background:g.bg,
                   borderLeft:gi>0?'2px solid rgba(255,255,255,.4)':undefined}},
                 g.label)];
