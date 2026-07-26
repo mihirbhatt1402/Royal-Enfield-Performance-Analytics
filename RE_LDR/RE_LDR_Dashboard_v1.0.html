@@ -1266,8 +1266,10 @@ const CompactMonthGrid=React.memo(function CompactMonthGrid({M,rows,grandRows,ro
 
   const grandVahan=useMemo(()=>{
     if(!isStateGrid) return undefined;
-    return Object.keys(dimAggs).reduce((s,v)=>s+(vahanRetailFor(v,vMonths)||0),0);
-  },[isStateGrid,dimAggs,vMonths]);
+    /* Use grandGrouped.dimAggs (all-source) so states with no data for the active source
+       filter are still counted — their Vahan retails belong in the Grand Total row. */
+    return Object.keys(grandGrouped.dimAggs).reduce((s,v)=>s+(vahanRetailFor(v,vMonths)||0),0);
+  },[isStateGrid,grandGrouped,vMonths]);
 
   const vahanAllIndia=useMemo(()=>isStateGrid?vahanMonthTotal(vMonths):undefined,[isStateGrid,vMonths]);
 
