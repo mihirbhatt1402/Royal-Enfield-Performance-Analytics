@@ -1586,8 +1586,6 @@ const MultiSelect=React.memo(function MultiSelect({label,options,selected,onChan
 });
 
 const GeoModelTab=React.memo(function GeoModelTab({rows,grandRows,mf,viewerMode,bm='update'}){
-  /* Use all-source rows so model cards and month pills don't disappear when a Source is filtered.
-     mr per model is already all-source so no grandRows prop is needed on individual grids. */
   const effectiveRows=grandRows||rows;
   const allMonths=useMemo(()=>
     [...new Set(effectiveRows.map(r=>r.lead_month))].filter(Boolean).sort((a,b)=>monthOrder(b)-monthOrder(a))
@@ -1595,25 +1593,35 @@ const GeoModelTab=React.memo(function GeoModelTab({rows,grandRows,mf,viewerMode,
 
   const resolvedMonths=(!mf||mf==='All')?allMonths:[mf];
 
-  /* Do NOT pre-filter by lead_month here — aggGrouped inside CompactMonthGrid must see
-     rows from M-2 to M so backward booking attribution works correctly in On Update mode.
-     Group by model from effectiveRows (all-source) so every model card appears regardless
-     of the active Source filter. Month scoping is handled by passing M:mf. */
-  const modelGroups=useMemo(()=>{
+  /* All-source model map — every model card appears regardless of source filter.
+     Passed as grandRows so Total/Paid/Org columns in CompactMonthGrid stay constant. */
+  const modelGrandMap=useMemo(()=>{
     const m={};
     for(const r of effectiveRows){ const v=r.model||'Unknown'; if(!m[v]) m[v]=[]; m[v].push(r); }
-    return Object.keys(m)
-      .sort((a,b)=>m[b].length-m[a].length)
-      .map(model=>({model,rows:m[model]}));
+    return m;
   },[effectiveRows]);
+
+  const modelList=useMemo(()=>
+    Object.keys(modelGrandMap).sort((a,b)=>modelGrandMap[b].length-modelGrandMap[a].length)
+  ,[modelGrandMap]);
+
+  /* Source-filtered model map — passed as rows so expanded individual src columns (MS FB,
+     Adwords, Organic, Non MS) only show data for the selected source.
+     When no source filter, effectiveRows===rows so reuse modelGrandMap (same arrays). */
+  const modelRowsMap=useMemo(()=>{
+    if(effectiveRows===rows) return modelGrandMap;
+    const m={};
+    for(const r of rows){ const v=r.model||'Unknown'; if(!m[v]) m[v]=[]; m[v].push(r); }
+    return m;
+  },[rows,effectiveRows,modelGrandMap]);
 
   return ce('div',{className:'fade-up'},
     ce('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12,marginTop:8}},
       ce('div',{style:{fontSize:11,fontWeight:700,color:'#6b7280',textTransform:'uppercase',letterSpacing:'.08em'}},'State × Source — by Model'),
       ce(ExportBtn,{onClick:()=>{
         const sheets={};
-        for(const{model,rows:mr} of modelGroups){
-          const g=aggGrouped(mr,mf,r=>r.state||'Unknown',bm);
+        for(const model of modelList){
+          const g=aggGrouped(modelGrandMap[model],mf,r=>r.state||'Unknown',bm);
           sheets[model.slice(0,31)]=aggToAoa(g,'State');
         }
         const gAll=aggGrouped(effectiveRows,mf,r=>r.state||'Unknown',bm);
@@ -1621,8 +1629,10 @@ const GeoModelTab=React.memo(function GeoModelTab({rows,grandRows,mf,viewerMode,
         exportXlsx(sheets,'RE_LDR_Model_State_x_Source');
       }})
     ),
-    modelGroups.map(({model,rows:mr})=>ce(CompactMonthGrid,{
-      key:model,M:mf,rows:mr,
+    modelList.map(model=>ce(CompactMonthGrid,{
+      key:model,M:mf,
+      rows:modelRowsMap[model]||[],
+      grandRows:modelGrandMap[model],
       rowKey:'state',dimLabel:'State',
       badgeLabel:model,vahanMonths:resolvedMonths,viewerMode,bm
     })),
@@ -1630,7 +1640,8 @@ const GeoModelTab=React.memo(function GeoModelTab({rows,grandRows,mf,viewerMode,
     ce('div',{style:{fontSize:11,fontWeight:700,color:'#6b7280',textTransform:'uppercase',
       letterSpacing:'.08em',marginBottom:12}},'Model wise State × Source — All Models Summary'),
     ce(CompactMonthGrid,{
-      M:mf,rows:effectiveRows,rowKey:'state',dimLabel:'State',
+      M:mf,rows,grandRows:effectiveRows!==rows?effectiveRows:undefined,
+      rowKey:'state',dimLabel:'State',
       badgeLabel:'All Models',vahanMonths:resolvedMonths,viewerMode,bm
     })
   );
