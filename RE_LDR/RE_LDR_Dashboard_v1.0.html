@@ -1208,11 +1208,11 @@ const CompactMonthGrid=React.memo(function CompactMonthGrid({M,rows,grandRows,ro
   const grandPaid=isSourceGrid?EMPTY_AGG:grandGrouped.grandPaid;
   const grandOrg=isSourceGrid?EMPTY_AGG:grandGrouped.grandOrg;
   const dimAggs=useMemo(()=>{
-    if(!isSourceGrid) return grouped.dimAggs;
+    if(!isSourceGrid) return grandGrouped.dimAggs;
     const res={};
-    for(const v of Object.keys(grouped.dimAggs)) res[v]={total:grouped.dimAggs[v].total,paid:EMPTY_AGG,org:EMPTY_AGG,src:{}};
+    for(const v of Object.keys(grandGrouped.dimAggs)) res[v]={total:grandGrouped.dimAggs[v].total,paid:EMPTY_AGG,org:EMPTY_AGG,src:{}};
     return res;
-  },[grouped,isSourceGrid]);
+  },[grandGrouped,isSourceGrid]);
   const TOPGROUPS=(isSourceGrid||viewerMode)?[
     {label:'Total',bg:'#1D4ED8',name:null,children:null,aggKey:'total',grandLeads:grand.uniqueLeads},
   ]:[
@@ -1486,17 +1486,18 @@ const SourceTab=React.memo(function SourceTab({rows,grandRows,mf,viewerMode,bm='
     ),
 
     /* Compact matrix grids — one per active month */
-    activeMonths.map(M=>ce(CompactMonthGrid,{key:M,M,rows,grandRows,rowKey:'source',dimLabel:'Source',viewerMode,bm}))
+    activeMonths.map(M=>ce(CompactMonthGrid,{key:M,M,rows,rowKey:'source',dimLabel:'Source',viewerMode,bm}))
   );
 });
 
 
 /* ── Generic Dimension × Source Tab ──────────────────────────────── */
 const DimSourceTab=React.memo(function DimSourceTab({rows,grandRows,mf,rowKey,dimLabel,xTabLabel,viewerMode,flat=false,bm='update'}){
+  const effectiveRows=grandRows||rows;
   const allMonths=useMemo(()=>
-    [...new Set(rows.map(r=>r.lead_month))].filter(Boolean)
+    [...new Set(effectiveRows.map(r=>r.lead_month))].filter(Boolean)
       .sort((a,b)=>monthOrder(b)-monthOrder(a))
-  ,[rows]);
+  ,[effectiveRows]);
   /* Driven solely by the global Lead Month filter — no local month-pill row. */
   const activeMonths=useMemo(()=>mf&&mf!=='All'?[mf]:allMonths,[mf,allMonths]);
   return ce('div',{className:'fade-up'},
@@ -1505,10 +1506,10 @@ const DimSourceTab=React.memo(function DimSourceTab({rows,grandRows,mf,rowKey,di
       ce(ExportBtn,{onClick:()=>{
         const sheets={};
         for(const M of activeMonths){
-          const g=aggGrouped(rows,M,r=>r[rowKey]||'Unknown',bm);
+          const g=aggGrouped(effectiveRows,M,r=>r[rowKey]||'Unknown',bm);
           sheets[M]=aggToAoa(g,dimLabel);
         }
-        const gAll=aggGrouped(rows,mf,r=>r[rowKey]||'Unknown',bm);
+        const gAll=aggGrouped(effectiveRows,mf,r=>r[rowKey]||'Unknown',bm);
         sheets['All Months Summary']=aggToAoa(gAll,dimLabel);
         exportXlsx(sheets,'RE_LDR_'+dimLabel.replace(/\s+/g,'_')+'_x_Source');
       }})
@@ -1579,31 +1580,26 @@ const MultiSelect=React.memo(function MultiSelect({label,options,selected,onChan
 });
 
 const GeoModelTab=React.memo(function GeoModelTab({rows,grandRows,mf,viewerMode,bm='update'}){
+  /* Use all-source rows so model cards and month pills don't disappear when a Source is filtered.
+     mr per model is already all-source so no grandRows prop is needed on individual grids. */
+  const effectiveRows=grandRows||rows;
   const allMonths=useMemo(()=>
-    [...new Set(rows.map(r=>r.lead_month))].filter(Boolean).sort((a,b)=>monthOrder(b)-monthOrder(a))
-  ,[rows]);
+    [...new Set(effectiveRows.map(r=>r.lead_month))].filter(Boolean).sort((a,b)=>monthOrder(b)-monthOrder(a))
+  ,[effectiveRows]);
 
   const resolvedMonths=(!mf||mf==='All')?allMonths:[mf];
 
   /* Do NOT pre-filter by lead_month here — aggGrouped inside CompactMonthGrid must see
      rows from M-2 to M so backward booking attribution works correctly in On Update mode.
-     Group by model from the full row set; month scoping is handled by passing M:mf. */
+     Group by model from effectiveRows (all-source) so every model card appears regardless
+     of the active Source filter. Month scoping is handled by passing M:mf. */
   const modelGroups=useMemo(()=>{
     const m={};
-    for(const r of rows){ const v=r.model||'Unknown'; if(!m[v]) m[v]=[]; m[v].push(r); }
+    for(const r of effectiveRows){ const v=r.model||'Unknown'; if(!m[v]) m[v]=[]; m[v].push(r); }
     return Object.keys(m)
       .sort((a,b)=>m[b].length-m[a].length)
       .map(model=>({model,rows:m[model]}));
-  },[rows]);
-
-  /* grandRows grouped by model — used to keep Total/Paid/Organic column group totals
-     stable even when a Source filter is active (mirrors the same logic in DimSourceTab). */
-  const modelGrandMap=useMemo(()=>{
-    if(!grandRows||grandRows===rows) return null;
-    const m={};
-    for(const r of grandRows){ const v=r.model||'Unknown'; if(!m[v]) m[v]=[]; m[v].push(r); }
-    return m;
-  },[grandRows,rows]);
+  },[effectiveRows]);
 
   return ce('div',{className:'fade-up'},
     ce('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12,marginTop:8}},
@@ -1614,14 +1610,13 @@ const GeoModelTab=React.memo(function GeoModelTab({rows,grandRows,mf,viewerMode,
           const g=aggGrouped(mr,mf,r=>r.state||'Unknown',bm);
           sheets[model.slice(0,31)]=aggToAoa(g,'State');
         }
-        const gAll=aggGrouped(rows,mf,r=>r.state||'Unknown',bm);
+        const gAll=aggGrouped(effectiveRows,mf,r=>r.state||'Unknown',bm);
         sheets['All Models']=aggToAoa(gAll,'State');
         exportXlsx(sheets,'RE_LDR_Model_State_x_Source');
       }})
     ),
     modelGroups.map(({model,rows:mr})=>ce(CompactMonthGrid,{
       key:model,M:mf,rows:mr,
-      grandRows:modelGrandMap?modelGrandMap[model]:undefined,
       rowKey:'state',dimLabel:'State',
       badgeLabel:model,vahanMonths:resolvedMonths,viewerMode,bm
     })),
@@ -1629,7 +1624,7 @@ const GeoModelTab=React.memo(function GeoModelTab({rows,grandRows,mf,viewerMode,
     ce('div',{style:{fontSize:11,fontWeight:700,color:'#6b7280',textTransform:'uppercase',
       letterSpacing:'.08em',marginBottom:12}},'Model wise State × Source — All Models Summary'),
     ce(CompactMonthGrid,{
-      M:mf,rows,grandRows,rowKey:'state',dimLabel:'State',
+      M:mf,rows:effectiveRows,rowKey:'state',dimLabel:'State',
       badgeLabel:'All Models',vahanMonths:resolvedMonths,viewerMode,bm
     })
   );
