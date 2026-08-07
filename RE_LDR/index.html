@@ -2026,7 +2026,7 @@ function App({fbUser,role,presence,onSignOut,onAdminOpen}){
      subtle loading cue instead of the UI appearing to freeze). */
   const [isPending,startTransition]=useTransition();
   /* Each filter is a Set of selected values — empty Set means "All" (no restriction). */
-  const [filters,setFilters]=useState(()=>({month:new Set(),source:new Set(),primarySrc:new Set(),state:new Set(),city:new Set(),model:new Set(),campaign:new Set()}));
+  const [filters,setFilters]=useState(()=>({month:new Set(),source:new Set(),primarySrc:new Set(),state:new Set(),city:new Set(),model:new Set(),campaign:new Set(),lt:new Set()}));
   const [bookingMode,setBookingMode]=useState('update');
   function setFilterKey(key,valueOrFn){
     startTransition(()=>setFilters(prev=>({...prev,[key]:typeof valueOrFn==='function'?valueOrFn(prev[key]):valueOrFn})));
@@ -2077,6 +2077,7 @@ function App({fbUser,role,presence,onSignOut,onAdminOpen}){
   const cities=useMemo(()=>rows?[...new Set(rows.map(r=>r.city))].filter(Boolean).sort():[],[rows]);
   const models=useMemo(()=>rows?[...new Set(rows.map(r=>r.model))].filter(Boolean).sort():[],[rows]);
   const campaigns=useMemo(()=>rows?[...new Set(rows.map(r=>r.utm_campaign))].filter(v=>v&&v!=='Unknown').sort():[],[rows]);
+  const leadTypes=useMemo(()=>rows?[...new Set(rows.map(r=>r.lt))].filter(v=>v&&v!=='Unknown').sort():[],[rows]);
   const maxCreateDate=useMemo(()=>{
     if(!rows) return null;
     let best='',bestTs=0;
@@ -2102,9 +2103,10 @@ function App({fbUser,role,presence,onSignOut,onAdminOpen}){
       (filters.state.size===0||filters.state.has(r.state))&&
       (filters.city.size===0||filters.city.has(r.city))&&
       (filters.model.size===0||filters.model.has(r.model))&&
-      (filters.campaign.size===0||filters.campaign.has(r.utm_campaign))
+      (filters.campaign.size===0||filters.campaign.has(r.utm_campaign))&&
+      (filters.lt.size===0||filters.lt.has(r.lt))
     );
-  },[rows,filters.source,filters.primarySrc,filters.state,filters.city,filters.model,filters.campaign]);
+  },[rows,filters.source,filters.primarySrc,filters.state,filters.city,filters.model,filters.campaign,filters.lt]);
 
   /* Same as baseRows but without the source filter — passed to dimension tabs so their
      Total/Paid/Organic column group aggregations stay stable when a Source is selected. */
@@ -2116,9 +2118,10 @@ function App({fbUser,role,presence,onSignOut,onAdminOpen}){
       (filters.state.size===0||filters.state.has(r.state))&&
       (filters.city.size===0||filters.city.has(r.city))&&
       (filters.model.size===0||filters.model.has(r.model))&&
-      (filters.campaign.size===0||filters.campaign.has(r.utm_campaign))
+      (filters.campaign.size===0||filters.campaign.has(r.utm_campaign))&&
+      (filters.lt.size===0||filters.lt.has(r.lt))
     );
-  },[baseRows,rows,filters.source,filters.primarySrc,filters.state,filters.city,filters.model,filters.campaign]);
+  },[baseRows,rows,filters.source,filters.primarySrc,filters.state,filters.city,filters.model,filters.campaign,filters.lt]);
 
   const mf=filters.month.size===1?[...filters.month][0]:'All';
 
@@ -2232,6 +2235,7 @@ function App({fbUser,role,presence,onSignOut,onAdminOpen}){
           {k:'month',     label:'Lead Month',     opts:months},
           {k:'source',    label:'Source',          opts:sources,  viewerHide:true},
           {k:'primarySrc',label:'Primary Source',  opts:primSrcs},
+          {k:'lt',        label:'Lead Type',       opts:leadTypes},
           {k:'campaign',  label:'UTM Campaign',    opts:campaigns},
           {k:'model',     label:'Model',           opts:models},
           {k:'state',     label:'State',           opts:states},
@@ -2243,7 +2247,7 @@ function App({fbUser,role,presence,onSignOut,onAdminOpen}){
         )),
         Object.values(filters).some(s=>s.size>0)&&
           ce('button',{
-            onClick:()=>startTransition(()=>setFilters({month:new Set(),source:new Set(),primarySrc:new Set(),state:new Set(),city:new Set(),model:new Set(),campaign:new Set()})),
+            onClick:()=>startTransition(()=>setFilters({month:new Set(),source:new Set(),primarySrc:new Set(),state:new Set(),city:new Set(),model:new Set(),campaign:new Set(),lt:new Set()})),
             style:{padding:'4px 12px',fontSize:10,background:'#D8EED8',border:'1px solid #A8D5BA',borderRadius:20,cursor:'pointer',fontFamily:'inherit',color:'#1B4332',fontWeight:600}
           },'✕ Clear Filters'),
         ce('div',{style:{display:'flex',alignItems:'center',gap:4,marginLeft:8,flexShrink:0}},
