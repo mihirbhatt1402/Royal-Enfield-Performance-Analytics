@@ -579,9 +579,13 @@ function aggGroupedByMonth(rows,dimKey,bm='update'){
 }
 
 /* ── Flexible pivot aggregation ─────────────────────────────────── */
-function aggPivot(rows,rowFields,colFields,mf,bm){
+function aggPivot(rows,rowFields,colFields,mf,bm,selectedMonths){
   const isAll=mf==='All';
   const mfOrder=isAll?0:monthOrder(mf);
+  /* Multi-month filter: active when the caller passes a non-empty Set of months.
+     baseRows is intentionally unfiltered by month, so backward-attribution leads
+     (Apr/May leads whose bookings fall in Jun) are still present for On Update. */
+  const hasMonthSet=!!(selectedMonths&&selectedMonths.size>0);
   const SEP='\x00';
   const isNested=rowFields.length>=2;
   function mk(){return{tl:0,us:new Set(),bc:0};}
@@ -589,7 +593,23 @@ function aggPivot(rows,rowFields,colFields,mf,bm){
   const byRow=new Map(),colTotals=new Map(),grand=mk();
   for(const r of rows){
     let countsLead,countsBooking;
-    if(isAll){
+    if(hasMonthSet){
+      /* Lead counts if its lead_month is in the selected set.
+         On Update: booking counts if booking_month is in the selected set (correct month attribution).
+         On Create: booking counts if lead_month is in the selected set (booking attributed to lead month). */
+      countsLead=selectedMonths.has(r.lead_month);
+      if(bm==='update'){
+        if(r.isUnique&&r.booking_month&&r.lead_month){
+          const d=monthOrder(r.booking_month)-monthOrder(r.lead_month);
+          countsBooking=selectedMonths.has(r.booking_month)&&d>=0&&d<=2;
+        } else countsBooking=false;
+      } else {
+        if(r.isUnique&&r.lead_month&&r.booking_month){
+          const d=monthOrder(r.booking_month)-monthOrder(r.lead_month);
+          countsBooking=selectedMonths.has(r.lead_month)&&d>=0&&d<=2;
+        } else countsBooking=false;
+      }
+    } else if(isAll){
       countsLead=true;
       if(r.isUnique&&r.booking_month&&r.lead_month){
         const d=monthOrder(r.booking_month)-monthOrder(r.lead_month);
@@ -610,11 +630,10 @@ function aggPivot(rows,rowFields,colFields,mf,bm){
     /* When a specific month is filtered and this row qualifies only via booking
        attribution (not as a lead from mf), treat its lead_month as mf for column
        placement — otherwise May/Jun leads booked in Jul create spurious columns. */
-    const getF=f=>f==='lead_month'?((isAll||countsLead)?(r.lead_month||'–'):mf):(r[f]||'Unknown');
-    /* On Update + All Months: bookings are attributed to booking_month (the month the
-       booking was made), not the lead's creation month. This makes On Update / On Create
-       produce different per-month column values in the pivot. */
-    const getBookingF=(isAll&&bm==='update')?
+    const getF=f=>f==='lead_month'?((isAll||hasMonthSet||countsLead)?(r.lead_month||'–'):mf):(r[f]||'Unknown');
+    /* On Update + All Months or month-set: bookings go to booking_month column so that
+       On Update and On Create produce different per-month values. */
+    const getBookingF=((isAll||hasMonthSet)&&bm==='update')?
       (f=>f==='lead_month'?(r.booking_month||r.lead_month||'–'):(r[f]||'Unknown')):getF;
     const outerRv=getF(rowFields[0]);
     const innerRv=isNested?getF(rowFields[1]):null;
@@ -623,19 +642,21 @@ function aggPivot(rows,rowFields,colFields,mf,bm){
     const bumpL=a=>{if(countsLead){a.tl++;if(countsUnique)a.us.add(r.lead_number);}};
     const bumpB=a=>{if(countsBooking)a.bc++;};
     bumpL(grand);bumpB(grand);
-    if(colKey) bumpL(acc(colTotals,colKey));
-    if(bColKey) bumpB(acc(colTotals,bColKey));
+    /* Guard acc() calls so empty entries are never created for months outside the
+       selected set — prevents spurious column keys appearing in the pivot. */
+    if(colKey&&countsLead) bumpL(acc(colTotals,colKey));
+    if(bColKey&&countsBooking) bumpB(acc(colTotals,bColKey));
     if(!byRow.has(outerRv))byRow.set(outerRv,{total:mk(),cells:new Map(),subRows:new Map()});
     const oe=byRow.get(outerRv);
     bumpL(oe.total);bumpB(oe.total);
-    if(colKey) bumpL(acc(oe.cells,colKey));
-    if(bColKey) bumpB(acc(oe.cells,bColKey));
+    if(colKey&&countsLead) bumpL(acc(oe.cells,colKey));
+    if(bColKey&&countsBooking) bumpB(acc(oe.cells,bColKey));
     if(isNested){
       if(!oe.subRows.has(innerRv))oe.subRows.set(innerRv,{total:mk(),cells:new Map()});
       const ie=oe.subRows.get(innerRv);
       bumpL(ie.total);bumpB(ie.total);
-      if(colKey) bumpL(acc(ie.cells,colKey));
-      if(bColKey) bumpB(acc(ie.cells,bColKey));
+      if(colKey&&countsLead) bumpL(acc(ie.cells,colKey));
+      if(bColKey&&countsBooking) bumpB(acc(ie.cells,bColKey));
     }
   }
   function fin(a){const ul=a.us.size,tl=a.tl,bc=a.bc;return{tl,ul,bc,e2b:ul>0?bc/ul*100:0};}
@@ -1808,7 +1829,7 @@ function UploadScreen({onData,onSync,syncing,syncErr,sheetUrl,setSheetUrl,urlDra
 /* ══════════════════════════════════════════════════════════════════════════
    PIVOT TAB
 ══════════════════════════════════════════════════════════════════════════ */
-const PivotTab=React.memo(function PivotTab({rows,mf,viewerMode,bm='update'}){
+const PivotTab=React.memo(function PivotTab({rows,mf,viewerMode,bm='update',selectedMonths}){
   const ROW_DIMS=[
     {v:'model',l:'Model'},{v:'source',l:'Source'},{v:'primary_src',l:'Primary Source'},
     {v:'utm_campaign',l:'UTM Campaign'},{v:'state',l:'State'},{v:'lt',l:'LT'},{v:'city',l:'City'},
@@ -1830,7 +1851,7 @@ const PivotTab=React.memo(function PivotTab({rows,mf,viewerMode,bm='update'}){
   const activeVals=VAL_DEFS.filter(v=>showVals[v.k]);
   const nv=Math.max(activeVals.length,1);
 
-  const pivotData=useMemo(()=>aggPivot(rows,rowDims,colDims,mf,bm),[rows,rowDims,colDims,mf,bm]);
+  const pivotData=useMemo(()=>aggPivot(rows,rowDims,colDims,mf,bm,selectedMonths),[rows,rowDims,colDims,mf,bm,selectedMonths]);
 
   const sortedRows=useMemo(()=>{
     const s=[...pivotData.rows].sort((a,b)=>{const av=a.total[sortBy]??0,bv=b.total[sortBy]??0;return sortDir==='desc'?bv-av:av-bv;});
@@ -2160,8 +2181,8 @@ function App({fbUser,role,presence,onSignOut,onAdminOpen}){
       geomodel:  GeoModelTab,
       pivot:     PivotTab,
     };
-    return ce(COMPONENTS[tab],{key:tab,rows:baseRows,grandRows:baseRowsNoSrc,mf,viewerMode,bm:bookingMode});
-  },[tab,baseRows,baseRowsNoSrc,mf,viewerMode,bookingMode]);
+    return ce(COMPONENTS[tab],{key:tab,rows:baseRows,grandRows:baseRowsNoSrc,mf,viewerMode,bm:bookingMode,selectedMonths:filters.month});
+  },[tab,baseRows,baseRowsNoSrc,mf,viewerMode,bookingMode,filters.month]);
 
   if(!rows) return ce(UploadScreen,{onData:setRows,onSync:handleSync,syncing,syncErr,sheetUrl,setSheetUrl,urlDraft,setUrlDraft,lastSynced});
 
