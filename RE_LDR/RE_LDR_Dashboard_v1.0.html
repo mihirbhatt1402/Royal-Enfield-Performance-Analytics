@@ -611,21 +611,31 @@ function aggPivot(rows,rowFields,colFields,mf,bm){
        attribution (not as a lead from mf), treat its lead_month as mf for column
        placement — otherwise May/Jun leads booked in Jul create spurious columns. */
     const getF=f=>f==='lead_month'?((isAll||countsLead)?(r.lead_month||'–'):mf):(r[f]||'Unknown');
+    /* On Update + All Months: bookings are attributed to booking_month (the month the
+       booking was made), not the lead's creation month. This makes On Update / On Create
+       produce different per-month column values in the pivot. */
+    const getBookingF=(isAll&&bm==='update')?
+      (f=>f==='lead_month'?(r.booking_month||r.lead_month||'–'):(r[f]||'Unknown')):getF;
     const outerRv=getF(rowFields[0]);
     const innerRv=isNested?getF(rowFields[1]):null;
     const colKey=colFields.length?colFields.map(getF).join(SEP):'';
-    const bump=a=>{if(countsLead){a.tl++;if(countsUnique)a.us.add(r.lead_number);}if(countsBooking)a.bc++;};
-    bump(grand);
-    if(colKey) bump(acc(colTotals,colKey));
+    const bColKey=colFields.length?colFields.map(getBookingF).join(SEP):colKey;
+    const bumpL=a=>{if(countsLead){a.tl++;if(countsUnique)a.us.add(r.lead_number);}};
+    const bumpB=a=>{if(countsBooking)a.bc++;};
+    bumpL(grand);bumpB(grand);
+    if(colKey) bumpL(acc(colTotals,colKey));
+    if(bColKey) bumpB(acc(colTotals,bColKey));
     if(!byRow.has(outerRv))byRow.set(outerRv,{total:mk(),cells:new Map(),subRows:new Map()});
     const oe=byRow.get(outerRv);
-    bump(oe.total);
-    if(colKey) bump(acc(oe.cells,colKey));
+    bumpL(oe.total);bumpB(oe.total);
+    if(colKey) bumpL(acc(oe.cells,colKey));
+    if(bColKey) bumpB(acc(oe.cells,bColKey));
     if(isNested){
       if(!oe.subRows.has(innerRv))oe.subRows.set(innerRv,{total:mk(),cells:new Map()});
       const ie=oe.subRows.get(innerRv);
-      bump(ie.total);
-      if(colKey) bump(acc(ie.cells,colKey));
+      bumpL(ie.total);bumpB(ie.total);
+      if(colKey) bumpL(acc(ie.cells,colKey));
+      if(bColKey) bumpB(acc(ie.cells,bColKey));
     }
   }
   function fin(a){const ul=a.us.size,tl=a.tl,bc=a.bc;return{tl,ul,bc,e2b:ul>0?bc/ul*100:0};}
