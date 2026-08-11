@@ -1635,12 +1635,18 @@ const GeoModelTab=React.memo(function GeoModelTab({rows,grandRows,mf,viewerMode,
       ce('div',{style:{fontSize:11,fontWeight:700,color:'#6b7280',textTransform:'uppercase',letterSpacing:'.08em'}},'State × Source — by Model'),
       ce(ExportBtn,{onClick:()=>{
         const sheets={};
+        /* Iterate per month so bm is respected (aggGrouped with isAll=true ignores bm).
+           Each month sheet shows state breakdown across all models for that month. */
+        for(const M of resolvedMonths){
+          const g=aggGrouped(effectiveRows,M,r=>r.state||'Unknown',bm);
+          sheets[M]=aggToAoa(g,'State');
+        }
+        /* Per-model all-time sheets — state breakdown per model.
+           All-time totals are mode-agnostic by definition (same valid pairs, different attribution month). */
         for(const model of modelList){
-          const g=aggGrouped(modelGrandMap[model],mf,r=>r.state||'Unknown',bm);
+          const g=aggGrouped(modelGrandMap[model],'All',r=>r.state||'Unknown',bm);
           sheets[model.slice(0,31)]=aggToAoa(g,'State');
         }
-        const gAll=aggGrouped(effectiveRows,mf,r=>r.state||'Unknown',bm);
-        sheets['All Models']=aggToAoa(gAll,'State');
         exportXlsx(sheets,'RE_LDR_Model_State_x_Source');
       }})
     ),
