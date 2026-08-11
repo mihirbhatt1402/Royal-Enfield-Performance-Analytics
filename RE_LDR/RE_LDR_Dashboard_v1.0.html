@@ -1071,10 +1071,11 @@ const OverviewTab=React.memo(function OverviewTab({rows,mf,viewerMode,bm='update
 
 /* ── Source color palette ─────────────────────────────────────────── */
 const SRC_PALETTE={
-  'Adwords':  {bar:'#F59E0B',line:'#D97706',light:'#FEF3C7',text:'#92400E',badge:'#FEF3C7'},
-  'MS FB':    {bar:'#8B5CF6',line:'#7C3AED',light:'#EDE9FE',text:'#4C1D95',badge:'#EDE9FE'},
-  'Non MS':   {bar:'#3B82F6',line:'#2563EB',light:'#DBEAFE',text:'#1E40AF',badge:'#DBEAFE'},
-  'Organic':  {bar:'#10B981',line:'#059669',light:'#D1FAE5',text:'#064E3B',badge:'#D1FAE5'},
+  'Adwords':       {bar:'#F59E0B',line:'#D97706',light:'#FEF3C7',text:'#92400E',badge:'#FEF3C7'},
+  'MS FB':         {bar:'#8B5CF6',line:'#7C3AED',light:'#EDE9FE',text:'#4C1D95',badge:'#EDE9FE'},
+  'Non MS':        {bar:'#3B82F6',line:'#2563EB',light:'#DBEAFE',text:'#1E40AF',badge:'#DBEAFE'},
+  'Organic':       {bar:'#10B981',line:'#059669',light:'#D1FAE5',text:'#064E3B',badge:'#D1FAE5'},
+  'Whatsapp_Mkt':  {bar:'#06B6D4',line:'#0891B2',light:'#CFFAFE',text:'#164E63',badge:'#CFFAFE'},
 };
 const FALLBACK_COLORS=['#6366F1','#EC4899','#14B8A6','#F97316','#84CC16'];
 function getSrcColor(src,idx){
@@ -1084,7 +1085,7 @@ function getSrcColor(src,idx){
   };
 }
 const SRC_GROUPS=[
-  {name:'Paid',    members:['MS FB','Adwords'],  clr:{bar:'#8B5CF6',light:'#EDE9FE',text:'#4C1D95'}},
+  {name:'Paid',    members:['MS FB','Adwords','Whatsapp_Mkt'],  clr:{bar:'#8B5CF6',light:'#EDE9FE',text:'#4C1D95'}},
   {name:'Organic', members:['Organic','Non MS'], clr:{bar:'#10B981',light:'#D1FAE5',text:'#064E3B'}},
 ];
 const GRP_MAP={};SRC_GROUPS.forEach(g=>g.members.forEach(m=>{GRP_MAP[m]=g.name;}));
