@@ -2163,6 +2163,12 @@ function App({fbUser,role,presence,onSignOut,onAdminOpen}){
 
   const mf=filters.month.size===1?[...filters.month][0]:'All';
 
+  /* All-source aggregation for the header KPI strip — stays constant when the Source
+     filter changes, matching the same "all-source baseline" contract as the grid's
+     Total columns.  Uses baseRowsNoSrc (every non-source filter applied, source removed). */
+  const totalMAll=useMemo(()=>aggRE(baseRowsNoSrc,mf,bookingMode),[baseRowsNoSrc,mf,bookingMode]);
+  /* Source-filtered aggregation — used only for the "X unique leads shown" indicator
+     in the filter bar, which intentionally reflects the active source filter. */
   const totalM=useMemo(()=>aggRE(baseRows,mf,bookingMode),[baseRows,mf,bookingMode]);
 
   /* Only render the active tab. Every dimension's aggregation now runs through the
@@ -2200,11 +2206,11 @@ function App({fbUser,role,presence,onSignOut,onAdminOpen}){
         ),
         ce('div',{style:{flex:1,display:'flex',gap:14,overflowX:'auto',padding:'8px 0',borderLeft:'1px solid rgba(255,255,255,.3)',paddingLeft:16,marginLeft:4}},
           [
-            {l:'Total',  v:Nf(totalM.totalLeads)},
-            {l:'Unique', v:Nf(totalM.uniqueLeads)},
-            {l:'Dup%',   v:totalM.dupPct.toFixed(1)+'%'},
-            {l:'Bookings',v:Nf(totalM.bookings)},
-            {l:'E2B%',   v:totalM.e2bPct.toFixed(1)+'%'},
+            {l:'Total',  v:Nf(totalMAll.totalLeads)},
+            {l:'Unique', v:Nf(totalMAll.uniqueLeads)},
+            {l:'Dup%',   v:totalMAll.dupPct.toFixed(1)+'%'},
+            {l:'Bookings',v:Nf(totalMAll.bookings)},
+            {l:'E2B%',   v:totalMAll.e2bPct.toFixed(1)+'%'},
           ].map((k,i)=>ce('div',{key:i,style:{flexShrink:0,textAlign:'center',minWidth:56}},
             ce('div',{style:{fontSize:8,fontWeight:700,textTransform:'uppercase',letterSpacing:'.08em',color:'#D8EED8'}},k.l),
             ce('div',{style:{fontSize:13,fontWeight:800,color:'#fff',fontFamily:'DM Mono,monospace',letterSpacing:'-.02em'}},k.v)
@@ -2302,7 +2308,7 @@ function App({fbUser,role,presence,onSignOut,onAdminOpen}){
           )
         ),
         ce('span',{style:{marginLeft:'auto',fontSize:10,fontFamily:'DM Mono',color:'#94a3b8'}},
-          Nf(totalM.uniqueLeads)+' unique leads shown')
+          Nf(totalM.uniqueLeads)+(filters.source.size>0?' filtered':'')+' unique leads shown')
       )
     ),
 
