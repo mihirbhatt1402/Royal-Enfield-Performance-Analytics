@@ -1249,6 +1249,27 @@ const CompactMonthGrid=React.memo(function CompactMonthGrid({M,rows,grandRows,ro
     for(const v of Object.keys(grandGrouped.dimAggs)) res[v]={total:grandGrouped.dimAggs[v].total,paid:EMPTY_AGG,org:EMPTY_AGG,src:{}};
     return res;
   },[grandGrouped,isSourceGrid]);
+  /* DEBUG — logs to console whenever source filter changes so values can be verified.
+     Remove this block after empirical validation is complete. */
+  useEffect(()=>{
+    if(!dimAggs||!grouped?.dimAggs) return;
+    const srcActive=!!(grandRows&&grandRows!==rows);
+    const label=`[RE_TOTAL_CHECK] ${rowKey||'?'} | Month:${M} | grandRows:${grandRows?.length??'—'} | rows:${rows?.length??'—'}`;
+    const keys=Object.keys(dimAggs).slice(0,12);
+    if(!keys.length) return;
+    console.group(label);
+    console.debug('Source filter active:',srcActive);
+    console.debug('(TOTAL = all-source; FILTERED = selected source only)');
+    const tbl=keys.map(k=>({
+      [`${rowKey||'dim'}`]:k,
+      'TOTAL_unique(all-src)':dimAggs[k]?.total?.uniqueLeads??'—',
+      'TOTAL_bookings(all-src)':dimAggs[k]?.total?.bookings??'—',
+      'FILTERED_unique':grouped.dimAggs[k]?.total?.uniqueLeads??'—',
+      'FILTERED_bookings':grouped.dimAggs[k]?.total?.bookings??'—',
+    }));
+    console.table(tbl);
+    console.groupEnd();
+  },[dimAggs,grouped]);
   /* When a source filter is active, replace the Paid/Organic group columns with individual
      per-source columns for only the selected source(s). Total always stays. */
   const hasSourceFilter=!!(grandRows&&grandRows!==rows);
