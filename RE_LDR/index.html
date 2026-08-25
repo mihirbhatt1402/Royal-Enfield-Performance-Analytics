@@ -1193,7 +1193,7 @@ function l2rColor(pct){
   return '#FECDD3';
 }
 
-const CompactMonthGrid=React.memo(function CompactMonthGrid({M,rows,grandRows,rowKey,dimLabel,badgeLabel,vahanMonths,precomputed,viewerMode,bm='update'}){
+const CompactMonthGrid=React.memo(function CompactMonthGrid({M,rows,grandRows,rowKey,dimLabel,badgeLabel,vahanMonths,precomputed,viewerMode,bm='update',compact=true}){
   const vMonths=useMemo(()=>vahanMonths&&vahanMonths.length?vahanMonths:[M],[vahanMonths,M]);
   const [expanded,setExpanded]=useState(new Set());
   const toggleGrp=name=>setExpanded(p=>{const n=new Set(p);n.has(name)?n.delete(name):n.add(name);return n;});
@@ -1290,7 +1290,9 @@ const CompactMonthGrid=React.memo(function CompactMonthGrid({M,rows,grandRows,ro
       {label:'Organic + Non MS',bg:'#0D9488',name:'Organic + Non MS',children:ORG_MBRS,aggKey:'org',grandLeads:grandOrg.uniqueLeads},
     ];
   },[isSourceGrid,viewerMode,hasSourceFilter,grand,grandPaid,grandOrg,grouped.grandSrc]);
-  const SCOLS=[
+  const isStateGrid=rowKey==='state';
+  /* Full column sets (all 7 metrics) */
+  const SCOLS_FULL=[
     {label:'Unique Leads',m:'leads'},
     {label:'Lead Contrib%',m:'contrib'},
     {label:'Bookings',m:'retail'},
@@ -1299,24 +1301,37 @@ const CompactMonthGrid=React.memo(function CompactMonthGrid({M,rows,grandRows,ro
     {label:'Duplicate Leads',m:'dup'},
     {label:'Duplicity%',m:'duppct'},
   ];
-  /* State × Source tab: drop Duplicity/Duplicity%, add Booking Contrib% + Vahan industry columns */
-  const isStateGrid=rowKey==='state';
-  const SCOLS_STATE=[
+  const SCOLS_STATE_FULL=[
     {label:'Unique Leads',m:'leads'},
     {label:'Lead Contrib%',m:'contrib'},
     {label:'Booking',m:'retail'},
     {label:'Booking Contrib%',m:'bcontrib'},
     {label:'E2B%',m:'l2r'},
   ];
-  const SCOLS_TOTAL_STATE=[
+  const SCOLS_TOTAL_STATE_FULL=[
     {label:'Unique Leads',m:'leads'},
     {label:'Lead Contrib%',m:'contrib'},
     {label:'Booking',m:'retail'},
     {label:'Booking Contrib%',m:'bcontrib'},
     {label:'E2B',m:'l2r'},
   ];
-  const SCOLS_NONTOTAL=isStateGrid?SCOLS_STATE:SCOLS;
-  const SCOLS_TOTAL=isStateGrid?SCOLS_TOTAL_STATE:SCOLS;
+  /* Compact column sets (4 key metrics — fits one screen width without horizontal scroll) */
+  const SCOLS_CMP=[
+    {label:'Unique Leads',m:'leads'},
+    {label:'Bookings',m:'retail'},
+    {label:'E2B',m:'l2r'},
+    {label:'Duplicity%',m:'duppct'},
+  ];
+  const SCOLS_STATE_CMP=[
+    {label:'Unique Leads',m:'leads'},
+    {label:'Booking',m:'retail'},
+    {label:'E2B%',m:'l2r'},
+  ];
+  const SCOLS=compact?SCOLS_CMP:SCOLS_FULL;
+  const SCOLS_STATE_SEL=compact?SCOLS_STATE_CMP:SCOLS_STATE_FULL;
+  const SCOLS_TOTAL_STATE_SEL=compact?SCOLS_STATE_CMP:SCOLS_TOTAL_STATE_FULL;
+  const SCOLS_NONTOTAL=isStateGrid?SCOLS_STATE_SEL:SCOLS;
+  const SCOLS_TOTAL=isStateGrid?SCOLS_TOTAL_STATE_SEL:SCOLS;
 
   /* flat column list — each top group contributes either 1 aggregate col or N child-source cols */
   const COLS=useMemo(()=>TOPGROUPS.flatMap(g=>{
@@ -1571,31 +1586,40 @@ const DimSourceTab=React.memo(function DimSourceTab({rows,grandRows,mf,rowKey,di
     [...new Set(effectiveRows.map(r=>r.lead_month))].filter(Boolean)
       .sort((a,b)=>monthOrder(b)-monthOrder(a))
   ,[effectiveRows]);
-  /* Driven solely by the global Lead Month filter — no local month-pill row. */
   const activeMonths=useMemo(()=>mf&&mf!=='All'?[mf]:allMonths,[mf,allMonths]);
+  const [compact,setCompact]=useState(()=>localStorage.getItem('re_grid_compact')!=='0');
+  const toggleCompact=()=>{
+    const next=!compact;
+    localStorage.setItem('re_grid_compact',next?'1':'0');
+    setCompact(next);
+  };
   return ce('div',{className:'fade-up'},
     ce('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}},
       ce('div',{style:{fontSize:11,fontWeight:700,color:'#6b7280',textTransform:'uppercase',letterSpacing:'.08em'}},dimLabel+' × Source — by Month'),
-      ce(ExportBtn,{onClick:()=>{
-        const sheets={};
-        for(const M of activeMonths){
-          const g=aggGrouped(effectiveRows,M,r=>r[rowKey]||'Unknown',bm);
-          sheets[M]=aggToAoa(g,dimLabel);
-        }
-        const gAll=aggGrouped(effectiveRows,mf,r=>r[rowKey]||'Unknown',bm);
-        sheets['All Months Summary']=aggToAoa(gAll,dimLabel);
-        exportXlsx(sheets,'RE_LDR_'+dimLabel.replace(/\s+/g,'_')+'_x_Source');
-      }})
+      ce('div',{style:{display:'flex',gap:8,alignItems:'center'}},
+        ce('button',{onClick:toggleCompact,title:compact?'Show all columns':'Show key columns only',
+          style:{padding:'4px 14px',fontSize:10,fontFamily:'inherit',fontWeight:700,
+            border:'1px solid #A8D5BA',borderRadius:20,background:compact?'#EFF6FF':'#fff',
+            color:compact?'#1D4ED8':'#374151',cursor:'pointer',whiteSpace:'nowrap'}},
+          compact?'⊞ Expand Columns':'⊟ Compact Columns'),
+        ce(ExportBtn,{onClick:()=>{
+          const sheets={};
+          for(const M of activeMonths){
+            const g=aggGrouped(effectiveRows,M,r=>r[rowKey]||'Unknown',bm);
+            sheets[M]=aggToAoa(g,dimLabel);
+          }
+          const gAll=aggGrouped(effectiveRows,mf,r=>r[rowKey]||'Unknown',bm);
+          sheets['All Months Summary']=aggToAoa(gAll,dimLabel);
+          exportXlsx(sheets,'RE_LDR_'+dimLabel.replace(/\s+/g,'_')+'_x_Source');
+        }})
+      )
     ),
-    activeMonths.map(M=>ce(CompactMonthGrid,{key:M,M,rows,grandRows,rowKey,dimLabel,viewerMode,bm})),
-    /* Only show the All Months Summary when no month is filtered — when a single month is
-       selected the per-month grid above already shows the same data, so the summary is a
-       duplicate and its label is misleading. */
+    activeMonths.map(M=>ce(CompactMonthGrid,{key:M,M,rows,grandRows,rowKey,dimLabel,viewerMode,bm,compact})),
     (!mf||mf==='All')&&ce(React.Fragment,null,
       ce('div',{style:{margin:'24px 0 16px',borderTop:'2px solid #D1D5DB'}}),
       ce('div',{style:{fontSize:11,fontWeight:700,color:'#6b7280',textTransform:'uppercase',
         letterSpacing:'.08em',marginBottom:12}},xTabLabel+' — All Months Summary'),
-      ce(CompactMonthGrid,{M:'All',rows,grandRows,rowKey,dimLabel,viewerMode,bm})
+      ce(CompactMonthGrid,{M:'All',rows,grandRows,rowKey,dimLabel,viewerMode,bm,compact})
     )
   );
 });
