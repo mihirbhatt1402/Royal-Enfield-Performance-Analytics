@@ -172,12 +172,19 @@ const MONTH_NAMES=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','
    boundary (e.g. Jan'2027 - Dec'2026 = 202700-202611 = 89, not 1), silently dropping any
    booking attribution that spans a calendar year. *12 makes consecutive months always
    differ by exactly 1, year boundary or not. */
+/* Normalise 2-digit year in month strings so Sep'26 → Sep'2026 everywhere */
+function normMonth(m){
+  if(!m) return m;
+  return m.replace(/^([A-Za-z]+)'(\d{2})$/,(_,mon,yr)=>mon+"'"+(2000+parseInt(yr)));
+}
 function monthOrder(m){
   if(!m||m==='-'||m==='') return 0;
   const match=m.match(/([A-Za-z]+)'(\d+)/);
   if(!match) return 0;
   const mi=MONTH_NAMES.indexOf(match[1]);
-  return parseInt(match[2])*12+mi;
+  let yr=parseInt(match[2]);
+  if(yr<100) yr+=2000; // normalise 2-digit year: 'Sep'26 → 2026
+  return yr*12+mi;
 }
 
 /* ── Parse raw rows into structured records ───────────────────────── */
@@ -237,9 +244,9 @@ function parseRows(raw){
     const city          = get('City');
     const state         = get('State');
     const dup           = get(['Duplicate Check','Duplicity Check']);
-    const lead_month    = get('Lead Month');
+    const lead_month    = normMonth(get('Lead Month'));
     const booking_status= get('Booking Status');
-    const booking_month = get('Booking Month');
+    const booking_month = normMonth(get('Booking Month'));
     const utm_campaign  = utmRawKey?String(r[utmRawKey]||'').trim():'';
     const create_date   = get(['Create Date','Lead Create Date','Created Date','Creation Date','Lead Date','created_at','CreateDate']);
     const isUnique      = dup.toLowerCase()==='unique';
