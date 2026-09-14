@@ -1256,31 +1256,6 @@ const CompactMonthGrid=React.memo(function CompactMonthGrid({M,rows,grandRows,ro
     for(const v of Object.keys(grandGrouped.dimAggs)) res[v]={total:grandGrouped.dimAggs[v].total,paid:EMPTY_AGG,org:EMPTY_AGG,src:{}};
     return res;
   },[grandGrouped,isSourceGrid]);
-  /* DEBUG — booking attribution analysis per month grid.
-     Remove this block after the booking count discrepancy is resolved. */
-  useEffect(()=>{
-    if(M==='All'||!rows?.length) return;
-    const mfOrd=monthOrder(M);
-    const srcRows=grandRows&&grandRows!==rows?grandRows:rows;
-    let total=0,passD=0,failD=0,failUnique=0,failBmatch=0;
-    const bmFmts={};
-    for(const r of srcRows){
-      if(!r.isUnique) continue;
-      if(!r.booking_month||r.booking_month===''||r.booking_month==='-') continue;
-      bmFmts[r.booking_month]=(bmFmts[r.booking_month]||0)+1;
-      if(r.booking_month!==M){failBmatch++;continue;}
-      total++;
-      const d=mfOrd-monthOrder(r.lead_month);
-      if(d>=0&&d<=2) passD++;
-      else failD++;
-    }
-    /* top-5 booking_month values by frequency */
-    const top5=Object.entries(bmFmts).sort((a,b)=>b[1]-a[1]).slice(0,8);
-    console.group(`[RE_BOOKING_DEBUG] Month:${M} | bm_match:${total} | pass_d:${passD} | fail_d(window):${failD}`);
-    console.debug(`booking_month format distribution (top 8 values):`);
-    console.table(top5.map(([m,n])=>({'booking_month':m,'count':n,'matches_mf':m===M})));
-    console.groupEnd();
-  },[rows,grandRows,M]);
   /* When a source filter is active, replace the Paid/Organic group columns with individual
      per-source columns for only the selected source(s). Total always stays. */
   const hasSourceFilter=!!(grandRows&&grandRows!==rows);
