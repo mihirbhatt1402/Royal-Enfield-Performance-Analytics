@@ -559,10 +559,17 @@ function parseAtherLeadRows(raw){
     const lead_month=normalizeAtherMonth(lead_month_raw);
     if(!opty_id||!lead_month)continue; // structural skip (not counted in cutoff diagnostics)
     // PRIMARY GATE: Lead_Month must be May'2026 or later.
+    // NOTE: lead_month is sourced from the 'lead_month'/'lead month'/'month' COLUMN in the sheet.
+    // The auto-detected date column (leadDateColKey) is used ONLY to populate leadDate for
+    // day-level Dispersion (BDM) calculations — it does NOT determine lead_month.
     const lmo=atherMonthOrder(lead_month);
     const mayOrd=atherMonthOrder("May'2026");
     if(lmo===0){excludedInvalidDate++;continue;} // unparseable month
     if(lmo<mayOrd){excludedBeforeCutoff++;continue;} // before May'2026 → exclude
+    const dup=get(r,['duplicate check','duplicity check','duplicate','is duplicate','isdup','is_duplicate']);
+    const isUnique=dup?dup.toLowerCase()==='unique':true;
+    // Skip cross-month duplicate opty_ids — only 'Unique' rows enter analysis
+    if(!isUnique)continue;
     let leadDate=null;
     {
       // capture day-level date if available for Dispersion
@@ -578,8 +585,6 @@ function parseAtherLeadRows(raw){
     const state=get(r,['state','lead state']);
     const ao=get(r,['ao','area officer','area_officer','area officer name']);
     const region=get(r,['region','zone','area zone','area_zone']);
-    const dup=get(r,['duplicate check','duplicity check','duplicate','is duplicate','isdup','is_duplicate']);
-    const isUnique=dup?dup.toLowerCase()==='unique':true;
     // Extra fields for Detailed CSV
     const encryptMobile=get(r,['encrypt mobile number','encrypt_mobile_number','encrypted mobile','mobile number (encrypted)','encryptmobile','mobile']);
     const idVerifiedLead=get(r,['id_verified_lead','id verified lead','id verified','idverifiedlead','id_verified']);
