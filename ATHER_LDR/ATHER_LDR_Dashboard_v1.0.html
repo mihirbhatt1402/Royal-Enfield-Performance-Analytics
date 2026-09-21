@@ -3871,22 +3871,32 @@ function App({fbUser,role,presence,onSignOut,onAdminOpen}){
 
 /* ══════════════════════════════════════════════════════════════════════
    FIREBASE — Ather LDR Dashboard
-   TODO: Replace credentials below with a dedicated ather-ldr-dashboard Firebase project.
-   Project: re-ldr-dashboard (placeholder)  |  Collection: ather_ldr_users
+   Project: ather-ldr-dashboard  |  Collection: ather_users
+   ─────────────────────────────────────────────────────────────────────
+   ACTION REQUIRED BEFORE PRODUCTION:
+     1. Go to https://console.firebase.google.com
+     2. Create project named: ather-ldr-dashboard
+     3. Enable Authentication → Google provider
+     4. Enable Firestore (production mode)
+     5. Enable Realtime Database
+     6. Copy the config object and replace placeholder values below
+   ─────────────────────────────────────────────────────────────────────
+   Firestore rules:  /ather_users/{uid}  — read/write for owner + admin
+   RTDB rules:       /ather_presence/{uid} — read/write for owner
 ══════════════════════════════════════════════════════════════════════ */
 var FIREBASE_CONFIG={
-  apiKey:'AIzaSyBgqQZ-0-rDhxZQl4ktt433YGzw-MdWT3Y',
-  authDomain:'re-ldr-dashboard.firebaseapp.com',
-  databaseURL:'https://re-ldr-dashboard-default-rtdb.firebaseio.com',
-  projectId:'re-ldr-dashboard',
-  storageBucket:'re-ldr-dashboard.firebasestorage.app',
-  messagingSenderId:'327269038709',
-  appId:'1:327269038709:web:037032749de4cae0b2d63c',
+  apiKey:'REPLACE_WITH_ATHER_API_KEY',
+  authDomain:'ather-ldr-dashboard.firebaseapp.com',
+  databaseURL:'https://ather-ldr-dashboard-default-rtdb.firebaseio.com',
+  projectId:'ather-ldr-dashboard',
+  storageBucket:'ather-ldr-dashboard.firebasestorage.app',
+  messagingSenderId:'REPLACE_WITH_MESSAGING_SENDER_ID',
+  appId:'REPLACE_WITH_APP_ID',
 };
 var ADMIN_EMAILS=['mihir.bhatt@girnarsoft.com'];
 var ALLOWED_DOMAINS=['@girnarsoft.com','@girnarcare.com'];
-var USERS_COL='ather_ldr_users';
-var PRESENCE_PATH='ather_ldr_presence';
+var USERS_COL='ather_users';
+var PRESENCE_PATH='ather_presence';
 
 var _fbApp=null;
 function getFirebase(){
