@@ -847,7 +847,8 @@ function buildPayload(joinedRows){
   function isRetailed(r){
     if(!r.isBooked||!r.booking_month||!r.lead_month)return false;
     const d=atherMonthOrder(r.booking_month)-atherMonthOrder(r.lead_month);
-    return d>=0&&d<=2;
+    if(d<0||d>2)return false;
+    return ATHER_SCOPE_MODELS.has(canonPurMdl(r.purchasedModel||''));
   }
 
   // On Create accumulators (lead_month dimension, all leads + unique subset)
@@ -1307,7 +1308,8 @@ function DetailedCsvBtn({onClick}) {
 function isRetailedLead(r) {
   if (!r.isBooked || !r.booking_month || !r.lead_month) return false;
   const d = atherMonthOrder(r.booking_month) - atherMonthOrder(r.lead_month);
-  return d >= 0 && d <= 2;
+  if (d < 0 || d > 2) return false;
+  return ATHER_SCOPE_MODELS.has(canonPurMdl(r.purchasedModel||''));
 }
 
 function exportDetailedCsv(rawJoined, filters, RT, leadsMode, filename, monthOverride) {
@@ -3591,138 +3593,6 @@ function App({fbUser,role,presence,onSignOut,onAdminOpen}){
       console.log('[ATHER QA] Retail Till Date:',retailResult.maxRetailDate?formatRetailDate(retailResult.maxRetailDate):'— (no valid retail dates found)');
       console.log('[ATHER QA] Booked with both dates (bdm eligible):',joined.filter(r=>r.isBooked&&r.leadDate&&r.retailDate).length);
       console.log('[ATHER QA] BDM rows:',payload.bdm.length);
-      // ── [HERO FINAL QA] Status_Name pipeline diagnostic ──────────────────────────
-      (function reFinalQAInline(j,ld){
-        const fq=s=>'[HERO FINAL QA] '+s;
-        const snTotal=j.length;
-        const snNonBlank=j.filter(r=>r.statusName&&r.statusName.trim()!=='').length;
-        const snBlank=snTotal-snNonBlank;
-        const snRA=j.filter(r=>String(r.statusName||'').trim().toLowerCase()==='retail attribution').length;
-        const snNonRA=snTotal-snRA;
-        const snNoRetail=j.filter(r=>!r.isBooked).length;
-        const snNoRetailBlank=j.filter(r=>!r.isBooked&&(!r.statusName||r.statusName.trim()===''));
-        const snRAWithFields=j.filter(r=>String(r.statusName||'').trim().toLowerCase()==='retail attribution'&&r.purchasedModel&&r.booking_month).length;
-        const snRAMissing=snRA-snRAWithFields;
-        const badNonRA=j.filter(r=>String(r.statusName||'').trim().toLowerCase()!=='retail attribution'&&(r.purchasedModel||r.booking_month||r.retailDate));
-        const dupIds=j.map(r=>r.opty_id);const dupSet=new Set(dupIds);const dupCount=dupIds.length-dupSet.size;
-        const dist=new Map();j.forEach(r=>{const v=r.statusName||'(blank)';dist.set(v,(dist.get(v)||0)+1);});
-        console.log('');
-        console.group(fq('─────────────────────────────────────────'));
-        console.log(fq('Lead Master detected Status_Name column:'),ld.statusNameRawKey||'❌ NOT DETECTED');
-        console.log(fq('Total Lead Master rows (post-cutoff):'),snTotal);
-        console.log(fq('Rows with non-blank Status_Name (parse):'),ld.statusNameNonBlankCount,'/',ld.included);
-        console.log(fq('Rows with blank Status_Name (parse):'),ld.included-ld.statusNameNonBlankCount);
-        console.log(fq('Joined rows:'),snTotal);
-        console.log(fq('Joined rows with non-blank statusName:'),snNonBlank);
-        console.log(fq('Joined rows with BLANK statusName:'),snBlank,snBlank?'⚠':'✓');
-        console.log(fq('Retail Attribution count:'),snRA);
-        console.log(fq('Non-Retail Attribution count:'),snNonRA);
-        console.log(fq('Retail Attribution rows with retail fields populated:'),snRAWithFields,'/',snRA,snRAMissing?'(⚠ '+snRAMissing+' missing retail fields — no Retail Master match)':'✓');
-        console.log(fq('Non-Retail rows with retail fields (MUST BE 0):'),badNonRA.length,badNonRA.length?'⚠ LEAK':'✓');
-        if(badNonRA.length)badNonRA.slice(0,3).forEach(r=>console.log('  leak:',r.opty_id,'sn="'+r.statusName+'" pm="'+r.purchasedModel+'"'));
-        console.log(fq('Non-retail leads (no Retail Master record):'),snNoRetail);
-        console.log(fq('Non-retail leads with BLANK statusName (8):'),snNoRetailBlank.length,snNoRetailBlank.length?'⚠ UNEXPECTED':'✓');
-        if(snNoRetailBlank.length)snNoRetailBlank.slice(0,3).forEach(r=>console.log('  blank:',r.opty_id));
-        console.log(fq('Duplicate opty_id count:'),dupCount,dupCount?'⚠':'✓');
-        console.log('');
-        console.log(fq('Distinct statusName values:'));
-        [...dist.entries()].sort((a,b)=>b[1]-a[1]).forEach(([v,c])=>console.log('  "'+v+'" →',c,'rows'));
-        console.log('');
-        console.log(fq('── SAMPLE: 5 Retail Attribution leads ──'));
-        console.log('opty_id | statusName | purchasedModel | booking_month | callType | retailDate');
-        j.filter(r=>String(r.statusName||'').trim().toLowerCase()==='retail attribution').slice(0,5)
-          .forEach(r=>console.log(r.opty_id+' | "'+r.statusName+'" | "'+r.purchasedModel+'" | "'+r.booking_month+'" | "'+r.callType+'" | '+(r.retailDate?formatRetailDate(r.retailDate):'—')));
-        console.log('');
-        console.log(fq('── SAMPLE: 5 Non-Retail Attribution leads ──'));
-        console.log('opty_id | statusName | purchasedModel | booking_month | callType | retailDate');
-        j.filter(r=>String(r.statusName||'').trim().toLowerCase()!=='retail attribution').slice(0,5)
-          .forEach(r=>console.log(r.opty_id+' | "'+r.statusName+'" | "'+r.purchasedModel+'" | "'+r.booking_month+'" | "'+r.callType+'" | '+(r.retailDate?formatRetailDate(r.retailDate):'—')));
-        const allClear=!snBlank&&!badNonRA.length&&!dupCount;
-        console.log('');
-        console.log(fq('ALL CLEAR: '+(allClear?'✓ YES':'⚠ SEE ABOVE')));
-        console.groupEnd();
-      })(joined,ld);
-      // ── Expose window.heroFinalQA() and window.heroDetailedCsvPreview() for DevTools ──
-      window.heroFinalQA=(function(j,ld){
-        return function(){
-          const fq=s=>'[HERO FINAL QA] '+s;
-          const snTotal=j.length;
-          const snNonBlank=j.filter(r=>r.statusName&&r.statusName.trim()!=='').length;
-          const snBlank=snTotal-snNonBlank;
-          const snRA=j.filter(r=>String(r.statusName||'').trim().toLowerCase()==='retail attribution').length;
-          const snNonRA=snTotal-snRA;
-          const snNoRetail=j.filter(r=>!r.isBooked).length;
-          const snNoRetailBlank=j.filter(r=>!r.isBooked&&(!r.statusName||r.statusName.trim()===''));
-          const snRAWithFields=j.filter(r=>String(r.statusName||'').trim().toLowerCase()==='retail attribution'&&r.purchasedModel&&r.booking_month).length;
-          const badNonRA=j.filter(r=>String(r.statusName||'').trim().toLowerCase()!=='retail attribution'&&(r.purchasedModel||r.booking_month||r.retailDate));
-          const dupIds=j.map(r=>r.opty_id);const dupCount=dupIds.length-new Set(dupIds).size;
-          const dist=new Map();j.forEach(r=>{const v=r.statusName||'(blank)';dist.set(v,(dist.get(v)||0)+1);});
-          console.log('');
-          console.group(fq('LIVE DATA REPORT'));
-          console.log(fq('Status_Name column:'),ld.statusNameRawKey||'❌ NOT DETECTED');
-          console.log(fq('Lead Master rows (post-cutoff):'),snTotal);
-          console.log(fq('Rows non-blank Status_Name (parse):'),ld.statusNameNonBlankCount,'/',ld.included);
-          console.log(fq('Rows blank Status_Name (parse):'),ld.included-ld.statusNameNonBlankCount);
-          console.log(fq('Joined rows:'),snTotal);
-          console.log(fq('Joined non-blank statusName:'),snNonBlank);
-          console.log(fq('Joined BLANK statusName:'),snBlank,snBlank?'⚠':'✓');
-          console.log(fq('Retail Attribution rows:'),snRA);
-          console.log(fq('Non-Retail Attribution rows:'),snNonRA);
-          console.log(fq('RA rows with retail fields:'),snRAWithFields,'/',snRA);
-          console.log(fq('Non-RA rows with retail fields (MUST=0):'),badNonRA.length,badNonRA.length?'⚠ LEAK':'✓');
-          if(badNonRA.length)badNonRA.slice(0,5).forEach(r=>console.log('  leak:',r.opty_id,'sn="'+r.statusName+'"'));
-          console.log(fq('Non-retail leads (no retail record):'),snNoRetail);
-          console.log(fq('Non-retail leads with blank statusName:'),snNoRetailBlank.length,snNoRetailBlank.length?'⚠':'✓');
-          console.log(fq('Duplicate opty_id count:'),dupCount,dupCount?'⚠':'✓');
-          console.log('');
-          console.log(fq('Distinct statusName values:'));
-          [...dist.entries()].sort((a,b)=>b[1]-a[1]).forEach(([v,c])=>console.log('  "'+v+'" →',c));
-          console.log('');
-          console.log(fq('── 5 Retail Attribution samples ──'));
-          j.filter(r=>String(r.statusName||'').trim().toLowerCase()==='retail attribution').slice(0,5)
-            .forEach(r=>console.log(r.opty_id,'| sn="'+r.statusName+'" | pm="'+r.purchasedModel+'" | bm="'+r.booking_month+'" | ct="'+r.callType+'" | rd='+(r.retailDate?formatRetailDate(r.retailDate):'—')));
-          console.log(fq('── 5 Non-RA samples ──'));
-          j.filter(r=>String(r.statusName||'').trim().toLowerCase()!=='retail attribution').slice(0,5)
-            .forEach(r=>console.log(r.opty_id,'| sn="'+r.statusName+'" | pm="'+r.purchasedModel+'" | bm="'+r.booking_month+'" | ct="'+r.callType+'" | rd='+(r.retailDate?formatRetailDate(r.retailDate):'—')));
-          console.log('');
-          console.log(fq('ALL CLEAR: '+((!snBlank&&!badNonRA.length&&!dupCount)?'✓ YES':'⚠ SEE ABOVE')));
-          console.groupEnd();
-        };
-      })(joined,ld);
-      // Preview CSV rows (no download) — call window.heroDetailedCsvPreview(n) from DevTools
-      window.heroDetailedCsvPreview=(function(j){
-        return function(n){
-          n=n||20;
-          const rows=[];
-          for(const r of j){
-            const sn=r.statusName||'';
-            const isRA=sn.trim().toLowerCase()==='retail attribution';
-            rows.push({
-              opty_id:r.opty_id,lead_month:r.lead_month,
-              statusName:sn,
-              isRA,
-              purchasedModel:isRA?(r.purchasedModel||''):'',
-              performanceMonth:isRA?(r.booking_month||''):'',
-              callType:isRA?(r.callType||''):'',
-              retailDate:isRA?(r.retailDate?formatRetailDate(r.retailDate):''):'',
-              isBooked:r.isBooked
-            });
-            if(rows.length>=n)break;
-          }
-          console.log('[HERO FINAL QA] CSV preview (first '+n+' rows):');
-          console.table(rows);
-          const raRows=rows.filter(r=>r.isRA);
-          const nonRARows=rows.filter(r=>!r.isRA);
-          console.log('[HERO FINAL QA] Of',rows.length,'previewed:',raRows.length,'RA,',nonRARows.length,'non-RA');
-          const leak=nonRARows.filter(r=>r.purchasedModel||r.performanceMonth||r.callType||r.retailDate);
-          console.log('[HERO FINAL QA] Non-RA rows with retail fields (MUST=0):',leak.length,leak.length?'⚠ LEAK':'✓');
-          const raBlank=raRows.filter(r=>!r.purchasedModel&&!r.performanceMonth);
-          console.log('[HERO FINAL QA] RA rows missing retail fields:',raBlank.length,raBlank.length?'⚠':'✓');
-          return rows;
-        };
-      })(joined);
-      console.log('[HERO FINAL QA] window.heroFinalQA() and window.heroDetailedCsvPreview(n) are now available.');
-      // ── end HERO FINAL QA ──
       console.groupEnd();
     }catch(e){setSyncErr(e.message);}
     finally{setSyncing(false);}
