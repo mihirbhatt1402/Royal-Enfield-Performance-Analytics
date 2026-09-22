@@ -1489,6 +1489,34 @@ function canonPurMdl(s){const t=(s||'').trim();return _RE_PUR_MDL_CANONICAL[t.to
 // In-scope models for retail attribution
 const ATHER_SCOPE_MODELS=new Set(['Ather Rizta','Ather 450X','Ather 450S','Ather 450 Apex']);
 
+// Module-scope diagnostic helper — always available after Sync
+window.atherRetailDiag=function(){
+  const j=window.__atherJoined;
+  if(!j||!j.length){console.error('[atherRetailDiag] No data — run Sync first');return;}
+  console.group('[ATHER RETAIL DIAG]');
+  const booked=j.filter(r=>r.isBooked&&r.booking_month&&r.lead_month);
+  const dElig=booked.filter(r=>{const d=atherMonthOrder(r.booking_month)-atherMonthOrder(r.lead_month);return d>=0&&d<=2;});
+  const inScope=dElig.filter(r=>ATHER_SCOPE_MODELS.has(canonPurMdl(r.purchasedModel||'')));
+  const outScope=dElig.filter(r=>!ATHER_SCOPE_MODELS.has(canonPurMdl(r.purchasedModel||'')));
+  console.log('d-eligible total:',dElig.length,'| in-scope:',inScope.length,'| out-of-scope:',outScope.length);
+  console.log('');
+  console.log('IN-SCOPE RECORDS ('+inScope.length+'):');
+  console.log('opty_id | raw_pm | canon_pm | lead_month → booking_month | d | state');
+  inScope.forEach(r=>{
+    const d=atherMonthOrder(r.booking_month)-atherMonthOrder(r.lead_month);
+    console.log(r.opty_id+' | "'+(r.purchasedModel||'')+'" | "'+canonPurMdl(r.purchasedModel||'')+'" | '+r.lead_month+' → '+r.booking_month+' d='+d+' | '+(r.state||'?'));
+  });
+  if(outScope.length){
+    console.log('');
+    console.log('OUT-OF-SCOPE d-eligible (first 20):');
+    outScope.slice(0,20).forEach(r=>{
+      const d=atherMonthOrder(r.booking_month)-atherMonthOrder(r.lead_month);
+      console.log(r.opty_id+' | "'+(r.purchasedModel||'')+'" | "'+canonPurMdl(r.purchasedModel||'')+'" | d='+d);
+    });
+  }
+  console.groupEnd();
+};
+
 const MultiSelect = React.memo(function MultiSelect({ label, options, selected, onChange }) {
   const [open, setOpen] = useState(false);
   const ref = useRef();
@@ -3567,7 +3595,7 @@ function App({fbUser,role,presence,onSignOut,onAdminOpen}){
       setData({...payload, retailTillDate: retailResult.maxRetailDate});
       setDiagnostics(diag);
       setLastSynced(new Date());
-      window.__atherJoined = joinResult.rows;
+      window.__atherJoined = joined;
       // [ATHER QA] full pipeline trace
       const ld=leadResult.diagnostics,rd=retailResult.diagnostics;
       console.group('[ATHER QA] Ather LDR — cutoff: 01-May-2026');
@@ -3663,40 +3691,6 @@ function App({fbUser,role,presence,onSignOut,onAdminOpen}){
       console.log('[ATHER QA] ── d=0-2 ELIGIBILITY BREAKDOWN ──');
       console.log('[ATHER QA] d-eligible total:',dEligTotal,'| in-scope:',dInScope,'| out-of-scope:',dOutScope);
       [...dEligMap.entries()].sort((a,b)=>b[1]-a[1]).forEach(([k,v])=>console.log('[ATHER QA]  '+k+' →',v));
-      // Install DevTools helper
-      window.atherRetailDiag=(function(j,rdDiag){
-        return function(){
-          console.group('[ATHER RETAIL DIAG]');
-          console.log('Included raw model values → canonical → IN_SCOPE | count');
-          if(rdDiag.includedModelValues&&rdDiag.includedModelValues.length){
-            rdDiag.includedModelValues.forEach(([raw,cnt])=>{
-              const canon=_RE_PUR_MDL_CANONICAL[raw.toLowerCase().trim()]||raw;
-              console.log('"'+raw+'" → "'+canon+'" → '+(ATHER_SCOPE_MODELS.has(canon)?'YES':'NO')+' | '+cnt);
-            });
-          }
-          console.log('');
-          console.log('d-eligible records (all):');
-          const booked=j.filter(r=>r.isBooked&&r.booking_month&&r.lead_month);
-          const dElig=booked.filter(r=>{const d=atherMonthOrder(r.booking_month)-atherMonthOrder(r.lead_month);return d>=0&&d<=2;});
-          const inScope=dElig.filter(r=>ATHER_SCOPE_MODELS.has(canonPurMdl(r.purchasedModel||'')));
-          const outScope=dElig.filter(r=>!ATHER_SCOPE_MODELS.has(canonPurMdl(r.purchasedModel||'')));
-          console.log('total d-eligible:',dElig.length,'| in-scope:',inScope.length,'| out-scope:',outScope.length);
-          console.log('');
-          console.log('IN-SCOPE RECORDS:');
-          console.log('opty_id | raw_pm | canon_pm | lead_month | booking_month | d | state');
-          inScope.forEach(r=>{
-            const d=atherMonthOrder(r.booking_month)-atherMonthOrder(r.lead_month);
-            console.log(r.opty_id+' | "'+r.purchasedModel+'" | "'+canonPurMdl(r.purchasedModel||'')+'" | '+r.lead_month+' → '+r.booking_month+' d='+d+' | '+(r.state||'?'));
-          });
-          console.log('');
-          console.log('OUT-OF-SCOPE (d-eligible) — first 20:');
-          outScope.slice(0,20).forEach(r=>{
-            const d=atherMonthOrder(r.booking_month)-atherMonthOrder(r.lead_month);
-            console.log(r.opty_id+' | "'+r.purchasedModel+'" | "'+canonPurMdl(r.purchasedModel||'')+'" | d='+d);
-          });
-          console.groupEnd();
-        };
-      })(joined,rd);
       console.log('[ATHER QA] Call window.atherRetailDiag() for full per-record breakdown.');
       console.groupEnd();
     }catch(e){setSyncErr(e.message);}
