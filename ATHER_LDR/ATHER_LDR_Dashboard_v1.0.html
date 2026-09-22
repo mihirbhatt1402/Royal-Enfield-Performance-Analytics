@@ -3533,6 +3533,7 @@ function App({fbUser,role,presence,onSignOut,onAdminOpen}){
       setData({...payload, retailTillDate: retailResult.maxRetailDate});
       setDiagnostics(diag);
       setLastSynced(new Date());
+      window.__atherJoined = joinResult.rows;
       // [ATHER QA] full pipeline trace
       const ld=leadResult.diagnostics,rd=retailResult.diagnostics;
       console.group('[ATHER QA] Ather LDR — cutoff: 01-May-2026');
