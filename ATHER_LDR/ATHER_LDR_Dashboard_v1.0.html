@@ -662,23 +662,29 @@ function parseAtherRetailRows(raw){
   let reBrandCount=0,reDateCount=0;
   let earliestRetailDate=null,latestRetailDate=null,latestDmsDate=null,latestCoDate=null;
   const brandValMap=new Map();
-  const rawDateSamples=[]; // raw date strings from Hero-brand rows
-  const rawKeySamples=[]; // sourceLeadId values from Hero-brand rows
+  const excludedBrandModelMap=new Map(); // raw model values from brand-excluded rows
+  const includedModelMap=new Map();      // raw purchasedModel values from included rows
+  const rawDateSamples=[]; // raw date strings from accepted rows
+  const rawKeySamples=[]; // sourceLeadId values from accepted rows
   for(const r of raw){
     const proc=brandColKey?String(r[brandColKey]||'').trim():get(r,['process','brand','oem','manufacturer','oem brand','brand name']);
     const procLow=(proc||'').toLowerCase().trim();
     // Track all brand values
     brandValMap.set(proc||'(empty)',(brandValMap.get(proc||'(empty)')||0)+1);
-    // Hero brand filter: accept if empty OR starts with 'hero'
-    // IMPORTANT: do NOT change this to startsWith unless we confirm the actual brand value
-    // Using strict match first, then log what the actual values are
-    const isHeroBrand=!proc||procLow==='hero'||procLow.startsWith('hero');
-    if(!isHeroBrand){excludedBrand++;continue;}
+    // Accept rows where brand is empty, 'ather*', or 'hero*'
+    const isAcceptedBrand=!proc||procLow.startsWith('ather')||procLow.startsWith('hero');
+    if(!isAcceptedBrand){
+      excludedBrand++;
+      // Track model values from excluded rows for diagnostics
+      const excMdl=get(r,['retail model','retail_model','retailmodel','purchasedmodel','purchased model','model','vehicle model','model name','modelname']);
+      if(excMdl)excludedBrandModelMap.set(excMdl,(excludedBrandModelMap.get(excMdl)||0)+1);
+      continue;
+    }
     reBrandCount++;
     const sourceLeadId=get(r,['sourcelead id','sourcelead_id','source lead id','source_lead_id','sourceleadid','lead id','leadid','optyid','opty id','opty_id']);
     const performanceMonth=normalizeAtherMonth(get(r,['performance month','performancemonth','performance_month','retail month','retailmonth','month']));
     if(!sourceLeadId||!performanceMonth){excludedKey++;continue;}
-    // Capture sample keys and dates from Hero-brand rows
+    // Capture sample keys and dates from accepted rows
     if(rawKeySamples.length<10)rawKeySamples.push(sourceLeadId);
     const dateStr=retailDateColKey?String(r[retailDateColKey]||'').trim():get(r,['retail_attribution_date','retailattributiondate','attribution date','attribution_date','retail date','retaildate','retail_date','date']);
     if(rawDateSamples.length<10&&dateStr)rawDateSamples.push({raw:dateStr,parsed:parseAtherDate(dateStr)?formatRetailDate(parseAtherDate(dateStr)):null});
@@ -695,11 +701,15 @@ function parseAtherRetailRows(raw){
     const callType=ctLow.includes('dms')?'dms':ctLow.includes('call')?'co':'other';
     if(callType==='dms'){if(!latestDmsDate||retailDate>latestDmsDate)latestDmsDate=retailDate;}
     if(callType==='co'){if(!latestCoDate||retailDate>latestCoDate)latestCoDate=retailDate;}
-    const purchasedModel=get(r,['purchasedmodel','purchased model','purchased_model','purchasedmodelname','purchased model name','model','model name','vehicle model','vehicle_model','product','product name','vehicle name','vehiclename','vehicle','model_name','productname']);
+    // 'retail model' is the common Ather Retail Master column name; aliases cover Hero variants
+    const purchasedModel=get(r,['retail model','retail_model','retailmodel','purchasedmodel','purchased model','purchased_model','purchasedmodelname','purchased model name','model','model name','vehicle model','vehicle_model','product','product name','vehicle name','vehiclename','vehicle','model_name','productname']);
+    includedModelMap.set(purchasedModel||'(blank)',(includedModelMap.get(purchasedModel||'(blank)')||0)+1);
     rows.push({sourceLeadId,performanceMonth,callType,retailDate,purchasedModel});
   }
   const uniqueIds=new Set(rows.map(r=>r.sourceLeadId)).size;
-  const brandValues=[...brandValMap.entries()].sort((a,b)=>b[1]-a[1]).slice(0,10).map(([v,c])=>v+'('+c+')');
+  const brandValues=[...brandValMap.entries()].sort((a,b)=>b[1]-a[1]).slice(0,20).map(([v,c])=>v+'('+c+')');
+  const includedModelValues=[...includedModelMap.entries()].sort((a,b)=>b[1]-a[1]);
+  const excludedBrandModelValues=[...excludedBrandModelMap.entries()].sort((a,b)=>b[1]-a[1]).slice(0,20);
   return{rows,diagnostics:{
     totalRows:raw.length,reRows:rows.length,uniqueIds,
     excludedBrand,excludedKey,excludedBeforeCutoff,excludedInvalidDate,
@@ -708,7 +718,8 @@ function parseAtherRetailRows(raw){
     detectedDateCol:retailDateColKey||'(not found)',
     brandColKey:brandColKey||'(not found)',
     brandValues,rawDateSamples,rawKeySamples,
-    sampleRetailDateValues,allRetailCols
+    sampleRetailDateValues,allRetailCols,
+    includedModelValues,excludedBrandModelValues
   },maxRetailDate};
 }
 
@@ -3594,6 +3605,76 @@ function App({fbUser,role,presence,onSignOut,onAdminOpen}){
       console.log('[ATHER QA] Retail Till Date:',retailResult.maxRetailDate?formatRetailDate(retailResult.maxRetailDate):'— (no valid retail dates found)');
       console.log('[ATHER QA] Booked with both dates (bdm eligible):',joined.filter(r=>r.isBooked&&r.leadDate&&r.retailDate).length);
       console.log('[ATHER QA] BDM rows:',payload.bdm.length);
+      // ── RETAIL MODEL RECONCILIATION ──
+      console.log('');
+      console.log('[ATHER QA] ── RETAIL MODEL RECONCILIATION (included rows) ──');
+      console.log('[ATHER QA] Raw purchasedModel value → canonical → IN_SCOPE | count');
+      if(rd.includedModelValues&&rd.includedModelValues.length){
+        rd.includedModelValues.forEach(([raw,cnt])=>{
+          const canon=_RE_PUR_MDL_CANONICAL_LOWER[raw.toLowerCase().trim()]||raw;
+          const inScope=ATHER_SCOPE_MODELS.has(canon)?'YES':'NO ';
+          console.log('[ATHER QA]  "'+raw+'" → "'+canon+'" → '+inScope+' | '+cnt);
+        });
+      } else {
+        console.log('[ATHER QA]  (no included retail rows — check brand/date/key filters above)');
+      }
+      if(rd.excludedBrandModelValues&&rd.excludedBrandModelValues.length){
+        console.log('');
+        console.log('[ATHER QA] ── BRAND-EXCLUDED ROWS: raw model values (first 20) ──');
+        rd.excludedBrandModelValues.forEach(([raw,cnt])=>console.log('[ATHER QA]  "'+raw+'" | '+cnt));
+      }
+      // ── d-eligible breakdown ──
+      const booked=joined.filter(r=>r.isBooked&&r.booking_month&&r.lead_month);
+      const dEligMap=new Map();
+      let dEligTotal=0,dInScope=0,dOutScope=0;
+      booked.forEach(r=>{
+        const d=atherMonthOrder(r.booking_month)-atherMonthOrder(r.lead_month);
+        if(d>=0&&d<=2){
+          dEligTotal++;
+          const canon=canonPurMdl(r.purchasedModel||'');
+          if(ATHER_SCOPE_MODELS.has(canon)){dInScope++;dEligMap.set(canon,(dEligMap.get(canon)||0)+1);}
+          else{dOutScope++;dEligMap.set('OUT:'+r.purchasedModel,(dEligMap.get('OUT:'+r.purchasedModel)||0)+1);}
+        }
+      });
+      console.log('');
+      console.log('[ATHER QA] ── d=0-2 ELIGIBILITY BREAKDOWN ──');
+      console.log('[ATHER QA] d-eligible total:',dEligTotal,'| in-scope:',dInScope,'| out-of-scope:',dOutScope);
+      [...dEligMap.entries()].sort((a,b)=>b[1]-a[1]).forEach(([k,v])=>console.log('[ATHER QA]  '+k+' →',v));
+      // Install DevTools helper
+      window.atherRetailDiag=(function(j,rdDiag){
+        return function(){
+          console.group('[ATHER RETAIL DIAG]');
+          console.log('Included raw model values → canonical → IN_SCOPE | count');
+          if(rdDiag.includedModelValues&&rdDiag.includedModelValues.length){
+            rdDiag.includedModelValues.forEach(([raw,cnt])=>{
+              const canon=_RE_PUR_MDL_CANONICAL_LOWER[raw.toLowerCase().trim()]||raw;
+              console.log('"'+raw+'" → "'+canon+'" → '+(ATHER_SCOPE_MODELS.has(canon)?'YES':'NO')+' | '+cnt);
+            });
+          }
+          console.log('');
+          console.log('d-eligible records (all):');
+          const booked=j.filter(r=>r.isBooked&&r.booking_month&&r.lead_month);
+          const dElig=booked.filter(r=>{const d=atherMonthOrder(r.booking_month)-atherMonthOrder(r.lead_month);return d>=0&&d<=2;});
+          const inScope=dElig.filter(r=>ATHER_SCOPE_MODELS.has(canonPurMdl(r.purchasedModel||'')));
+          const outScope=dElig.filter(r=>!ATHER_SCOPE_MODELS.has(canonPurMdl(r.purchasedModel||'')));
+          console.log('total d-eligible:',dElig.length,'| in-scope:',inScope.length,'| out-scope:',outScope.length);
+          console.log('');
+          console.log('IN-SCOPE RECORDS:');
+          console.log('opty_id | raw_pm | canon_pm | lead_month | booking_month | d | state');
+          inScope.forEach(r=>{
+            const d=atherMonthOrder(r.booking_month)-atherMonthOrder(r.lead_month);
+            console.log(r.opty_id+' | "'+r.purchasedModel+'" | "'+canonPurMdl(r.purchasedModel||'')+'" | '+r.lead_month+' → '+r.booking_month+' d='+d+' | '+(r.state||'?'));
+          });
+          console.log('');
+          console.log('OUT-OF-SCOPE (d-eligible) — first 20:');
+          outScope.slice(0,20).forEach(r=>{
+            const d=atherMonthOrder(r.booking_month)-atherMonthOrder(r.lead_month);
+            console.log(r.opty_id+' | "'+r.purchasedModel+'" | "'+canonPurMdl(r.purchasedModel||'')+'" | d='+d);
+          });
+          console.groupEnd();
+        };
+      })(joined,rd);
+      console.log('[ATHER QA] Call window.atherRetailDiag() for full per-record breakdown.');
       console.groupEnd();
     }catch(e){setSyncErr(e.message);}
     finally{setSyncing(false);}
