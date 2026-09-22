@@ -1366,10 +1366,8 @@ function exportDetailedCsv(rawJoined, filters, RT, leadsMode, filename, monthOve
       if (cf === FILTER_CLEARED) continue;
       if (!cf.has(r.city)) continue;
     }
-    // Status_Name comes directly from Lead Master; gates columns 19-22
     const statusName = r.statusName || '';
-    const normalizedStatus = String(statusName).trim().toLowerCase();
-    const isRA = normalizedStatus === 'retail attribution';
+    const isRA = isRetailedLead(r);
     aoa.push([
       r.encryptMobile||'', r.idVerifiedLead||'', r.opty_id,
       fmtD(r.leadDate), r.lead_month, r.brand||'', r.model,
@@ -3596,103 +3594,127 @@ function App({fbUser,role,presence,onSignOut,onAdminOpen}){
       setDiagnostics(diag);
       setLastSynced(new Date());
       window.__atherJoined = joined;
-      // [ATHER QA] full pipeline trace
-      const ld=leadResult.diagnostics,rd=retailResult.diagnostics;
-      console.group('[ATHER QA] Ather LDR — cutoff: 01-May-2026');
-      console.log('[ATHER QA] DATA CUTOFF: 03-Aug-2026');
-      console.log('');
-      console.log('[ATHER QA] ── LEAD MASTER ──');
-      console.log('[ATHER QA] Lead raw:',ld.totalRows);
-      console.log('[ATHER QA] Lead included:',ld.included);
-      console.log('[ATHER QA] Lead excl before cutoff:',ld.excludedBeforeCutoff);
-      console.log('[ATHER QA] Lead excl invalid/missing date:',ld.excludedInvalidDate);
-      console.log('[ATHER QA] Lead earliest included:',ld.earliestDate?formatRetailDate(ld.earliestDate):'—');
-      console.log('[ATHER QA] Lead latest included:',ld.latestDate?formatRetailDate(ld.latestDate):'—');
-      console.log('[ATHER QA] Lead date col detected:',ld.detectedDateCol);
-      console.log('[ATHER QA] Lead ALL COLUMNS:',ld.allLeadCols);
-      console.log('[ATHER QA] Web ID detected col:',ld.webIdDetectedCol);
-      if(ld.sampleDateValues&&ld.sampleDateValues.length)
-        ld.sampleDateValues.forEach(x=>console.log('[ATHER QA] Lead date sample: raw="'+x.raw+'" → '+(x.parsed||'UNPARSEABLE')));
-      else console.log('[ATHER QA] Lead date samples: (none — col not detected or empty)');
-      console.log('');
-      console.log('[ATHER QA] ── RETAIL MASTER ──');
-      console.log('[ATHER QA] Retail raw:',rd.totalRows);
-      console.log('[ATHER QA] Retail brand col detected:',rd.brandColKey);
-      console.log('[ATHER QA] Retail unique brand values:',rd.brandValues);
-      console.log('[ATHER QA] Retail excl (brand filter):',rd.excludedBrand);
-      console.log('[ATHER QA] Retail RE brand count (after brand filter):',rd.reBrandCount);
-      console.log('[ATHER QA] Retail excl (missing key/month):',rd.excludedKey);
-      console.log('[ATHER QA] Retail date col detected:',rd.detectedDateCol);
-      console.log('[ATHER QA] Retail ALL COLUMNS:',rd.allRetailCols);
-      console.log('[ATHER QA] Retail RE date valid (parses OK):',rd.reDateCount);
-      console.log('[ATHER QA] Retail excl invalid/missing date:',rd.excludedInvalidDate);
-      console.log('[ATHER QA] Retail excl before cutoff:',rd.excludedBeforeCutoff);
-      console.log('[ATHER QA] Retail included (final):',rd.reRows);
-      console.log('[ATHER QA] Retail earliest included:',diag.retailEarliestDate?formatRetailDate(diag.retailEarliestDate):'—');
-      console.log('[ATHER QA] Retail latest included:',diag.retailLatestDate?formatRetailDate(diag.retailLatestDate):'—');
-      if(rd.rawDateSamples&&rd.rawDateSamples.length)
-        rd.rawDateSamples.forEach(x=>console.log('[ATHER QA] Retail date sample (Hero rows): raw="'+x.raw+'" → '+(x.parsed||'UNPARSEABLE')));
-      else console.log('[ATHER QA] Retail date samples (Hero rows): (none)');
-      if(rd.sampleRetailDateValues&&rd.sampleRetailDateValues.length)
-        rd.sampleRetailDateValues.forEach(x=>console.log('[ATHER QA] Retail date sample (ALL rows): raw="'+x.raw+'" → '+(x.parsed||'UNPARSEABLE')));
-      console.log('');
-      console.log('[ATHER QA] ── MATCHING ──');
-      console.log('[ATHER QA] Retail valid keys:',diag.retailKeyCount);
-      console.log('[ATHER QA] Lead valid keys:',diag.leadKeyCount);
-      console.log('[ATHER QA] Retail keys matched to leads:',diag.matched);
-      console.log('[ATHER QA] Retail keys unmatched:',diag.retailKeyCount-diag.matched);
-      console.log('[ATHER QA] Lead keys unmatched:',diag.unmatched);
-      if(diag.keyMatchSamples&&diag.keyMatchSamples.length)
-        diag.keyMatchSamples.forEach(s=>console.log('[ATHER QA] MATCH SAMPLE retail key="'+s.retailKey+'" → inLeads='+s.inLeads));
-      if(rd.rawKeySamples&&rd.rawKeySamples.length)
-        console.log('[ATHER QA] Retail key samples (Hero rows):',rd.rawKeySamples);
-      console.log('');
-      console.log('[ATHER QA] ── RESULTS ──');
-      const rAll=joined.filter(r=>r.isBooked).length;
-      const rDms=joined.filter(r=>r.isBooked&&r.callType==='dms').length;
-      const rCo=joined.filter(r=>r.isBooked&&r.callType==='co').length;
-      console.log('[ATHER QA] Booked/joined rows:',rAll);
-      console.log('[ATHER QA] R_all:',rAll,'| R_dms:',rDms,'| R_co:',rCo);
-      console.log('[ATHER QA] Retail Till Date:',retailResult.maxRetailDate?formatRetailDate(retailResult.maxRetailDate):'— (no valid retail dates found)');
-      console.log('[ATHER QA] Booked with both dates (bdm eligible):',joined.filter(r=>r.isBooked&&r.leadDate&&r.retailDate).length);
-      console.log('[ATHER QA] BDM rows:',payload.bdm.length);
-      // ── RETAIL MODEL RECONCILIATION ──
-      console.log('');
-      console.log('[ATHER QA] ── RETAIL MODEL RECONCILIATION (included rows) ──');
-      console.log('[ATHER QA] Raw purchasedModel value → canonical → IN_SCOPE | count');
-      if(rd.includedModelValues&&rd.includedModelValues.length){
-        rd.includedModelValues.forEach(([raw,cnt])=>{
-          const canon=_RE_PUR_MDL_CANONICAL[raw.toLowerCase().trim()]||raw;
-          const inScope=ATHER_SCOPE_MODELS.has(canon)?'YES':'NO ';
-          console.log('[ATHER QA]  "'+raw+'" → "'+canon+'" → '+inScope+' | '+cnt);
-        });
-      } else {
-        console.log('[ATHER QA]  (no included retail rows — check brand/date/key filters above)');
-      }
-      if(rd.excludedBrandModelValues&&rd.excludedBrandModelValues.length){
-        console.log('');
-        console.log('[ATHER QA] ── BRAND-EXCLUDED ROWS: raw model values (first 20) ──');
-        rd.excludedBrandModelValues.forEach(([raw,cnt])=>console.log('[ATHER QA]  "'+raw+'" | '+cnt));
-      }
-      // ── d-eligible breakdown ──
-      const booked=joined.filter(r=>r.isBooked&&r.booking_month&&r.lead_month);
-      const dEligMap=new Map();
-      let dEligTotal=0,dInScope=0,dOutScope=0;
-      booked.forEach(r=>{
-        const d=atherMonthOrder(r.booking_month)-atherMonthOrder(r.lead_month);
-        if(d>=0&&d<=2){
-          dEligTotal++;
-          const canon=canonPurMdl(r.purchasedModel||'');
-          if(ATHER_SCOPE_MODELS.has(canon)){dInScope++;dEligMap.set(canon,(dEligMap.get(canon)||0)+1);}
-          else{dOutScope++;dEligMap.set('OUT:'+r.purchasedModel,(dEligMap.get('OUT:'+r.purchasedModel)||0)+1);}
-        }
-      });
-      console.log('');
-      console.log('[ATHER QA] ── d=0-2 ELIGIBILITY BREAKDOWN ──');
-      console.log('[ATHER QA] d-eligible total:',dEligTotal,'| in-scope:',dInScope,'| out-of-scope:',dOutScope);
-      [...dEligMap.entries()].sort((a,b)=>b[1]-a[1]).forEach(([k,v])=>console.log('[ATHER QA]  '+k+' →',v));
-      console.log('[ATHER QA] Call window.atherRetailDiag() for full per-record breakdown.');
-      console.groupEnd();
+      // ── AUTOMATED QA (runs automatically after every Sync) ──
+      (function runAtherQA(){
+        try{
+          const ld=leadResult.diagnostics,rd=retailResult.diagnostics;
+          // 1. Booked-row d-distribution
+          const allBooked=joined.filter(r=>r.isBooked);
+          let dNeg=0,d0=0,d1=0,d2=0,d3=0,dGt3=0,dMissing=0;
+          allBooked.forEach(r=>{
+            if(!r.booking_month||!r.lead_month){dMissing++;return;}
+            const d=atherMonthOrder(r.booking_month)-atherMonthOrder(r.lead_month);
+            if(d<0)dNeg++;else if(d===0)d0++;else if(d===1)d1++;else if(d===2)d2++;else if(d===3)d3++;else dGt3++;
+          });
+          const dEligTotal=d0+d1+d2;
+          // 2. Model-scope split within d-eligible
+          let dInScope=0,dOutScope=0;
+          joined.filter(r=>r.isBooked&&r.booking_month&&r.lead_month).forEach(r=>{
+            const d=atherMonthOrder(r.booking_month)-atherMonthOrder(r.lead_month);
+            if(d<0||d>2)return;
+            if(ATHER_SCOPE_MODELS.has(canonPurMdl(r.purchasedModel||'')))dInScope++;else dOutScope++;
+          });
+          // 3. Ground-truth final retail
+          const finalRetail=joined.filter(r=>isRetailedLead(r)).length;
+          const modelCounts=new Map();
+          joined.filter(r=>isRetailedLead(r)).forEach(r=>{
+            const c=canonPurMdl(r.purchasedModel||'');modelCounts.set(c,(modelCounts.get(c)||0)+1);
+          });
+          const konarcSR2=modelCounts.get('KONARC SR2')||0;
+          const konarcSR3=modelCounts.get('KONARC SR3')||0;
+          // 4. Payload-derived totals (what tabs actually display)
+          // sm  f2:[si,li,L,Ra,Rd,Rc]            Ra=[3]
+          // stm f3:[sti,si,li,L,Ra,Rd,Rc]        Ra=[4]
+          // ltm f3:[lti,si,li,L,Ra,Rd,Rc]        Ra=[4]
+          // pmsm f3:[pm,si,li,L,Ra,Rd,Rc]        Ra=[4]
+          // univ f5:[mi,si,sti,lti,li,L,Ra,Rd,Rc] Ra=[6]
+          const s2=a=>a.reduce((s,r)=>s+r[3],0);
+          const s3=a=>a.reduce((s,r)=>s+r[4],0);
+          const s5=a=>a.reduce((s,r)=>s+r[6],0);
+          const overviewR=s2(payload.sm);
+          const stateR=s3(payload.stm);
+          const ltSrcR=s3(payload.ltm);
+          const pivotR=s5(payload.univ);
+          const modelPerfTotal=s3(payload.pmsm);
+          const purMdlArr2=payload.maps.purMdl;
+          const mpMap=new Map();
+          payload.pmsm.forEach(row=>{const k=purMdlArr2[row[0]];mpMap.set(k,(mpMap.get(k)||0)+row[4]);});
+          const konarcSR2Pld=mpMap.get('KONARC SR2')||0;
+          const konarcSR3Pld=mpMap.get('KONARC SR3')||0;
+          // 5. Gate identity check (isRetailed in buildPayload ≡ isRetailedLead at module scope)
+          const isRetailedInline=joined.filter(r=>{
+            if(!r.isBooked||!r.booking_month||!r.lead_month)return false;
+            const d=atherMonthOrder(r.booking_month)-atherMonthOrder(r.lead_month);
+            if(d<0||d>2)return false;
+            return ATHER_SCOPE_MODELS.has(canonPurMdl(r.purchasedModel||''));
+          }).length;
+          // 6. Deduplication checks
+          const allOptyIds=joined.map(r=>r.opty_id).filter(Boolean);
+          const uniqOpty=new Set(allOptyIds).size;
+          const retailedOptyIds=joined.filter(r=>isRetailedLead(r)).map(r=>r.opty_id).filter(Boolean);
+          const uniqRetailed=new Set(retailedOptyIds).size;
+          // ── PRINT REPORT ──
+          console.log('[ATHER QA] =========================');
+          console.log('[ATHER QA] ── RETAIL MODEL MAPPING (raw → canonical → IN_SCOPE | count) ──');
+          if(rd.includedModelValues&&rd.includedModelValues.length){
+            rd.includedModelValues.forEach(([raw,cnt])=>{
+              const canon=_RE_PUR_MDL_CANONICAL[raw.toLowerCase().trim()]||raw;
+              console.log('[ATHER QA]  "'+raw+'" → "'+canon+'" → '+(ATHER_SCOPE_MODELS.has(canon)?'YES':'NO ')+' | '+cnt);
+            });
+          }else{
+            console.log('[ATHER QA]  (no retail rows passed brand+date+key filters)');
+          }
+          console.log('[ATHER QA] ── ATTRIBUTION PIPELINE ──');
+          console.log('[ATHER QA] RAW RETAIL:',rd.totalRows||0);
+          console.log('[ATHER QA] DATE VALID:',rd.reRows||0);
+          console.log('[ATHER QA] EXACT LEAD MATCH:',allBooked.length);
+          console.log('[ATHER QA] d<0:',dNeg);
+          console.log('[ATHER QA] d=0:',d0);
+          console.log('[ATHER QA] d=1:',d1);
+          console.log('[ATHER QA] d=2:',d2);
+          console.log('[ATHER QA] d=3:',d3);
+          console.log('[ATHER QA] d>3:',dGt3);
+          console.log('[ATHER QA] MISSING MONTH:',dMissing);
+          console.log('[ATHER QA] d=0-2 ELIGIBLE:',dEligTotal);
+          console.log('[ATHER QA] IN-SCOPE:',dInScope);
+          console.log('[ATHER QA] OUT-OF-SCOPE:',dOutScope);
+          console.log('[ATHER QA] -------------------------');
+          console.log('[ATHER QA] Ather Rizta:',(modelCounts.get('Ather Rizta')||0));
+          console.log('[ATHER QA] Ather 450X:',(modelCounts.get('Ather 450X')||0));
+          console.log('[ATHER QA] Ather 450S:',(modelCounts.get('Ather 450S')||0));
+          console.log('[ATHER QA] Ather 450 Apex:',(modelCounts.get('Ather 450 Apex')||0));
+          console.log('[ATHER QA] FINAL RETAIL:',finalRetail);
+          console.log('[ATHER QA] ── PAYLOAD RECONCILIATION ──');
+          console.log('[ATHER QA] OVERVIEW RETAIL:',overviewR);
+          console.log('[ATHER QA] MODEL PERFORMANCE RETAIL:',modelPerfTotal);
+          console.log('[ATHER QA]   by model:',Object.fromEntries(mpMap));
+          console.log('[ATHER QA] STATE PERFORMANCE RETAIL:',stateR);
+          console.log('[ATHER QA] SOURCE ANALYSIS RETAIL:',overviewR,'(sm matrix = Overview)');
+          console.log('[ATHER QA] LT x SOURCE RETAIL:',ltSrcR);
+          console.log('[ATHER QA] GEO & DEALER RETAIL:',stateR,'(stm matrix = State)');
+          console.log('[ATHER QA] PIVOT TABLE RETAIL:',pivotR);
+          console.log('[ATHER QA] KONARC SR2:',konarcSR2,'(ground) |',konarcSR2Pld,'(payload)');
+          console.log('[ATHER QA] KONARC SR3:',konarcSR3,'(ground) |',konarcSR3Pld,'(payload)');
+          console.log('[ATHER QA] ── DATA INTEGRITY ──');
+          console.log('[ATHER QA] Total leads:',joined.length,'| unique opty_ids:',uniqOpty,uniqOpty===joined.length?'OK':'WARN-dupes');
+          console.log('[ATHER QA] Retail rows:',retailedOptyIds.length,'| unique:',uniqRetailed,retailedOptyIds.length===uniqRetailed?'OK':'WARN-inflation');
+          console.log('[ATHER QA] Gate identity isRetailed(inline)='+isRetailedInline+' | isRetailedLead(module)='+finalRetail+(isRetailedInline===finalRetail?' OK':' FAIL-mismatch'));
+          console.log('[ATHER QA] -------------------------');
+          const fails=[];
+          if(overviewR!==finalRetail)fails.push('Overview='+overviewR+' ≠ ground='+finalRetail+' (sm)');
+          if(modelPerfTotal!==finalRetail)fails.push('ModelPerf='+modelPerfTotal+' ≠ ground='+finalRetail+' (pmsm)');
+          if(stateR!==finalRetail)fails.push('StatePerf='+stateR+' ≠ ground='+finalRetail+' (stm)');
+          if(ltSrcR!==finalRetail)fails.push('LTxSrc='+ltSrcR+' ≠ ground='+finalRetail+' (ltm)');
+          if(pivotR!==finalRetail)fails.push('Pivot='+pivotR+' ≠ ground='+finalRetail+' (univ)');
+          if(konarcSR2!==0||konarcSR2Pld!==0)fails.push('KONARC SR2='+konarcSR2+'/'+konarcSR2Pld+' (expected 0)');
+          if(konarcSR3!==0||konarcSR3Pld!==0)fails.push('KONARC SR3='+konarcSR3+'/'+konarcSR3Pld+' (expected 0)');
+          if(isRetailedInline!==finalRetail)fails.push('Gate mismatch: inline='+isRetailedInline+' module='+finalRetail);
+          if(fails.length===0){console.log('[ATHER QA] OVERALL RESULT: PASS');}
+          else{fails.forEach(f=>console.log('[ATHER QA] FAIL: '+f));console.log('[ATHER QA] OVERALL RESULT: FAIL');}
+          console.log('[ATHER QA] =========================');
+          console.log('[ATHER QA] window.atherRetailDiag() → per-record breakdown');
+        }catch(qaErr){console.error('[ATHER QA] QA block threw:',qaErr.message,qaErr);}
+      })();
     }catch(e){setSyncErr(e.message);}
     finally{setSyncing(false);}
   },[]);
