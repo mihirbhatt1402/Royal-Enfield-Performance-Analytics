@@ -1462,9 +1462,32 @@ function makeAggCsv(agg, dimLabel, filename) {
 // has() returns false for every real option → zero records for that dimension.
 const FILTER_CLEARED = Object.freeze(new Set(['\x00']));
 
-// Canonical display name for purchased model — used in buildPayload and in filter comparisons
-const _RE_PUR_MDL_CANONICAL = {};
-function canonPurMdl(s) { return _RE_PUR_MDL_CANONICAL[s] || s; }
+// Canonical model map — keys are lowercase trimmed raw Retail Master values
+const _RE_PUR_MDL_CANONICAL = {
+  // Ather Rizta family (all RIZTA variants)
+  'rizta s lr':'Ather Rizta','rizta s hr':'Ather Rizta',
+  'rizta z lr':'Ather Rizta','rizta z hr':'Ather Rizta',
+  'rizta s':'Ather Rizta','rizta z':'Ather Rizta',
+  'rizta':'Ather Rizta','ather rizta':'Ather Rizta',
+  'ather rizta s':'Ather Rizta','ather rizta z':'Ather Rizta',
+  // Ather 450X family
+  '450x hr':'Ather 450X','450x lr':'Ather 450X',
+  '450x':'Ather 450X','ather 450x':'Ather 450X',
+  '450 x':'Ather 450X','ather 450 x':'Ather 450X',
+  '450x gen 3':'Ather 450X','ather 450x gen 3':'Ather 450X',
+  // Ather 450S family
+  '450s hr':'Ather 450S','450s lr':'Ather 450S',
+  '450s':'Ather 450S','ather 450s':'Ather 450S',
+  '450 s':'Ather 450S','ather 450 s':'Ather 450S',
+  // Ather 450 Apex family
+  '450 apex':'Ather 450 Apex','ather 450 apex':'Ather 450 Apex',
+  '450apex':'Ather 450 Apex','ather 450apex':'Ather 450 Apex',
+  '450 apex gen 3':'Ather 450 Apex','ather 450 apex gen 3':'Ather 450 Apex',
+};
+// canonPurMdl: case-insensitive canonical lookup
+function canonPurMdl(s){const t=(s||'').trim();return _RE_PUR_MDL_CANONICAL[t.toLowerCase()]||t;}
+// In-scope models for retail attribution
+const ATHER_SCOPE_MODELS=new Set(['Ather Rizta','Ather 450X','Ather 450S','Ather 450 Apex']);
 
 const MultiSelect = React.memo(function MultiSelect({ label, options, selected, onChange }) {
   const [open, setOpen] = useState(false);
@@ -3611,7 +3634,7 @@ function App({fbUser,role,presence,onSignOut,onAdminOpen}){
       console.log('[ATHER QA] Raw purchasedModel value → canonical → IN_SCOPE | count');
       if(rd.includedModelValues&&rd.includedModelValues.length){
         rd.includedModelValues.forEach(([raw,cnt])=>{
-          const canon=_RE_PUR_MDL_CANONICAL_LOWER[raw.toLowerCase().trim()]||raw;
+          const canon=_RE_PUR_MDL_CANONICAL[raw.toLowerCase().trim()]||raw;
           const inScope=ATHER_SCOPE_MODELS.has(canon)?'YES':'NO ';
           console.log('[ATHER QA]  "'+raw+'" → "'+canon+'" → '+inScope+' | '+cnt);
         });
@@ -3647,7 +3670,7 @@ function App({fbUser,role,presence,onSignOut,onAdminOpen}){
           console.log('Included raw model values → canonical → IN_SCOPE | count');
           if(rdDiag.includedModelValues&&rdDiag.includedModelValues.length){
             rdDiag.includedModelValues.forEach(([raw,cnt])=>{
-              const canon=_RE_PUR_MDL_CANONICAL_LOWER[raw.toLowerCase().trim()]||raw;
+              const canon=_RE_PUR_MDL_CANONICAL[raw.toLowerCase().trim()]||raw;
               console.log('"'+raw+'" → "'+canon+'" → '+(ATHER_SCOPE_MODELS.has(canon)?'YES':'NO')+' | '+cnt);
             });
           }
