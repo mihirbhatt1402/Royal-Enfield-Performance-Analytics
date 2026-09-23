@@ -444,6 +444,8 @@ function parseAtherDate(s){
 // 01-May-2026: records before this date are excluded.
 const DATA_CUTOFF=new Date(2026,4,1);
 const CUTOFF_MONTH_ORDER_CLEAR=atherMonthOrder("May'2026"); // month >= May'2026 is in scope
+const ATHER_BUILD_TS='2026-09-23T00:00Z';
+const ATHER_BUILD_FEATURES=['canonPurMdl','ATHER_SCOPE_MODELS','window.atherRetailDiag','joined-fix','pipeline-diag','auto-qa'];
 
 function parseAtherLeadRows(raw){
   if(!raw.length)return{rows:[],diagnostics:{totalRows:0,included:0,uniqueIds:0,dupIds:0,excludedBeforeCutoff:0,excludedInvalidDate:0,earliestDate:null,latestDate:null,detectedDateCol:'(none)'}};
@@ -3567,10 +3569,109 @@ function App({fbUser,role,presence,onSignOut,onAdminOpen}){
       ]);
       const leadRaw=monthCsvs.flatMap(csv=>parseCsvToRows(csv));
       const retailRaw=parseCsvToRows(retailCSV);
+      // \u2500\u2500 PIPELINE COLUMN DETECTION (before parse functions) \u2500\u2500
+      (function atherPipelineColLog(){
+        try{
+          console.log('[ATHER BUILD] version='+ATHER_BUILD_TS+' | features='+ATHER_BUILD_FEATURES.join(','));
+          const lkm={};
+          if(leadRaw.length)Object.keys(leadRaw[0]).forEach(k=>{lkm[k.toLowerCase().replace(/\s+/g,' ').trim()]=k;});
+          const rkm={};
+          if(retailRaw.length)Object.keys(retailRaw[0]).forEach(k=>{rkm[k.toLowerCase().replace(/\s+/g,' ').trim()]=k;});
+          function col(km,als){for(const a of als){if(km[a])return km[a];}return'(NOT FOUND)';}
+          function val(row,km,als){for(const a of als){if(km[a])return String(row[km[a]]||'');}return'';}
+          const optyCol=col(lkm,['opty_id','opty id','lead id','leadid','lead_id','opportunity id','opportunity_id']);
+          const lmCol=col(lkm,['lead month','lead_month','leadmonth','month']);
+          const stCol=col(lkm,['state','lead state']);
+          const rLidCol=col(rkm,['sourcelead id','sourcelead_id','source lead id','source_lead_id','sourceleadid','lead id','leadid','optyid','opty id','opty_id']);
+          const rMonCol=col(rkm,['performance month','performancemonth','performance_month','retail month','retailmonth','booking month','booking_month','bookingmonth','month']);
+          const rMdlCol=col(rkm,['retail model','retail_model','retailmodel','purchasedmodel','purchased model','purchased_model','model','model name','vehicle model']);
+          const rDtCol=col(rkm,['retail_attribution_date','retailattributiondate','attribution date','attribution_date','retail date','retaildate','retail_date','date']);
+          window._atherPipelineCols={optyCol,lmCol,stCol,rLidCol,rMonCol,rMdlCol,rDtCol,
+            leadAllCols:leadRaw.length?Object.keys(leadRaw[0]):[],
+            retailAllCols:retailRaw.length?Object.keys(retailRaw[0]):[]};
+          console.log('[ATHER PIPELINE] =========================');
+          console.log('[ATHER PIPELINE] Lead raw rows:',leadRaw.length);
+          console.log('[ATHER PIPELINE] Retail raw rows:',retailRaw.length);
+          console.log('[ATHER PIPELINE] Lead ALL columns:',leadRaw.length?Object.keys(leadRaw[0]).join(' | '):'(empty)');
+          console.log('[ATHER PIPELINE] Retail ALL columns:',retailRaw.length?Object.keys(retailRaw[0]).join(' | '):'(empty)');
+          console.log('[ATHER PIPELINE] Lead opty_id column:',optyCol);
+          console.log('[ATHER PIPELINE] Lead Month column:',lmCol);
+          console.log('[ATHER PIPELINE] Lead State column:',stCol+(stCol==='(NOT FOUND)'?' << WARN: all leads will show Unknown state >>':''));
+          console.log('[ATHER PIPELINE] Retail Lead ID column:',rLidCol+(rLidCol==='(NOT FOUND)'?' << WARN: no retail-lead matching possible >>':''));
+          console.log('[ATHER PIPELINE] Retail booking month column:',rMonCol+(rMonCol==='(NOT FOUND)'?' << WARN: all retail rows excluded >>':''));
+          console.log('[ATHER PIPELINE] Retail purchased model column:',rMdlCol);
+          console.log('[ATHER PIPELINE] Retail date column:',rDtCol);
+          console.log('[ATHER PIPELINE] Lead State samples (first 5 rows with opty_id):');
+          for(let i=0,n=0;i<leadRaw.length&&n<5;i++){
+            const r=leadRaw[i];
+            const o=val(r,lkm,['opty_id','opty id','lead id','leadid','lead_id']);
+            if(!o)continue;
+            n++;
+            const s=val(r,lkm,['state','lead state']);
+            const m=val(r,lkm,['lead month','lead_month','leadmonth','month']);
+            console.log('[ATHER PIPELINE]  '+n+'. opty_id='+o+' | State="'+s+'" | lead_month="'+m+'"');
+          }
+          console.log('[ATHER PIPELINE] Retail Lead ID + Month + Model samples (first 5):');
+          for(let i=0,n=0;i<retailRaw.length&&n<5;i++){
+            const r=retailRaw[i];
+            const lid=val(r,rkm,['sourcelead id','sourcelead_id','source lead id','source_lead_id','sourceleadid','lead id','leadid','optyid','opty id','opty_id']);
+            const mon=val(r,rkm,['performance month','performancemonth','performance_month','retail month','retailmonth','booking month','booking_month','bookingmonth','month']);
+            const mdl=val(r,rkm,['retail model','retail_model','retailmodel','purchasedmodel','purchased model','purchased_model','model']);
+            n++;
+            console.log('[ATHER PIPELINE]  '+n+'. lid="'+lid+'" | month="'+mon+'" | model="'+mdl+'"');
+          }
+          console.log('[ATHER PIPELINE] =========================');
+        }catch(pErr){console.error('[ATHER PIPELINE] column log threw:',pErr.message,pErr);}
+      })();
       if(!leadRaw.length)throw new Error('No rows in Leads sheet \u2014 ensure it is shared as Anyone \u2192 Viewer.');
       const leadResult=parseAtherLeadRows(leadRaw);
       const retailResult=parseAtherRetailRows(retailRaw);
       const{rows:joined,diagnostics:diag}=joinREData(leadResult,retailResult);
+      // ── JOIN SAMPLING IIFE (diagnose state + retail pipeline) ──
+      (function atherJoinSample(){
+        try{
+          console.log('[ATHER JOIN] =========================');
+          console.log('[ATHER JOIN] Total joined rows:',joined.length);
+          // State coverage
+          let statePopulated=0,stateUnknown=0;
+          joined.forEach(r=>{if(!r.state||r.state==='Unknown')stateUnknown++;else statePopulated++;});
+          console.log('[ATHER JOIN] State POPULATED:',statePopulated,'| UNKNOWN:',stateUnknown);
+          if(stateUnknown===joined.length)console.warn('[ATHER JOIN] WARNING: ALL leads have Unknown state — check state column name in Lead Master');
+          // 10 sample joined rows
+          console.log('[ATHER JOIN] Sample joined rows (first 10):');
+          console.log('[ATHER JOIN]  opty_id | lead_month | state | isBooked | purchasedModel | booking_month');
+          for(let i=0;i<Math.min(10,joined.length);i++){
+            const r=joined[i];
+            console.log('[ATHER JOIN]  '+(i+1)+'. '+r.opty_id+' | '+r.lead_month+' | '+(r.state||'?')+' | '+r.isBooked+' | "'+(r.purchasedModel||'')+'" | '+(r.booking_month||''));
+          }
+          // Retail funnel
+          const bookedRows=joined.filter(r=>r.isBooked);
+          const bookedWithMonths=bookedRows.filter(r=>r.booking_month&&r.lead_month);
+          const dEligRows=bookedWithMonths.filter(r=>{const d=atherMonthOrder(r.booking_month)-atherMonthOrder(r.lead_month);return d>=0&&d<=2;});
+          const inScopeRows=dEligRows.filter(r=>ATHER_SCOPE_MODELS.has(canonPurMdl(r.purchasedModel||'')));
+          console.log('[ATHER JOIN] ── RETAIL FUNNEL ──');
+          console.log('[ATHER JOIN] isBooked=true:',bookedRows.length);
+          console.log('[ATHER JOIN] has booking_month+lead_month:',bookedWithMonths.length);
+          console.log('[ATHER JOIN] d=0-2 eligible:',dEligRows.length);
+          console.log('[ATHER JOIN] in-scope models:',inScopeRows.length);
+          // d-eligible model breakdown
+          const mdlMap={};
+          dEligRows.forEach(r=>{const c=canonPurMdl(r.purchasedModel||'');mdlMap[c]=(mdlMap[c]||0)+1;});
+          console.log('[ATHER JOIN] d-eligible model breakdown:',JSON.stringify(mdlMap));
+          // All in-scope retail records
+          if(inScopeRows.length){
+            console.log('[ATHER JOIN] ── ALL IN-SCOPE RETAIL RECORDS ('+inScopeRows.length+') ──');
+            console.log('[ATHER JOIN]  opty_id | lead_month | booking_month | d | raw_pm | canon_pm | state');
+            inScopeRows.forEach(r=>{
+              const d=atherMonthOrder(r.booking_month)-atherMonthOrder(r.lead_month);
+              console.log('[ATHER JOIN]  '+r.opty_id+' | '+r.lead_month+' → '+r.booking_month+' | d='+d+' | "'+(r.purchasedModel||'')+'" | "'+canonPurMdl(r.purchasedModel||'')+'" | '+(r.state||'?'));
+            });
+          }else{
+            console.warn('[ATHER JOIN] WARNING: 0 in-scope retail records — check retail data and column names');
+          }
+          console.log('[ATHER JOIN] =========================');
+        }catch(jsErr){console.error('[ATHER JOIN] join sample threw:',jsErr.message,jsErr);}
+      })();
       if(!joined.length)throw new Error('No rows after join. Check opty_id / sourceLeadId column names.');
       const payload=buildPayload(joined);
       setRawJoined(joined);
@@ -3653,6 +3754,17 @@ function App({fbUser,role,presence,onSignOut,onAdminOpen}){
           const uniqOpty=new Set(allOptyIds).size;
           const retailedOptyIds=joined.filter(r=>isRetailedLead(r)).map(r=>r.opty_id).filter(Boolean);
           const uniqRetailed=new Set(retailedOptyIds).size;
+          // 7. State coverage
+          let stPopulated=0,stUnknown=0;
+          joined.forEach(r=>{if(!r.state||r.state==='Unknown')stUnknown++;else stPopulated++;});
+          // 8. Payload state coverage (stm matrix: [sti,si,li,L,Ra,Rd,Rc]; sti=row[0] → maps.st)
+          let pldStatePopulated=0,pldStateUnknown=0;
+          const stArr2=payload.maps.st||[];
+          payload.stm.forEach(row=>{
+            const sti2=row[0],st=stArr2[sti2];
+            const ra=row[4];
+            if(!st||st==='Unknown')pldStateUnknown+=ra;else pldStatePopulated+=ra;
+          });
           // ── PRINT REPORT ──
           console.log('[ATHER QA] =========================');
           console.log('[ATHER QA] ── RETAIL MODEL MAPPING (raw → canonical → IN_SCOPE | count) ──');
@@ -3699,6 +3811,11 @@ function App({fbUser,role,presence,onSignOut,onAdminOpen}){
           console.log('[ATHER QA] Total leads:',joined.length,'| unique opty_ids:',uniqOpty,uniqOpty===joined.length?'OK':'WARN-dupes');
           console.log('[ATHER QA] Retail rows:',retailedOptyIds.length,'| unique:',uniqRetailed,retailedOptyIds.length===uniqRetailed?'OK':'WARN-inflation');
           console.log('[ATHER QA] Gate identity isRetailed(inline)='+isRetailedInline+' | isRetailedLead(module)='+finalRetail+(isRetailedInline===finalRetail?' OK':' FAIL-mismatch'));
+          console.log('[ATHER QA] ── STATE PIPELINE ──');
+          console.log('[ATHER QA] JOINED STATE POPULATED:',stPopulated);
+          console.log('[ATHER QA] JOINED STATE UNKNOWN:',stUnknown,(stUnknown===joined.length?'<< ALL UNKNOWN — check Lead Master state column >>':''));
+          console.log('[ATHER QA] PAYLOAD STATE POPULATED:',pldStatePopulated);
+          console.log('[ATHER QA] PAYLOAD STATE UNKNOWN:',pldStateUnknown);
           console.log('[ATHER QA] -------------------------');
           const fails=[];
           if(overviewR!==finalRetail)fails.push('Overview='+overviewR+' ≠ ground='+finalRetail+' (sm)');
@@ -3709,8 +3826,15 @@ function App({fbUser,role,presence,onSignOut,onAdminOpen}){
           if(konarcSR2!==0||konarcSR2Pld!==0)fails.push('KONARC SR2='+konarcSR2+'/'+konarcSR2Pld+' (expected 0)');
           if(konarcSR3!==0||konarcSR3Pld!==0)fails.push('KONARC SR3='+konarcSR3+'/'+konarcSR3Pld+' (expected 0)');
           if(isRetailedInline!==finalRetail)fails.push('Gate mismatch: inline='+isRetailedInline+' module='+finalRetail);
-          if(fails.length===0){console.log('[ATHER QA] OVERALL RESULT: PASS');}
-          else{fails.forEach(f=>console.log('[ATHER QA] FAIL: '+f));console.log('[ATHER QA] OVERALL RESULT: FAIL');}
+          if(stUnknown===joined.length&&joined.length>0)fails.push('State: ALL '+stUnknown+' leads Unknown — state column not found in Lead Master');
+          if(fails.length===0){
+            console.log('[ATHER QA] PIPELINE RESULT: PASS');
+            console.log('[ATHER QA] OVERALL RESULT: PASS');
+          }else{
+            fails.forEach(f=>console.log('[ATHER QA] FAIL: '+f));
+            console.log('[ATHER QA] PIPELINE RESULT: FAIL');
+            console.log('[ATHER QA] OVERALL RESULT: FAIL');
+          }
           console.log('[ATHER QA] =========================');
           console.log('[ATHER QA] window.atherRetailDiag() → per-record breakdown');
         }catch(qaErr){console.error('[ATHER QA] QA block threw:',qaErr.message,qaErr);}
