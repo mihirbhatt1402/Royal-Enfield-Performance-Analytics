@@ -70,7 +70,7 @@ body {
 }
 
 /* ── Layout ── */
-.page { max-width: 1100px; margin: 0 auto; padding: 28px 20px 60px; }
+.page { max-width: 1440px; margin: 0 auto; padding: 28px 32px 60px; }
 
 /* ── Header ── */
 .header {
@@ -1558,24 +1558,25 @@ function renderStateTable(srcKey, modelKey) {
   if (showCPL)  headerHtml += `<th class="num">W1 T-CPL</th><th class="num">W2 T-CPL</th><th class="num">W3 T-CPL</th>`;
   head.innerHTML = headerHtml;
 
+  // RAW_STATE_LEADS structure: state → source → "Royal Enfield ModelName" → week → count
+  const getL = (sData, src, mk, wk) => {
+    const srcData = sData[src] || {};
+    if (mk === 'All') return Object.values(srcData).reduce((s, wd) => s + (wd[wk] || 0), 0);
+    const fn = 'Royal Enfield ' + mk;
+    return (srcData[fn] || srcData[mk] || {})[wk] || 0;
+  };
+
   const rows = Object.entries(RAW_STATE_LEADS)
     .map(([state, sData]) => {
-      const w1Obj = (sData['Week-1'] || {})[srcKey] || {};
-      const w2Obj = (sData['Week-2'] || {})[srcKey] || {};
-      const w3Obj = (sData['Week-3'] || {})[srcKey] || {};
-      const w1 = modelKey === 'All' ? (w1Obj['All'] || 0) : (w1Obj[modelKey] || 0);
-      const w2 = modelKey === 'All' ? (w2Obj['All'] || 0) : (w2Obj[modelKey] || 0);
-      const w3 = modelKey === 'All' ? (w3Obj['All'] || 0) : (w3Obj[modelKey] || 0);
-
-      const fbData = sData['Week-1'] || {};
-      const fbw1 = modelKey === 'All' ? ((fbData['MS FB'] || {})['All'] || 0) : ((fbData['MS FB'] || {})[modelKey] || 0);
-      const waw1 = modelKey === 'All' ? ((fbData['Whatsapp_Mkt'] || {})['All'] || 0) : ((fbData['Whatsapp_Mkt'] || {})[modelKey] || 0);
-      const fbData2 = sData['Week-2'] || {};
-      const fbw2 = modelKey === 'All' ? ((fbData2['MS FB'] || {})['All'] || 0) : ((fbData2['MS FB'] || {})[modelKey] || 0);
-      const waw2 = modelKey === 'All' ? ((fbData2['Whatsapp_Mkt'] || {})['All'] || 0) : ((fbData2['Whatsapp_Mkt'] || {})[modelKey] || 0);
-      const fbData3 = sData['Week-3'] || {};
-      const fbw3 = modelKey === 'All' ? ((fbData3['MS FB'] || {})['All'] || 0) : ((fbData3['MS FB'] || {})[modelKey] || 0);
-      const waw3 = modelKey === 'All' ? ((fbData3['Whatsapp_Mkt'] || {})['All'] || 0) : ((fbData3['Whatsapp_Mkt'] || {})[modelKey] || 0);
+      const w1 = getL(sData, 'All', modelKey, 'Week-1');
+      const w2 = getL(sData, 'All', modelKey, 'Week-2');
+      const w3 = getL(sData, 'All', modelKey, 'Week-3');
+      const fbw1 = getL(sData, 'MS FB', modelKey, 'Week-1');
+      const fbw2 = getL(sData, 'MS FB', modelKey, 'Week-2');
+      const fbw3 = getL(sData, 'MS FB', modelKey, 'Week-3');
+      const waw1 = getL(sData, 'Whatsapp_Mkt', modelKey, 'Week-1');
+      const waw2 = getL(sData, 'Whatsapp_Mkt', modelKey, 'Week-2');
+      const waw3 = getL(sData, 'Whatsapp_Mkt', modelKey, 'Week-3');
 
       const spendW1 = ((RAW_STATE_SPEND[state] || {})['Week-1'] || {})[srcKey] || 0;
       const spendW2 = ((RAW_STATE_SPEND[state] || {})['Week-2'] || {})[srcKey] || 0;
@@ -1661,11 +1662,19 @@ function renderLeadShareTable(srcKey, modelKey) {
   head.innerHTML = `<th>State</th><th class="num">W1 Lead %</th><th class="num">W2 Lead %</th><th class="num">Δ Share</th><th class="num">Client Retail %</th><th class="num">W1 Our Retail %</th><th class="num">W2 Our Retail %</th><th class="num">W1 Gap</th><th class="num">W2 Gap</th>`
     + (showCPL ? `<th class="num">W1 T-CPL</th><th class="num">W2 T-CPL</th>` : '');
 
+  // RAW_STATE_LEADS structure: state → source → "Royal Enfield ModelName" → week → count
+  const getLs = (sd, src, mk, wk) => {
+    const srcData = sd[src] || {};
+    if (mk === 'All') return Object.values(srcData).reduce((s, wd) => s + (wd[wk] || 0), 0);
+    const fn = 'Royal Enfield ' + mk;
+    return (srcData[fn] || srcData[mk] || {})[wk] || 0;
+  };
+
   // Compute totals for this src × model across all states
   let total1 = 0, total2 = 0;
   Object.values(RAW_STATE_LEADS).forEach(sd => {
-    total1 += ((sd['Week-1'] || {})[srcKey] || {})[modelKey] || 0;
-    total2 += ((sd['Week-2'] || {})[srcKey] || {})[modelKey] || 0;
+    total1 += getLs(sd, srcKey, modelKey, 'Week-1');
+    total2 += getLs(sd, srcKey, modelKey, 'Week-2');
   });
 
   // Compute booking totals (model-specific) across all states
@@ -1678,13 +1687,13 @@ function renderLeadShareTable(srcKey, modelKey) {
 
   const rows = Object.entries(RAW_STATE_LEADS)
     .map(([state, sd]) => {
-      const l1 = ((sd['Week-1'] || {})[srcKey] || {})[modelKey] || 0;
-      const l2 = ((sd['Week-2'] || {})[srcKey] || {})[modelKey] || 0;
+      const l1 = getLs(sd, srcKey, modelKey, 'Week-1');
+      const l2 = getLs(sd, srcKey, modelKey, 'Week-2');
       const retail = (RAW_RETAIL[state] || {})[modelKey];
       const sp1 = ((RAW_STATE_SPEND[state] || {})['Week-1'] || {})[srcKey] || 0;
       const sp2 = ((RAW_STATE_SPEND[state] || {})['Week-2'] || {})[srcKey] || 0;
-      const leads1ForCPL = ((sd['Week-1'] || {})[srcKey] || {})['All'] || 0;
-      const leads2ForCPL = ((sd['Week-2'] || {})[srcKey] || {})['All'] || 0;
+      const leads1ForCPL = getLs(sd, srcKey, 'All', 'Week-1');
+      const leads2ForCPL = getLs(sd, srcKey, 'All', 'Week-2');
       const b1 = ((RAW_STATE_BOOKINGS[state] || {})['Week-1'] || {})[bookModelKey] || 0;
       const b2 = ((RAW_STATE_BOOKINGS[state] || {})['Week-2'] || {})[bookModelKey] || 0;
       return { state, l1, l2, retail, sp1, sp2, leads1ForCPL, leads2ForCPL, b1, b2 };
