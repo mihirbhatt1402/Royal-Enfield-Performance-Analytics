@@ -1,0 +1,21 @@
+name: Daily Dashboard Availability Check
+
+on:
+  schedule:
+    - cron: '0 4 * * *'   # 04:00 UTC = 09:30 IST
+  workflow_dispatch:
+
+jobs:
+  check-availability:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check dashboard URL
+        run: |
+          URL="https://<GITHUB_USERNAME>.github.io/<REPO_NAME>/ATHER_LDR/ATHER_LDR_Dashboard_v1.0.html"
+          STATUS=$(curl -o /dev/null -s -w "%{http_code}" "$URL")
+          echo "HTTP status: $STATUS for $URL"
+          if [ "$STATUS" != "200" ]; then
+            echo "Dashboard returned HTTP $STATUS — expected 200"
+            exit 1
+          fi
+          echo "Dashboard is up and responding 200 OK"
