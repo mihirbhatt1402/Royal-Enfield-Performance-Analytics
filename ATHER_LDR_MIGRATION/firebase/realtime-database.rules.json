@@ -1,0 +1,10 @@
+{
+  "rules": {
+    "ather_presence": {
+      "$uid": {
+        ".read": "auth != null && (auth.uid == $uid || auth.token.email == 'pooja.chowdhury@girnarsoft.com' || auth.token.email == 'mihir.bhatt@girnarsoft.com' || auth.token.email == 'aditya.kumar@girnarsoft.com')",
+        ".write": "auth != null && auth.uid == $uid"
+      }
+    }
+  }
+}

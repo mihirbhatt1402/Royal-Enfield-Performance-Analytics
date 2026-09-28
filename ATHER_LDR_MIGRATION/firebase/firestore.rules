@@ -1,0 +1,51 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Admin identity is determined ONLY by Firebase Auth token email.
+    // The stored Firestore role field is NEVER used to determine admin status.
+    function isAdmin() {
+      return request.auth != null &&
+        request.auth.token.email in [
+          'pooja.chowdhury@girnarsoft.com',
+          'mihir.bhatt@girnarsoft.com',
+          'aditya.kumar@girnarsoft.com'
+        ];
+    }
+
+    match /ather_users/{userId} {
+
+      // Any authenticated user can read their own document
+      allow read: if request.auth != null && request.auth.uid == userId;
+
+      // Admin can read any user document (for AdminPanel)
+      allow read: if isAdmin();
+
+      // CREATE: only own doc, email must match auth token, role must be 'pending' or 'admin'
+      allow create: if request.auth != null
+        && request.auth.uid == userId
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.role in ['pending', 'admin'];
+
+      // UPDATE PATH A: own user updates displayName / photoURL only
+      allow update: if request.auth != null
+        && request.auth.uid == userId
+        && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['displayName', 'photoURL']);
+
+      // UPDATE PATH B: admin updates their own email field (must match auth token)
+      allow update: if isAdmin()
+        && request.auth.uid == userId
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['email']);
+
+      // UPDATE PATH C: admin assigns non-admin role to any user
+      // Admin CANNOT assign 'admin' role via rules (only via Firebase Console or initial sign-in)
+      allow update: if isAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['role'])
+        && request.resource.data.role in ['pending', 'viewer', 'full', 'client'];
+    }
+  }
+}
