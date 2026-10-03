@@ -101,11 +101,11 @@ const SHEETS_CONFIG = Object.freeze({
    Manifest lists which year files actually exist, so the dashboard adapts automatically
    when a new year's data appears without any code changes. */
 async function fetchStaticData(onProgress){
-  // 1. Fetch manifest to discover which yearly files exist
+  // 1. Fetch manifest (no-cache — small file, must be fresh on every load)
   let files;
   let generatedAt=null;
   try{
-    const mRes=await fetch('./data/manifest.json',{cache:'default'});
+    const mRes=await fetch('./data/manifest.json',{cache:'no-cache'});
     if(mRes.ok){
       const m=await mRes.json();
       files=m.files;
@@ -118,10 +118,12 @@ async function fetchStaticData(onProgress){
     files=[yr-2,yr-1,yr].map(y=>`./data/leads_${y}.json`);
   }
 
-  // 2. Fetch all year files in parallel
+  // 2. Fetch all year files in parallel.
+  // Append ?v=<generated> so CDN-cached files are busted when data refreshes.
+  const vParam=generatedAt?('?v='+encodeURIComponent(generatedAt)):'';
   const results=await Promise.allSettled(
     files.map((url,idx)=>
-      fetch(url,{cache:'default'})
+      fetch(url+vParam,{cache:'default'})
         .then(r=>r.ok?r.json():null)
         .then(d=>{if(onProgress)onProgress(idx+1,files.length);return d;})
         .catch(()=>null)
