@@ -110,18 +110,24 @@ function sheetUrlToCsvUrl(url){
 
 async function fetchSheetCsv(url){
   const csvUrl=sheetUrlToCsvUrl(url);
+  const controller=new AbortController();
+  const tId=setTimeout(()=>controller.abort(),20000);
   let res;
-  try{ res=await fetch(csvUrl,{cache:'no-store'}); }
-  catch(e){ throw new Error('Network error — check internet connection. ('+e.message+')'); }
+  try{
+    res=await fetch(csvUrl,{cache:'no-store',signal:controller.signal});
+  }catch(e){
+    if(e.name==='AbortError') throw new Error('Google Sheets sync timed out after 20 s.\nCheck the URL and sheet sharing settings, then retry.');
+    throw new Error('Network error — check internet connection. ('+e.message+')');
+  }finally{clearTimeout(tId);}
   if(!res.ok){
     if(res.status===401||res.status===403)
-      throw new Error('Access denied.\nShare the sheet: File → Share → Anyone with the link → Viewer');
-    if(res.status===404) throw new Error('Sheet not found. Double-check the URL.');
+      throw new Error('Access denied (HTTP '+res.status+').\nShare the sheet: File → Share → Anyone with the link → Viewer');
+    if(res.status===404) throw new Error('Sheet or tab not found (HTTP 404).\nDouble-check the Spreadsheet ID and GID in the URL.');
     throw new Error('Google Sheets fetch failed: HTTP '+res.status);
   }
   const text=await res.text();
-  if(!text||text.trim().length<5) throw new Error('Sheet returned no data.');
-  if(text.trim().startsWith('<')) throw new Error('Sheet returned HTML instead of CSV.\nShare it as "Anyone with the link → Viewer".');
+  if(!text||text.trim().length<5) throw new Error('Google Sheets returned no data. Check that the sheet has data and the GID is correct.');
+  if(text.trim().startsWith('<')) throw new Error('Google Sheets returned HTML instead of CSV.\nMake sure the sheet is shared as "Anyone with the link → Viewer".');
   return text;
 }
 
@@ -1773,17 +1779,10 @@ function UploadScreen({onData,onSync,syncing,syncErr,sheetUrl,setSheetUrl,urlDra
 
   return ce('div',{style:{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',padding:24}},
 
-    syncing&&ce('div',{style:{position:'fixed',inset:0,background:'rgba(8,28,21,.45)',
-      display:'flex',alignItems:'center',justifyContent:'center',zIndex:999}},
-      ce('div',{style:{width:'30%',minWidth:280,maxWidth:420,background:'#fff',borderRadius:16,
-        padding:'32px 28px',textAlign:'center',boxShadow:'0 12px 40px rgba(0,0,0,.25)'}},
-        ce('div',{style:{fontSize:34,marginBottom:14,display:'inline-block',animation:'spin 1s linear infinite'}},'⟳'),
-        ce('div',{style:{fontSize:14,fontWeight:700,color:'#1B4332',marginBottom:6}},'Syncing from Google Sheets…'),
-        ce('div',{style:{fontSize:11,color:'#6b7280',marginBottom:16}},'Fetching and parsing your sheet data'),
-        ce('div',{style:{height:5,background:'#f0f2f7',borderRadius:10,overflow:'hidden'}},
-          ce('div',{className:'prog-fill',style:{height:'100%',width:'70%',borderRadius:10}})
-        )
-      )
+    syncing&&ce('div',{style:{marginBottom:16,padding:'12px 16px',background:'#F0FDF4',border:'1px solid #86EFAC',borderRadius:10,display:'flex',alignItems:'center',gap:10}},
+      ce('span',{style:{display:'inline-block',animation:'spin .8s linear infinite',fontSize:16,color:'#16A34A'}},'⟳'),
+      ce('span',{style:{fontSize:12,fontWeight:600,color:'#166534',flex:1}},'Syncing from Google Sheets… (times out in 20 s)'),
+      ce('span',{style:{fontSize:10,color:'#6b7280'}},'Upload an Excel file below while you wait')
     ),
 
     ce('div',{style:{maxWidth:560,width:'100%'}},
@@ -2086,7 +2085,15 @@ const TABS=[
 function App({fbUser,role,presence,onSignOut,onAdminOpen}){
   const viewerMode=role==='viewer';
   const VIEWER_HIDDEN_TABS=['source','ltxsrc'];
-  const [rows,setRows]=useState(null);
+  /* Load cached rows synchronously so the dashboard renders on first paint
+     even before the background auto-sync completes or errors. */
+  const [rows,setRows]=useState(()=>{
+    try{
+      const s=localStorage.getItem('re_ldr_data');
+      if(s){const p=JSON.parse(s);if(Array.isArray(p)&&p.length>0)return p;}
+    }catch(e){}
+    return null;
+  });
   const [tab,setTab]=useState('overview');
   /* If role changes to viewer while on a restricted tab, fall back to overview */
   useEffect(()=>{ if(viewerMode&&VIEWER_HIDDEN_TABS.includes(tab)) setTab('overview'); },[viewerMode]);
@@ -2108,6 +2115,7 @@ function App({fbUser,role,presence,onSignOut,onAdminOpen}){
   const [urlDraft,setUrlDraft]=useState('');
 
   const handleSync=useCallback(async(url)=>{
+    if(syncing) return; // prevent concurrent requests
     const u=(url||sheetUrl||SHEETS_CONFIG.LDR_SHEET_URL||'').trim();
     if(!u){setShowSyncPanel(true);setSyncErr('Paste your Google Sheets URL and click Sync.');return;}
     setSyncing(true);setSyncErr(null);
@@ -2127,17 +2135,13 @@ function App({fbUser,role,presence,onSignOut,onAdminOpen}){
     finally{setSyncing(false);}
   },[sheetUrl]);
 
+  /* Auto-sync runs in the background after first render.
+     Cached rows are already in state (loaded synchronously in useState above),
+     so the dashboard is usable immediately regardless of sync outcome. */
   useEffect(()=>{
     const u=sheetUrl||SHEETS_CONFIG.LDR_SHEET_URL;
     if(SHEETS_CONFIG.AUTO_SYNC_ON_LOAD&&u&&u!=='INJECT_SHEET_URL_HERE') handleSync(u);
   },[]);// eslint-disable-line
-
-  useEffect(()=>{
-    try{
-      const saved=localStorage.getItem('re_ldr_data');
-      if(saved){const p=JSON.parse(saved);if(p&&p.length)setRows(p);}
-    }catch(e){}
-  },[]);
 
   const months=useMemo(()=>rows?[...new Set(rows.map(r=>r.lead_month))].filter(Boolean).sort((a,b)=>monthOrder(a)-monthOrder(b)):[], [rows]);
   const sources=useMemo(()=>rows?[...new Set(rows.map(r=>r.source))].filter(Boolean).sort():[],[rows]);
