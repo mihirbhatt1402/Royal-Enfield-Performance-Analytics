@@ -50,13 +50,7 @@ jobs:
             echo "changed=false" >> "$GITHUB_OUTPUT"
           else
             DATE=$(date -u +%Y-%m-%d)
-            git commit -m "data: nightly leads refresh ${DATE}
-
-Automated refresh by refresh-data.yml workflow.
-Sheet: Royal Enfield LDR (GID 2097498245)
-Columns: Lead Date, Lead Number, Model, City, State, LT, Source, UTM,
-         Duplicate Check, Lead Month, Booking Status, Booking Month
-Excluded: Mobile Phone, EMN (PII), Booking Date (not used by dashboard)"
+            git commit -m "data: nightly leads refresh ${DATE}"
             git push
             echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
