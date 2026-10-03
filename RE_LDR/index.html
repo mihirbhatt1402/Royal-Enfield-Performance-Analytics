@@ -97,6 +97,55 @@ const SHEETS_CONFIG = Object.freeze({
   AUTO_SYNC_INTERVAL_MS: 0,
 });
 
+/* Static data files committed nightly by the refresh-data.yml GitHub Actions workflow.
+   Manifest lists which year files actually exist, so the dashboard adapts automatically
+   when a new year's data appears without any code changes. */
+async function fetchStaticData(onProgress){
+  // 1. Fetch manifest to discover which yearly files exist
+  let files;
+  let generatedAt=null;
+  try{
+    const mRes=await fetch('./data/manifest.json',{cache:'default'});
+    if(mRes.ok){
+      const m=await mRes.json();
+      files=m.files;
+      generatedAt=m.generated||null;
+    }
+  }catch(e){}
+  if(!files||!files.length){
+    // Fallback: try the last 3 calendar years
+    const yr=new Date().getFullYear();
+    files=[yr-2,yr-1,yr].map(y=>`./data/leads_${y}.json`);
+  }
+
+  // 2. Fetch all year files in parallel
+  const results=await Promise.allSettled(
+    files.map((url,idx)=>
+      fetch(url,{cache:'default'})
+        .then(r=>r.ok?r.json():null)
+        .then(d=>{if(onProgress)onProgress(idx+1,files.length);return d;})
+        .catch(()=>null)
+    )
+  );
+
+  // 3. Combine all years into a flat array-of-objects (same shape parseRows expects)
+  let allRaw=[],found=0;
+  for(const res of results){
+    const d=res.status==='fulfilled'?res.value:null;
+    if(!d||!Array.isArray(d.headers)||!Array.isArray(d.rows)) continue;
+    found++;
+    generatedAt=generatedAt||d.generated||null;
+    const hdrs=d.headers;
+    for(const row of d.rows){
+      const obj={};
+      hdrs.forEach((h,i)=>{obj[h]=row[i]||'';});
+      allRaw.push(obj);
+    }
+  }
+  if(!found) throw new Error('STATIC_NOT_FOUND');
+  return{raw:allRaw,generatedAt};
+}
+
 function sheetUrlToCsvUrl(url){
   const u=(url||'').trim();
   if(!u) throw new Error('Sheet URL is empty — paste it in the Sync panel.');
@@ -1781,7 +1830,7 @@ function UploadScreen({onData,onSync,syncing,syncErr,sheetUrl,setSheetUrl,urlDra
 
     syncing&&ce('div',{style:{marginBottom:16,padding:'12px 16px',background:'#F0FDF4',border:'1px solid #86EFAC',borderRadius:10,display:'flex',alignItems:'center',gap:10}},
       ce('span',{style:{display:'inline-block',animation:'spin .8s linear infinite',fontSize:16,color:'#16A34A'}},'⟳'),
-      ce('span',{style:{fontSize:12,fontWeight:600,color:'#166534',flex:1}},'Syncing from Google Sheets… (times out in 20 s)'),
+      ce('span',{style:{fontSize:12,fontWeight:600,color:'#166534',flex:1}},'Loading nightly data snapshot…'),
       ce('span',{style:{fontSize:10,color:'#6b7280'}},'Upload an Excel file below while you wait')
     ),
 
@@ -1820,28 +1869,47 @@ function UploadScreen({onData,onSync,syncing,syncErr,sheetUrl,setSheetUrl,urlDra
       err&&ce('div',{style:{padding:'10px 14px',background:'#fef2f2',border:'1px solid #fecaca',borderRadius:8,fontSize:11,color:'#dc2626',fontWeight:500}},err),
 
       ce('div',{className:'card',style:{padding:'18px',marginTop:16,borderLeft:'4px solid #2D6A4F'}},
-        ce('div',{style:{fontSize:11,fontWeight:700,color:'#1B4332',marginBottom:12,display:'flex',alignItems:'center',gap:8}},'📊 Or sync directly from Google Sheets'),
-        ce('div',{style:{marginBottom:12}},
-          ce('div',{style:{fontSize:10,fontWeight:700,color:'#1B4332',textTransform:'uppercase',letterSpacing:'.07em',marginBottom:4}},'Google Sheets URL'),
-          ce('input',{type:'text',value:urlDraft||'',onChange:e=>setUrlDraft&&setUrlDraft(e.target.value),
-            placeholder:'https://docs.google.com/spreadsheets/d/…',
-            style:{width:'100%',padding:'7px 14px',border:'1px solid #A8D5BA',borderRadius:10,fontSize:11,fontFamily:'inherit',outline:'none',background:'#fff',color:'#0a1f14'}
-          })
+        ce('div',{style:{fontSize:11,fontWeight:700,color:'#1B4332',marginBottom:8,display:'flex',alignItems:'center',gap:8}},'🔄 Auto-refresh data pipeline'),
+        ce('div',{style:{fontSize:10,color:'#166534',lineHeight:1.7,marginBottom:10}},
+          'The ',ce('strong',null,'refresh-data.yml'),
+          ' GitHub Actions workflow fetches the full 660K-row sheet every night at 2 AM UTC, ',
+          'compresses it, and commits it to ',ce('code',null,'RE_LDR/data/'),
+          '. The dashboard loads from those cached files instantly — no browser download of 165 MB.'
         ),
         ce('button',{
-          onClick:()=>{const u=(urlDraft||'').trim();if(!u)return;if(setSheetUrl)setSheetUrl(u);try{localStorage.setItem('re_ldr_sheet_url',u);}catch(e){}if(onSync)onSync(u);},
+          onClick:()=>{if(onSync)onSync(undefined,false);},
           disabled:syncing,
-          style:{padding:'8px 24px',background:'#2D6A4F',border:'none',borderRadius:20,color:'#fff',fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:'inherit',display:'flex',alignItems:'center',gap:6}
+          style:{padding:'8px 20px',background:'#2D6A4F',border:'none',borderRadius:20,color:'#fff',fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:'inherit',display:'flex',alignItems:'center',gap:6,marginBottom:8}
         },
-          syncing?ce('span',{style:{display:'inline-block',animation:'spin .8s linear infinite'}},'⟳'):'📊',
-          syncing?'Syncing…':'Sync from Google Sheets'
+          syncing?ce('span',{style:{display:'inline-block',animation:'spin .8s linear infinite'}},'⟳'):'🔄',
+          syncing?'Loading…':'Load latest snapshot'
         ),
-        syncErr&&ce('div',{style:{fontSize:11,color:'#dc2626',padding:'8px 12px',background:'#fef2f2',borderRadius:8,border:'1px solid #fecaca',marginTop:10,whiteSpace:'pre-wrap'}},'⚠ '+syncErr),
-        lastSynced&&ce('div',{style:{fontSize:10,color:'#166534',marginTop:8}},'✓ Last synced: '+lastSynced.toLocaleString()),
-        ce('div',{style:{fontSize:10,color:'#6b7280',marginTop:10,lineHeight:1.6}},
-          '💡 Share first: Google Sheets → File → Share → Anyone with the link → ',
-          ce('strong',null,'Viewer'),
-          ' · No API key · No login required')
+        lastSynced&&ce('div',{style:{fontSize:10,color:'#166534',marginBottom:8}},
+          '✓ Data as of: ',
+          ce('strong',null,lastSynced.toLocaleString('en-IN',{dateStyle:'medium',timeStyle:'short'}))
+        ),
+        syncErr&&ce('div',{style:{fontSize:11,color:'#dc2626',padding:'8px 12px',background:'#fef2f2',borderRadius:8,border:'1px solid #fecaca',marginTop:4,whiteSpace:'pre-wrap'}},'⚠ '+syncErr),
+        ce('details',{style:{marginTop:10}},
+          ce('summary',{style:{fontSize:10,color:'#6b7280',cursor:'pointer',userSelect:'none'}},'Advanced: force live Google Sheets sync (slow for large sheets)'),
+          ce('div',{style:{marginTop:8}},
+            ce('div',{style:{fontSize:10,color:'#92400e',background:'#fffbeb',border:'1px solid #fcd34d',borderRadius:6,padding:'6px 10px',marginBottom:8}},
+              '⚠ The source sheet has 660K+ rows (~165 MB). A live browser download will time out on most connections. Use the nightly pipeline above instead.'
+            ),
+            ce('div',{style:{marginBottom:8}},
+              ce('input',{type:'text',value:urlDraft||'',onChange:e=>setUrlDraft&&setUrlDraft(e.target.value),
+                placeholder:'https://docs.google.com/spreadsheets/d/…',
+                style:{width:'100%',padding:'7px 14px',border:'1px solid #A8D5BA',borderRadius:10,fontSize:11,fontFamily:'inherit',outline:'none',background:'#fff',color:'#0a1f14'}
+              })
+            ),
+            ce('button',{
+              onClick:()=>{const u=(urlDraft||'').trim();if(!u)return;if(setSheetUrl)setSheetUrl(u);try{localStorage.setItem('re_ldr_sheet_url',u);}catch(e){}if(onSync)onSync(u,true);},
+              disabled:syncing,
+              style:{padding:'6px 18px',background:'#92400e',border:'none',borderRadius:20,color:'#fff',fontSize:10,fontWeight:700,cursor:'pointer',fontFamily:'inherit'}
+            },
+              syncing?'Syncing…':'Force live Sheets sync'
+            )
+          )
+        )
       ),
 
       ce('div',{className:'card',style:{padding:'14px 18px',marginTop:16}},
@@ -2114,12 +2182,47 @@ function App({fbUser,role,presence,onSignOut,onAdminOpen}){
   const [sheetUrl,setSheetUrl]=useState(()=>localStorage.getItem('re_ldr_sheet_url')||SHEETS_CONFIG.LDR_SHEET_URL||'');
   const [urlDraft,setUrlDraft]=useState('');
 
-  const handleSync=useCallback(async(url)=>{
+  const handleSync=useCallback(async(url,forceSheets=false)=>{
     if(syncing) return; // prevent concurrent requests
-    const u=(url||sheetUrl||SHEETS_CONFIG.LDR_SHEET_URL||'').trim();
-    if(!u){setShowSyncPanel(true);setSyncErr('Paste your Google Sheets URL and click Sync.');return;}
     setSyncing(true);setSyncErr(null);
     try{
+      /* ── Path A: nightly-refreshed static JSON files (fast, no timeout risk) ── */
+      if(!forceSheets){
+        try{
+          const{raw,generatedAt}=await fetchStaticData();
+          const parsed=parseRows(raw);
+          if(!parsed.length) throw new Error('empty');
+          setRows(parsed);
+          setLastSynced(generatedAt?new Date(generatedAt):new Date());
+          setShowSyncPanel(false);
+          setTimeout(()=>{try{localStorage.setItem('re_ldr_data',JSON.stringify(parsed.slice(0,50000)));}catch(e){}},0);
+          return;
+        }catch(staticErr){
+          if(staticErr.message!=='STATIC_NOT_FOUND'&&staticErr.message!=='empty'){
+            // Real error with static files — surface it
+            throw new Error('Static data load failed: '+staticErr.message);
+          }
+          /* STATIC_NOT_FOUND → data files not committed yet (first deploy before
+             the refresh-data.yml workflow has run). Fall through to Sheets sync
+             only when the user explicitly triggered it via the URL sync panel. */
+          if(!url&&!forceSheets){
+            throw new Error(
+              'Nightly data files not found (./data/leads_*.json).\n'+
+              'The refresh-data.yml GitHub Actions workflow has not run yet.\n\n'+
+              'Options:\n'+
+              '  1. Trigger the workflow manually: GitHub → Actions → "Refresh Lead Data" → Run workflow\n'+
+              '  2. Upload an Excel file below to load data immediately'
+            );
+          }
+        }
+      }
+
+      /* ── Path B: live Google Sheets sync (fallback / admin override) ── */
+      /* WARNING: The source sheet has 660,000+ rows (~165 MB of CSV).
+         A live browser fetch will time out on most connections.
+         Use the nightly GitHub Actions pipeline (Path A) for reliable data loading. */
+      const u=(url||sheetUrl||SHEETS_CONFIG.LDR_SHEET_URL||'').trim();
+      if(!u){setShowSyncPanel(true);setSyncErr('Paste your Google Sheets URL and click Sync.');return;}
       const csv=await fetchSheetCsv(u);
       const raw=parseCsvToRows(csv);
       if(!raw.length) throw new Error('No rows found in sheet.');
@@ -2128,19 +2231,17 @@ function App({fbUser,role,presence,onSignOut,onAdminOpen}){
       setRows(parsed);
       setLastSynced(new Date());
       setShowSyncPanel(false);
-      /* Cache to localStorage after the UI updates — JSON.stringify on tens of
-         thousands of rows is blocking and shouldn't delay the paint. */
       setTimeout(()=>{ try{localStorage.setItem('re_ldr_data',JSON.stringify(parsed.slice(0,50000)));}catch(e){} },0);
     }catch(e){setSyncErr(e.message);setShowSyncPanel(true);}
     finally{setSyncing(false);}
-  },[sheetUrl]);
+  },[sheetUrl,syncing]);
 
   /* Auto-sync runs in the background after first render.
      Cached rows are already in state (loaded synchronously in useState above),
      so the dashboard is usable immediately regardless of sync outcome. */
   useEffect(()=>{
-    const u=sheetUrl||SHEETS_CONFIG.LDR_SHEET_URL;
-    if(SHEETS_CONFIG.AUTO_SYNC_ON_LOAD&&u&&u!=='INJECT_SHEET_URL_HERE') handleSync(u);
+    /* Try static data files first; falls back to Sheets URL only if explicitly set. */
+    if(SHEETS_CONFIG.AUTO_SYNC_ON_LOAD) handleSync();
   },[]);// eslint-disable-line
 
   const months=useMemo(()=>rows?[...new Set(rows.map(r=>r.lead_month))].filter(Boolean).sort((a,b)=>monthOrder(a)-monthOrder(b)):[], [rows]);
