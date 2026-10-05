@@ -2489,13 +2489,16 @@ function getFbRTDB(){return firebase.database(getFirebase());}
 
 function ensureUserDoc(user){
   var ref=getFbDb().collection(USERS_COL).doc(user.uid);
+  // email comes from Firebase Auth (verified Google identity) — never user-supplied
+  var emailLc=(user.email||'').toLowerCase();
   return ref.get().then(function(snap){
     if(!snap.exists){
+      var autoRole=emailLc===ADMIN_EMAIL.toLowerCase()?'admin':emailLc.endsWith('@girnarsoft.com')?'viewer':'pending';
       return ref.set({
         email:user.email,
         displayName:user.displayName||user.email,
         photoURL:user.photoURL||'',
-        role:user.email===ADMIN_EMAIL?'admin':'pending',
+        role:autoRole,
         createdAt:firebase.firestore.FieldValue.serverTimestamp(),
       });
     } else if(snap.data().email!==user.email){
